@@ -1,0 +1,27 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IntelliJ / JetBrains
+.idea/
+*.iml
+out/
+
+# Java / Maven
+**/target/
+*.log
+
+# Node / Angular
+**/node_modules/
+**/dist/
+**/.angular/
+**/.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env / secrets
+.env
+.env.*
+!*.env.example
