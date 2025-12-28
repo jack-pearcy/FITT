@@ -1,0 +1,40 @@
+# ADR-0003: V1 Domain Models Approved
+
+Status: Accepted  
+Date: 2025-12-24
+
+## Decision
+
+I have completed and approved the v1 domain model diagrams for FITT. These diagrams define the core entities, attributes, and relationships for version 1 across the four domains:
+
+- Identity
+- Workouts
+- Measurements
+- Nutrition
+
+These diagrams will be treated as the source of truth for initial entity design and will guide implementation of JPA entities, DTOs, and REST endpoints.
+
+## Scope
+
+The diagrams capture domain concepts and relationships, not database schema or UI design.
+
+The diagrams intentionally exclude:
+- Food database and barcode scanning
+- Social features
+- Medical or nutritional coaching liability
+- Advanced powerlifting/bodybuilding features beyond initial RPE placement
+
+## Artifacts
+
+The following artifacts are approved and stored under docs/architecture:
+
+- domain-identity
+- domain-workouts
+- domain-measurements
+- domain-nutrition
+
+## Consequences
+
+Implementation should follow these domain models unless I explicitly revise them via a new ADR.
+
+If future features require structural changes, I will update the diagrams and create an ADR documenting the change before modifying core entities.

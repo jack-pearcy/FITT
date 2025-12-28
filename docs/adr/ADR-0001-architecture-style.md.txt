@@ -1,0 +1,48 @@
+# ADR-0001: Architecture Style for FITT
+
+Status: Accepted  
+Date: 2025-12-23
+
+## Decision
+
+For version 1, FITT will use a modular monolith architecture for the backend, with a separate frontend client consuming a single backend API.
+
+The backend will be deployed as one application, but structured internally into clear modules with well-defined responsibilities and boundaries. These modules will communicate through explicit interfaces rather than shared, unrestricted access.
+
+## Context
+
+This project is both a learning effort and a real application I intend to use. I am working as a solo developer with limited time, budget, and infrastructure. Early complexity must be controlled while still allowing the system to grow in a clean and professional way.
+
+The application will support a web frontend initially (Angular), with a long-term goal of adding an iOS client. Both clients should be able to rely on the same backend API without changes to business logic.
+
+## Rationale
+
+A modular monolith fits these constraints because it:
+
+- Keeps deployment simple (one backend service)
+- Avoids the operational and cognitive overhead of microservices
+- Encourages clean separation of concerns inside the backend
+- Makes future refactoring or extraction of modules possible if needed
+- Is widely recommended as a starting point for systems that may grow
+
+Separating the frontend and backend allows independent development and supports multiple client types while keeping the backend authoritative for business rules and data integrity.
+
+## Alternatives Considered
+
+Microservices were considered but rejected for v1 due to:
+- Increased operational complexity
+- Infrastructure overhead
+- Higher risk of premature abstraction
+- Poor fit for a solo developer at this stage
+
+A fully monolithic backend without internal modular boundaries was also rejected, as it would make the system harder to reason about and evolve over time.
+
+## Consequences
+
+This decision means:
+- The backend will enforce boundaries through package structure and design
+- Architectural discipline is required to prevent cross-module coupling
+- Scaling will focus on code organization and clarity, not service proliferation
+- Future extraction into separate services remains possible but is not required
+
+This architecture supports learning, maintainability, and future growth without unnecessary complexity.
