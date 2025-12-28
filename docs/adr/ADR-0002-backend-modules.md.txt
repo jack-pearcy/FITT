@@ -1,0 +1,93 @@
+# ADR-0002: Backend Domain Modules for FITT
+
+Status: Accepted  
+Date: 2025-12-23
+
+## Decision
+
+For version 1, the FITT backend will be structured as a modular monolith with the following core domain modules:
+
+- Identity
+- Workouts
+- Measurements
+- Nutrition
+
+Each module owns its data, rules, and persistence. Modules communicate through explicit service boundaries rather than shared, unrestricted access.
+
+## Context
+
+FITT is a web-first, API-first application intended to support future clients such as iOS. The backend must remain clean, understandable, and extensible while being feasible for a solo developer.
+
+Early design decisions should avoid overly narrow domains that block future growth, while still keeping v1 focused and simple.
+
+## Module Definitions
+
+### Identity
+
+Owns:
+- User accounts
+- Authentication and authorization
+- Profile-related data (non-fitness)
+
+Does not own:
+- Fitness metrics
+- Workouts
+- Nutrition logic
+
+### Workouts
+
+Owns:
+- Workout programs and routines
+- Exercise selections
+- Set, rep, and scheme definitions
+- Progressive overload structure
+
+Does not own:
+- User identity
+- Body measurements
+- Nutrition calculations
+
+### Measurements
+
+Owns:
+- Weight logs (v1)
+- Historical measurement tracking
+- Time-based measurement history
+
+Future extensions may include:
+- Body fat percentage
+- Circumference measurements
+- Performance metrics such as RPE
+
+Does not own:
+- Workout definitions
+- Nutrition logic
+
+### Nutrition
+
+Owns:
+- Calorie targets and recommendations
+- Goal-based calorie logic (cut, maintain, bulk)
+
+Does not own:
+- Food databases
+- Barcode scanning
+- Meal-level tracking
+
+## Dependency Rules
+
+- Identity has no dependency on other modules
+- Workouts may depend on Identity for user ownership
+- Measurements may depend on Identity for user ownership
+- Nutrition may depend on Identity and Measurements
+- No module may directly access another module’s persistence layer
+
+## Consequences
+
+This structure:
+- Keeps responsibilities clear
+- Allows future expansion without breaking v1
+- Prevents god services and cross-module coupling
+- Supports long-term bodybuilding and powerlifting features such as RPE without forcing them into v1
+
+The tradeoff is that discipline is required to maintain boundaries as the codebase grows.
