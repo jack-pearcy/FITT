@@ -1,0 +1,95 @@
+# FITT — Sprint 0 Blueprint
+Status: Approved
+Last updated: 2025-12-23
+
+This document explains why FITT exists, who it is for, what success means, what is out of scope for v1, and when the project should stop. It is the foundation for the architecture and repo setup that comes next.
+
+## Why this project exists
+
+There is a gap in the fitness app space for people who lift weights and want a simple, budget-friendly tool that supports real training progress. Many apps are expensive, noisy, or bloated. Users end up tracking in journals, guessing calories, or relying on memory. That makes training harder than it needs to be and can slow progress.
+
+This project exists because that pain shows up daily for lifters, and the founder is also a user with the same problem.
+
+## Who this is for
+
+Primary user
+A person who trains with intention. This includes bodybuilders, powerlifters, and anyone serious about tracking workouts and progress.
+
+Not the user
+People who do not care about training, diet, or tracking progress.
+
+Context and constraints
+The problem appears when the user forgets what they did last session, cannot track progressive overload cleanly, or feels unsure about calories and goals. Common constraints are attention, memory, consistency, and knowledge.
+
+## What success looks like
+
+If FITT succeeds, the user feels confident that their training and diet choices are reasonable. It becomes easier to answer questions like surplus vs deficit and how progressive overload applies in practice.
+
+Success is measurable
+Strength increases over time, weight trends move in the intended direction, and physique improves. The user can look back and see proof of progress.
+
+## What v1 will not do
+
+v1 is intentionally limited. It will not include:
+- A MyFitnessPal-style food database or barcode scanning
+- Social features like friends, sharing, feeds, or messaging
+- Medical advice, clinical nutrition guidance, or coaching liability
+
+These boundaries exist to prevent a half-built product and to avoid security and quality shortcuts.
+
+## Project shape and constraints
+
+This is both a learning project and a real tool I intend to use. If it proves useful, it may become portfolio-ready and later public or commercial.
+
+Current constraints include time, money, and developing full-stack and mobile skills. Infrastructure should remain simple.
+
+Reliability expectation for v1
+Hobby-grade is acceptable, but the system must persist data. Workout history should not be casually lost. A real database is required, even if it is local in early stages.
+
+Platform direction
+Long term, the goal is iOS. v1 will be web-first to maximize learning and interview readiness, while keeping the API reusable for a future iOS client.
+
+## Data and responsibility
+
+Data handled includes:
+- Name, date of birth, age, email, password
+- Optional phone for 2FA, locale
+- Fitness metrics, goals, workout history
+
+Most sensitive data
+Passwords and identifiers. Payment information would be highly sensitive if added later.
+
+Accuracy expectations
+Age, height, goals, and calories must be accurate for recommendations to be meaningful. Some estimates (like daily calorie expenditure) can be approximate.
+
+Responsibility model
+The system provides suggestions and structure. The user is responsible for applying it safely and consistently.
+
+## Trust, ethics, and limits
+
+Risks
+Users may over-trust the system or assume results are automatic without discipline.
+
+Boundaries
+The app must present recommendations as suggestions and avoid claiming medical or nutritional authority. It is not a doctor, nutritionist, or personal coach.
+
+## Stop conditions
+
+Stop or pause if:
+- Users are consistently unhappy, stability is poor, or reviews are overwhelmingly negative
+- A security breach occurs that undermines trust
+- The project does not reach a minimally functional state
+
+It is irresponsible to charge users if promises are not met or if the product is unreliable.
+
+## Deferred vision (not v1)
+
+Future capabilities that are explicitly deferred:
+- Barcode scanning and food databases
+- Exercise demonstration media
+- Onboarding maintenance-calorie estimation and recalculation flows
+- Custom templates, default workouts, and recommended weights/sets/reps
+- RPE and advanced bodybuilding/powerlifting tracking needs
+- Social features
+
+These are recorded to preserve the vision without letting v1 collapse under scope.

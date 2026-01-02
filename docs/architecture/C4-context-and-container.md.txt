@@ -1,0 +1,65 @@
+# FITT Architecture (C4)
+
+We will use two C4 diagrams to describe FITT at the start:
+- System Context
+- Container
+
+C4 is a lightweight way to describe software architecture using a consistent set of diagram types and abstractions.
+
+## System Context, what exists
+
+Purpose
+Show the system boundary. Who uses FITT and what external systems it depends on.
+
+Actors
+- End user (lifter)
+
+Software systems
+- FITT (the system)
+- Database (local in development, hosted in production later)
+
+Future systems (not v1)
+- Messaging or sharing services
+- Cloud hosting and remote sync
+- iOS client using the same backend API
+
+Draw.io instructions
+Create a diagram with two boxes and one person:
+- Person: End user
+- Box: FITT
+Connect End user -> FITT with “uses”
+
+Optionally annotate that FITT stores data in a database, but keep it high level.
+
+## Container view (how it runs)
+
+Purpose
+Show the runtime pieces that make FITT work and how they communicate.
+
+Containers
+- Web client (browser UI)
+- Backend API (rules, auth, persistence orchestration)
+- Database (source of truth for user data)
+
+Trust boundaries
+- Browser client is untrusted
+- API is the enforcement boundary
+- Database is private to the API
+
+Draw.io instructions
+Create three boxes and one person:
+- Person: End user
+- Box: Web client
+- Box: Backend API
+- Cylinder: Database
+
+Connections
+- End user -> Web client “uses”
+- Web client -> Backend API “HTTPS/JSON”
+- Backend API -> Database “SQL”
+
+Diagram checklist
+Before you consider the diagram done, verify that:
+- Every box has a clear responsibility
+- The database is not connected directly to the user
+- The API is the boundary where validation and authorization live
