@@ -1,4 +1,15 @@
-package com.fitt.identity.service;
+package com.fitt.workouts.service;
 
-public class WorkoutService {
+import com.fitt.workouts.service.model.WorkoutView;
+
+
+public interface WorkoutService {
+
+    void createWorkout(Long userId, String name);
+
+    WorkoutView getWorkoutById(Long userId, Long workoutId);
+
+    void deleteWorkout(Long userId, Long workoutId);
 }
+
+
