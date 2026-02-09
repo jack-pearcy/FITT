@@ -3,13 +3,13 @@ package com.fitt.workouts.service.impl;
 import com.fitt.workouts.persistence.entity.WorkoutEntity;
 import com.fitt.workouts.repository.WorkoutRepository;
 import com.fitt.workouts.service.WorkoutService;
+import com.fitt.workouts.service.exception.WorkoutNotFoundException;
 import com.fitt.workouts.service.model.WorkoutView;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-
-// Service layer, business rules and transaction boundary.
-// Repos are injected here because services orchestrate use-cases.
+// Service layer: business rules, transaction boundary.
+// Controller shouldn't touch repos directly.
 @Service
 @Transactional
 public class WorkoutServiceImpl implements WorkoutService {
@@ -21,7 +21,7 @@ public class WorkoutServiceImpl implements WorkoutService {
     }
 
     @Override
-    public void createWorkout(Long userId, String name) {
+    public WorkoutView createWorkout(Long userId, String name) {
         if (userId == null) {
             throw new IllegalArgumentException("userId is required");
         }
@@ -29,8 +29,14 @@ public class WorkoutServiceImpl implements WorkoutService {
             throw new IllegalArgumentException("workout name is required");
         }
 
-        WorkoutEntity workout = new WorkoutEntity(userId, name.trim());
-        workoutRepository.save(workout);
+        WorkoutEntity saved = workoutRepository.save(new WorkoutEntity(userId, name.trim()));
+
+        return new WorkoutView(
+                saved.getId(),
+                saved.getName(),
+                saved.getCreatedAt(),
+                saved.getUpdatedAt()
+        );
     }
 
     @Override
@@ -44,7 +50,7 @@ public class WorkoutServiceImpl implements WorkoutService {
 
         WorkoutEntity workout = workoutRepository
                 .findByIdAndOwnerUserId(workoutId, userId)
-                .orElseThrow(() -> new IllegalArgumentException("workout not found"));
+                .orElseThrow(() -> new WorkoutNotFoundException("workout not found"));
 
         return new WorkoutView(
                 workout.getId(),
@@ -63,12 +69,11 @@ public class WorkoutServiceImpl implements WorkoutService {
             throw new IllegalArgumentException("workoutId is required");
         }
 
-        // No CRUD by id alone.
-        boolean owned = workoutRepository.existsByIdAndOwnerUserId(workoutId, userId);
-        if (!owned) {
-            throw new IllegalArgumentException("workout not found");
-        }
+        // Ownership-safe delete: load by (id, owner) and delete what we actually own.
+        WorkoutEntity ownedWorkout = workoutRepository
+                .findByIdAndOwnerUserId(workoutId, userId)
+                .orElseThrow(() -> new WorkoutNotFoundException("workout not found"));
 
-        workoutRepository.deleteById(workoutId);
+        workoutRepository.delete(ownedWorkout);
     }
 }
