@@ -2,4 +2,5 @@
 .idea/
 out/
 
+# Local dev db config
 backend/src/main/resources/application-local.properties

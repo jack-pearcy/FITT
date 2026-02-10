@@ -5,7 +5,7 @@ import com.fitt.workouts.service.model.WorkoutView;
 
 public interface WorkoutService {
 
-    void createWorkout(Long userId, String name);
+    WorkoutView createWorkout(Long userId, String name);
 
     WorkoutView getWorkoutById(Long userId, Long workoutId);
 
