@@ -4,3 +4,6 @@ out/
 
 # Local dev db config
 backend/src/main/resources/application-local.properties
+
+# Structure export
+structure_exports/
