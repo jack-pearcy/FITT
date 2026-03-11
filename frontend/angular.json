@@ -64,7 +64,8 @@
               "buildTarget": "fitt-web:build:production"
             },
             "development": {
-              "buildTarget": "fitt-web:build:development"
+              "buildTarget": "fitt-web:build:development",
+              "proxyConfig": "proxy.conf.json"
             }
           },
           "defaultConfiguration": "development"
