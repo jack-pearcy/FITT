@@ -1,0 +1,36 @@
+<div class="workouts-page">
+  <header class="workouts-page__header">
+    <h1>Workouts</h1>
+  </header>
+
+  <div class="workouts-page__create">
+    <input
+      type="text"
+      placeholder="Workout name"
+      [(ngModel)]="newWorkoutName"
+      (keyup.enter)="onCreateWorkout()"
+    />
+    <button (click)="onCreateWorkout()">Add</button>
+  </div>
+
+  @if (errorMessage) {
+    <p class="workouts-page__error">{{ errorMessage }}</p>
+  }
+
+  @if (loading) {
+    <p>Loading...</p>
+  }
+
+  @if (!loading && workouts.length === 0) {
+    <p class="workouts-page__empty">No workouts yet. Add one above.</p>
+  }
+
+  <div class="workouts-page__list">
+    @for (workout of workouts; track workout.id) {
+      <app-workout-card
+        [workout]="workout"
+        (deleteRequested)="onDeleteWorkout($event)">
+      </app-workout-card>
+    }
+  </div>
+</div>

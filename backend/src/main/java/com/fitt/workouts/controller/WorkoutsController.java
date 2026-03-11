@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/users/{userId}/workouts")
@@ -64,6 +65,21 @@ public class WorkoutsController {
         // 201 Created with a Location header pointing to the new resource. Correct REST semantics.
         URI location = URI.create("/api/users/" + userId + "/workouts/" + created.id());
         return ResponseEntity.created(location).body(body);
+    }
+
+    @GetMapping
+    public ResponseEntity<List<WorkoutResponse>> getWorkouts(
+            @PathVariable Long userId,
+            @AuthenticationPrincipal Jwt jwt) {
+
+        enforceOwnership(jwt, userId);
+
+        List<WorkoutResponse> workouts = workoutService.getWorkouts(userId)
+                .stream()
+                .map(w -> new WorkoutResponse(w.id(), w.name(), w.createdAt(), w.updatedAt()))
+                .toList();
+
+        return ResponseEntity.ok(workouts);
     }
 
     @GetMapping("/{workoutId}")

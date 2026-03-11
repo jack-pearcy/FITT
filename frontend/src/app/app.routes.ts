@@ -11,8 +11,8 @@ export const routes: Routes = [
     path: 'workouts',
     canActivate: [authGuard],
     loadComponent: () =>
-      import('./features/workouts/components/workouts-placeholder')
-        .then(m => m.WorkoutsPlaceholderComponent)
+      import('./features/workouts/components/workouts')
+        .then(m => m.WorkoutsComponent)
   },
   {
     path: '',

@@ -8,6 +8,8 @@ import com.fitt.workouts.service.model.WorkoutView;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 // Service layer: business rules, transaction boundary.
 // Controller shouldn't touch repos directly.
 @Service
@@ -58,6 +60,18 @@ public class WorkoutServiceImpl implements WorkoutService {
                 workout.getCreatedAt(),
                 workout.getUpdatedAt()
         );
+    }
+
+    @Override
+    public List<WorkoutView> getWorkouts(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId is required");
+        }
+
+        return workoutRepository.findByOwnerUserId(userId)
+                .stream()
+                .map(w -> new WorkoutView(w.getId(), w.getName(), w.getCreatedAt(), w.getUpdatedAt()))
+                .toList();
     }
 
     @Override

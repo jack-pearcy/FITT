@@ -8,6 +8,10 @@ export class WorkoutService {
 
   constructor(private http: HttpClient) {}
 
+  getWorkouts(userId: number): Observable<Workout[]> {
+    return this.http.get<Workout[]>(`/api/users/${userId}/workouts`);
+  }
+
   createWorkout(userId: number, name: string): Observable<Workout> {
     return this.http.post<Workout>(`/api/users/${userId}/workouts`, { name });
   }
