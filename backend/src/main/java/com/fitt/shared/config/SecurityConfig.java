@@ -16,13 +16,15 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 @Configuration
 public class SecurityConfig {
 
-    // Defines the rules for every HTTP request entering the app.
-    // Spring Security is a chain of filters. Requests flow through them
-    // in order before ever reaching a controller.
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
@@ -31,32 +33,24 @@ public class SecurityConfig {
     ) throws Exception {
 
         return http
-                // CSRF protection is meant for browser cookie/session flows.
-                // A stateless token API does not need it.
                 .csrf(AbstractHttpConfigurer::disable)
 
-                // Never create an HttpSession. Every request proves identity via its token.
+                // Configured here rather than at the MVC layer because Spring Security
+                // filters run before the DispatcherServlet. A preflight OPTIONS request
+                // would be rejected with 401 before MVC ever sees it without this.
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
                 .authorizeHttpRequests(auth -> auth
-                        // Health endpoints need to be reachable without credentials.
-                        // Monitoring tools and load balancers depend on this.
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/api/identity/health").permitAll()
-                        // Login has to be public. The client has no token yet at this point.
                         .requestMatchers("/api/identity/auth/login").permitAll()
-                        // Everything else requires a valid Bearer token.
                         .anyRequest().authenticated()
                 )
 
-                // Activates the BearerTokenAuthenticationFilter which reads the Authorization
-                // header, extracts the token, and runs it through the JwtDecoder bean.
-                // All automatic once declared here.
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
 
-                // Custom error responses wired in here.
-                // authenticationEntryPoint handles 401 (missing or invalid token).
-                // accessDeniedHandler handles 403 (valid token but wrong permissions).
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler)
@@ -65,17 +59,31 @@ public class SecurityConfig {
                 .build();
     }
 
-    // AuthenticationManager is what actually validates credentials.
-    // IdentityAuthService passes it a username and password, and it either returns
-    // an authenticated principal or throws if the credentials are wrong.
+    // X-Request-ID is listed so the correlation ID header
+    // passes the preflight check. allowCredentials(true) is required
+    // when sending an Authorization header — a wildcard origin is not
+    // permitted in that case, so the exact origin must be named.
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(List.of("http://localhost:4200"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-ID"));
+        config.setExposedHeaders(List.of("X-Request-ID"));
+        config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
 
-    // Phase 6 placeholder. One hardcoded in-memory user for local dev and smoke testing.
-    // The uid=1 in IdentityAuthService is tied to this user specifically.
-    // This gets replaced by a real UserDetailsService that hits the database in a future phase.
+    // Placeholder until Phase 10 replaces this with a database-backed UserDetailsService.
     @Bean
     public UserDetailsService userDetailsService(PasswordEncoder passwordEncoder) {
         return new InMemoryUserDetailsManager(
@@ -86,8 +94,6 @@ public class SecurityConfig {
         );
     }
 
-    // BCrypt is the standard for password hashing. It is intentionally slow to resist
-    // brute force attacks. Passwords never get stored or compared as plain text.
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
