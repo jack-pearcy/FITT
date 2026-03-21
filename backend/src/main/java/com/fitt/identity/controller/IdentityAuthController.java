@@ -1,15 +1,17 @@
 package com.fitt.identity.controller;
 
 import com.fitt.identity.dto.LoginRequest;
+import com.fitt.identity.dto.RegisterRequest;
 import com.fitt.identity.dto.TokenResponse;
 import com.fitt.identity.service.IdentityAuthService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-// Thin controller, only deals with HTTP concerns.
+// Thin controller, HTTP concerns only.
 // Parses the request, calls the service, returns the response.
 @RestController
 @RequestMapping("/api/identity/auth")
@@ -21,12 +23,19 @@ public class IdentityAuthController {
         this.identityAuthService = identityAuthService;
     }
 
-    // POST /api/identity/auth/login is a public endpoint, configured in SecurityConfig.
-    // Returns 200 with the token on success. Returns 401 if credentials are wrong,
-    // Spring handles that automatically via the AuthenticationManager.
+    // Returns 201 so the client knows a resource was created.
+    // Token is included so the user is logged in immediately after sign up.
+    @PostMapping("/register")
+    public ResponseEntity<TokenResponse> register(@RequestBody RegisterRequest request) {
+        String token = identityAuthService.register(request.getEmail(), request.getPassword());
+        return ResponseEntity.status(HttpStatus.CREATED).body(new TokenResponse(token));
+    }
+
+    // Public endpoint, configured in SecurityConfig.
+    // 401 is handled automatically by Spring Security if credentials fail.
     @PostMapping("/login")
     public ResponseEntity<TokenResponse> login(@RequestBody LoginRequest request) {
-        String token = identityAuthService.login(request.getUsername(), request.getPassword());
+        String token = identityAuthService.login(request.getEmail(), request.getPassword());
         return ResponseEntity.ok(new TokenResponse(token));
     }
 }

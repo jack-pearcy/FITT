@@ -1,0 +1,17 @@
+### Register
+POST http://localhost:8080/api/identity/auth/register
+Content-Type: application/json
+
+{ "email": "jay@fitt.com", "password": "password123" }
+
+### Login
+POST http://localhost:8080/api/identity/auth/login
+Content-Type: application/json
+
+{ "email": "jay@fitt.com", "password": "password123" }
+
+### Wrong password
+POST http://localhost:8080/api/identity/auth/login
+Content-Type: application/json
+
+{ "email": "jay@fitt.com", "password": "wrongpassword" }
