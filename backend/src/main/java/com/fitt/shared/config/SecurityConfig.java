@@ -1,20 +1,19 @@
 package com.fitt.shared.config;
 
+import com.fitt.identity.service.IdentityUserDetailsService;
 import com.fitt.shared.security.RestAccessDeniedHandler;
 import com.fitt.shared.security.RestAuthenticationEntryPoint;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
-import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -46,6 +45,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/api/identity/health").permitAll()
                         .requestMatchers("/api/identity/auth/login").permitAll()
+                        .requestMatchers("/api/identity/auth/register").permitAll()
                         .anyRequest().authenticated()
                 )
 
@@ -59,10 +59,8 @@ public class SecurityConfig {
                 .build();
     }
 
-    // X-Request-ID is listed so the correlation ID header
-    // passes the preflight check. allowCredentials(true) is required
-    // when sending an Authorization header — a wildcard origin is not
-    // permitted in that case, so the exact origin must be named.
+    // X-Request-ID is listed so the correlation ID header passes the preflight check.
+    // allowCredentials(true) requires a named origin, wildcard is not allowed with credentials.
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
@@ -78,20 +76,23 @@ public class SecurityConfig {
         return source;
     }
 
+    // Explicit wiring so it is clear exactly which service and encoder are used.
+    // Nothing is auto-detected here.
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
-        return config.getAuthenticationManager();
+    public DaoAuthenticationProvider authenticationProvider(
+            IdentityUserDetailsService userDetailsService,
+            PasswordEncoder passwordEncoder
+    ) {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
+        provider.setPasswordEncoder(passwordEncoder);
+        return provider;
     }
 
-    // Placeholder until Phase 10 replaces this with a database-backed UserDetailsService.
+    // ProviderManager is the standard AuthenticationManager implementation.
+    // Exposed as a bean so IdentityAuthService can inject and call it directly.
     @Bean
-    public UserDetailsService userDetailsService(PasswordEncoder passwordEncoder) {
-        return new InMemoryUserDetailsManager(
-                User.withUsername("testuser")
-                        .password(passwordEncoder.encode("password123"))
-                        .roles("USER")
-                        .build()
-        );
+    public AuthenticationManager authenticationManager(DaoAuthenticationProvider authenticationProvider) {
+        return new ProviderManager(authenticationProvider);
     }
 
     @Bean

@@ -1,11 +1,13 @@
 package com.fitt.shared.config;
 
+import com.fitt.identity.service.exception.EmailAlreadyExistsException;
 import com.fitt.workouts.service.exception.WorkoutNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -13,6 +15,15 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
+    // 409 because the request is valid but conflicts with existing data.
+    @ExceptionHandler(EmailAlreadyExistsException.class)
+    public ResponseEntity<ProblemDetail> handleEmailAlreadyExists(EmailAlreadyExistsException ex) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.CONFLICT);
+        problem.setTitle("Conflict");
+        problem.setDetail(ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+    }
 
     @ExceptionHandler(WorkoutNotFoundException.class)
     public ResponseEntity<ProblemDetail> handleWorkoutNotFound(WorkoutNotFoundException ex) {
@@ -38,5 +49,13 @@ public class ApiExceptionHandler {
         problem.setTitle("Internal Server Error");
         problem.setDetail("Unexpected error");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(problem);
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<ProblemDetail> handleBadCredential(BadCredentialsException ex) {
+        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.UNAUTHORIZED);
+        problem.setTitle("Bad Credentials");
+        problem.setDetail(ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problem);
     }
 }

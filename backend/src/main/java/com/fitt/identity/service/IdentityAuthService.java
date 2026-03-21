@@ -1,15 +1,19 @@
 package com.fitt.identity.service;
 
+import com.fitt.identity.domain.UserEntity;
+import com.fitt.identity.repository.UserRepository;
+import com.fitt.identity.service.exception.EmailAlreadyExistsException;
 import com.fitt.shared.properties.JwtProperties;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
-import org.springframework.security.oauth2.jwt.JwsHeader;
 
 import java.time.Instant;
 
@@ -19,43 +23,65 @@ public class IdentityAuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtEncoder jwtEncoder;
     private final JwtProperties jwtProperties;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     public IdentityAuthService(
             AuthenticationManager authenticationManager,
             JwtEncoder jwtEncoder,
-            JwtProperties jwtProperties
+            JwtProperties jwtProperties,
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder
     ) {
         this.authenticationManager = authenticationManager;
         this.jwtEncoder = jwtEncoder;
         this.jwtProperties = jwtProperties;
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
-    // Two things happen here.
-    //
-    // First, AuthenticationManager verifies the credentials against the UserDetailsService.
-    // If they are wrong it throws an AuthenticationException and execution stops there.
-    // Spring Security catches it and returns a 401 automatically.
-    //
-    // Second, the claims get built and the token gets signed. Claims are the assertions
-    // the token carries: iss is who issued it, sub is who it is for, iat is when it was
-    // issued, exp is when it expires, and uid is the internal numeric user ID used later
-    // for ownership enforcement in the controllers.
-    //
-    // Phase 6 note: uid is hardcoded to 1L because the in-memory user has no numeric ID.
-    // This gets replaced with a real DB lookup once the identity domain is fully built out.
-    public String login(String username, String password) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(username, password)
+    // Duplicate check runs first so we return a clean 409 instead of letting
+    // a DB constraint violation bubble up as a 500.
+    // Password is hashed before the entity is built so plain text never hits the DB.
+    public String register(String email, String password) {
+        if (userRepository.existsByEmail(email)) {
+            throw new EmailAlreadyExistsException("email already registered");
+        }
+
+        String hash = passwordEncoder.encode(password);
+        UserEntity saved = userRepository.save(new UserEntity(email, hash));
+
+        return buildToken(saved);
+    }
+
+    // AuthenticationManager runs the full verification chain.
+    // Wrong credentials throw AuthenticationException and Spring Security returns 401.
+    // Pattern matching instanceof checks the type and binds in one step.
+    // In practice this never fails because loadUserByUsername always returns a UserEntity,
+    // but failing fast here is cleaner than letting a ClassCastException surface later.
+    public String login(String email, String password) {
+        Authentication auth = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(email, password)
         );
 
+        Object principal = auth.getPrincipal();
+        if (!(principal instanceof UserEntity user)) {
+            throw new IllegalStateException("unexpected principal type after authentication");
+        }
+
+        return buildToken(user);
+    }
+
+    // Shared by register and login so token structure has one place to change.
+    private String buildToken(UserEntity user) {
         Instant now = Instant.now();
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer(jwtProperties.getIssuer())
-                .subject(authentication.getName())
+                .subject(user.getUsername())
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(jwtProperties.getTtlSeconds()))
-                .claim("uid", 1L) // Phase 6 placeholder, replace with real user lookup
+                .claim("uid", user.getId())
                 .build();
 
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
