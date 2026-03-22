@@ -1,7 +1,9 @@
 package com.fitt.shared.config;
 
 import com.fitt.identity.service.exception.EmailAlreadyExistsException;
-import com.fitt.workouts.service.exception.WorkoutNotFoundException;
+import com.fitt.workouts.service.exception.ExerciseNotFoundException;
+import com.fitt.workouts.service.exception.WorkoutPlanNotFoundException;
+import com.fitt.workouts.service.exception.WorkoutSessionNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -16,6 +18,36 @@ public class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
+    // workouts domain, 404s
+    @ExceptionHandler(WorkoutSessionNotFoundException.class)
+    public ProblemDetail handleWorkoutSessionNotFound(WorkoutSessionNotFoundException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setTitle("Workout Session Not Found");
+        return problem;
+    }
+
+    @ExceptionHandler(WorkoutPlanNotFoundException.class)
+    public ProblemDetail handleWorkoutPlanNotFound(WorkoutPlanNotFoundException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setTitle("Workout Plan Not Found");
+        return problem;
+    }
+
+    @ExceptionHandler(ExerciseNotFoundException.class)
+    public ProblemDetail handleExerciseNotFound(ExerciseNotFoundException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setTitle("Exercise Not Found");
+        return problem;
+    }
+
+    // bad requests from the workouts domain (fixed exercise delete, bad entry IDs, etc)
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problem.setTitle("Bad Request");
+        return problem;
+    }
+
     // 409 because the request is valid but conflicts with existing data.
     @ExceptionHandler(EmailAlreadyExistsException.class)
     public ResponseEntity<ProblemDetail> handleEmailAlreadyExists(EmailAlreadyExistsException ex) {
@@ -23,14 +55,6 @@ public class ApiExceptionHandler {
         problem.setTitle("Conflict");
         problem.setDetail(ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
-    }
-
-    @ExceptionHandler(WorkoutNotFoundException.class)
-    public ResponseEntity<ProblemDetail> handleWorkoutNotFound(WorkoutNotFoundException ex) {
-        ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
-        problem.setTitle("Not Found");
-        problem.setDetail(ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
