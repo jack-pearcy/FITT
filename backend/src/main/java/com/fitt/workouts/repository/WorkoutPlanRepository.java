@@ -1,6 +1,5 @@
 package com.fitt.workouts.repository;
 
-import com.fitt.workouts.dto.WorkoutPlanResponse;
 import com.fitt.workouts.persistence.entity.WorkoutPlanEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -18,9 +17,6 @@ public interface WorkoutPlanRepository extends JpaRepository<WorkoutPlanEntity, 
     // Cheaper ownership check when loading is not needed.
     boolean existsByIdAndOwnerUserId(Long id, Long ownerUserId);
 
-    // The user's currently active plan. Optional because a user may have no active plan.
+    // The user's currently active plan. Optional because a user may have no active plan yet.
     Optional<WorkoutPlanEntity> findByOwnerUserIdAndIsActiveTrue(Long ownerUserId);
-
-    List<WorkoutPlanResponse> findByOwnerUserIdOrderByCreatedAtDesc(Long ownerUserId);
-
 }
