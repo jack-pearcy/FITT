@@ -1,17 +1,26 @@
-### Register
-POST http://localhost:8080/api/identity/auth/register
+### List exercises (should return the global library, no custom ones yet)
+GET http://localhost:8080/api/users/5/exercises
+Authorization: Bearer {{token}}
+
+### Filter by muscle group
+GET http://localhost:8080/api/users/5/exercises?muscleGroup=CHEST
+Authorization: Bearer {{token}}
+
+### Start a session
+POST http://localhost:8080/api/users/5/workout-sessions
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{ "email": "jay@fitt.com", "password": "password123" }
+{"startedAt": "2026-03-22T12:00:00Z", "notes": null}
 
-### Login
-POST http://localhost:8080/api/identity/auth/login
-Content-Type: application/json
+### List sessions (should show the one you just created)
+GET http://localhost:8080/api/users/5/workout-sessions
+Authorization: Bearer {{token}}
 
-{ "email": "jay@fitt.com", "password": "password123" }
+### List plans (should be empty)
+GET http://localhost:8080/api/users/5/workout-plans
+Authorization: Bearer {{token}}
 
-### Wrong password
-POST http://localhost:8080/api/identity/auth/login
-Content-Type: application/json
-
-{ "email": "jay@fitt.com", "password": "wrongpassword" }
+### Ownership check — should return 403
+GET http://localhost:8080/api/users/999/exercises
+Authorization: Bearer {{token}}
