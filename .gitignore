@@ -7,3 +7,5 @@ backend/src/main/resources/application-local.properties
 
 # Structure export
 structure_exports/
+project_dump.txt
+FITT_TRANSITION_PROMPT_claude.txt
