@@ -4,6 +4,7 @@ import com.fitt.identity.service.exception.EmailAlreadyExistsException;
 import com.fitt.workouts.service.exception.ExerciseNotFoundException;
 import com.fitt.workouts.service.exception.WorkoutPlanNotFoundException;
 import com.fitt.workouts.service.exception.WorkoutSessionNotFoundException;
+import com.fitt.measurements.service.exception.BodyWeightEntryNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -38,6 +39,14 @@ public class ApiExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
         problem.setTitle("Exercise Not Found");
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+    }
+
+    @ExceptionHandler(BodyWeightEntryNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleBodyWeightEntryNotFound(
+            BodyWeightEntryNotFoundException ex) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND, ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
     }
 
     // Covers bad input from workouts domain: deleting a fixed exercise, bad entry IDs, etc.
