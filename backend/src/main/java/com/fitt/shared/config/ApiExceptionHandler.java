@@ -14,6 +14,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import com.fitt.identity.service.exception.BiometricsNotFoundException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -47,6 +48,15 @@ public class ApiExceptionHandler {
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
                 HttpStatus.NOT_FOUND, ex.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
+    }
+
+    @ExceptionHandler(BiometricsNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleBiometricsNotFound(
+            BiometricsNotFoundException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setTitle("Biometrics Not Found");
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
     }
 
     // Covers bad input from workouts domain: deleting a fixed exercise, bad entry IDs, etc.
