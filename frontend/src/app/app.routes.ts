@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { onboardingGuard } from './core/guards/onboarding.guard';
 import { LoginComponent } from './features/auth/components/login';
 
 export const routes: Routes = [
@@ -8,8 +9,21 @@ export const routes: Routes = [
     component: LoginComponent
   },
   {
-    path: 'workouts',
+    path: 'register',
+    loadComponent: () =>
+      import('./features/auth/components/register')
+        .then(m => m.RegisterComponent)
+  },
+  {
+    path: 'onboarding',
     canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/onboarding/components/onboarding')
+        .then(m => m.OnboardingComponent)
+  },
+  {
+    path: 'home',
+    canActivate: [authGuard, onboardingGuard],
     loadComponent: () =>
       import('./features/workouts/components/workouts')
         .then(m => m.WorkoutsComponent)
