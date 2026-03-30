@@ -1,0 +1,185 @@
+<div class="onboarding-container">
+
+  <div class="progress">
+    <div class="progress__bar" [style.width.%]="((currentStep() + 1) / totalSteps) * 100"></div>
+  </div>
+
+  @if (error()) {
+    <p class="form-error">{{ error() }}</p>
+  }
+
+  <div class="step">
+
+    @if (currentStep() === 0) {
+      <h2>What units do you prefer?</h2>
+      <div class="options" [formGroup]="biometricsForm">
+        <label class="option">
+          <input type="radio" formControlName="unitsPreference" value="METRIC" />
+          <span>Metric <small>kg and cm</small></span>
+        </label>
+        <label class="option">
+          <input type="radio" formControlName="unitsPreference" value="IMPERIAL" />
+          <span>Imperial <small>lbs and inches</small></span>
+        </label>
+      </div>
+    }
+
+    @if (currentStep() === 1) {
+      <h2>What is your height?</h2>
+      <div class="field" [formGroup]="biometricsForm">
+        <input
+          type="number"
+          formControlName="height"
+          [placeholder]="units === 'METRIC' ? 'e.g. 175' : 'e.g. 69'"
+          min="1"
+        />
+        <span class="unit-label">{{ units === 'METRIC' ? 'cm' : 'inches' }}</span>
+      </div>
+    }
+
+    @if (currentStep() === 2) {
+      <h2>What is your current weight?</h2>
+      <div class="field" [formGroup]="biometricsForm">
+        <input
+          type="number"
+          formControlName="weight"
+          [placeholder]="units === 'METRIC' ? 'e.g. 75' : 'e.g. 165'"
+          min="1"
+        />
+        <span class="unit-label">{{ units === 'METRIC' ? 'kg' : 'lbs' }}</span>
+      </div>
+    }
+
+    @if (currentStep() === 3) {
+      <h2>When were you born?</h2>
+      <div class="field" [formGroup]="biometricsForm">
+        <input type="date" formControlName="dateOfBirth" />
+      </div>
+    }
+
+    @if (currentStep() === 4) {
+      <h2>What is your biological sex?</h2>
+      <p class="helper">Used to calculate your calorie needs accurately.</p>
+      <div class="options" [formGroup]="biometricsForm">
+        <label class="option">
+          <input type="radio" formControlName="biologicalSex" value="MALE" />
+          <span>Male</span>
+        </label>
+        <label class="option">
+          <input type="radio" formControlName="biologicalSex" value="FEMALE" />
+          <span>Female</span>
+        </label>
+      </div>
+    }
+
+    @if (currentStep() === 5) {
+      <h2>How active are you?</h2>
+      <div class="options" [formGroup]="biometricsForm">
+        <label class="option">
+          <input type="radio" formControlName="activityLevel" value="SEDENTARY" />
+          <span>Sedentary <small>Little to no exercise</small></span>
+        </label>
+        <label class="option">
+          <input type="radio" formControlName="activityLevel" value="LIGHTLY_ACTIVE" />
+          <span>Lightly active <small>1 to 3 days per week</small></span>
+        </label>
+        <label class="option">
+          <input type="radio" formControlName="activityLevel" value="MODERATELY_ACTIVE" />
+          <span>Moderately active <small>3 to 5 days per week</small></span>
+        </label>
+        <label class="option">
+          <input type="radio" formControlName="activityLevel" value="ACTIVE" />
+          <span>Active <small>6 to 7 days per week</small></span>
+        </label>
+        <label class="option">
+          <input type="radio" formControlName="activityLevel" value="VERY_ACTIVE" />
+          <span>Very active <small>Hard exercise or physical job</small></span>
+        </label>
+      </div>
+    }
+
+    @if (currentStep() === 6) {
+      <h2>What is your goal?</h2>
+      <div class="options" [formGroup]="goalsForm">
+        <label class="option">
+          <input type="radio" formControlName="goalDirection" value="BULK" />
+          <span>Bulk <small>Gain muscle and weight</small></span>
+        </label>
+        <label class="option">
+          <input type="radio" formControlName="goalDirection" value="CUT" />
+          <span>Cut <small>Lose fat, maintain muscle</small></span>
+        </label>
+        <label class="option">
+          <input type="radio" formControlName="goalDirection" value="MAINTAIN" />
+          <span>Maintain <small>Keep your current physique</small></span>
+        </label>
+      </div>
+    }
+
+    @if (currentStep() === 7) {
+      <h2>What is your target weight? <span class="optional">(optional)</span></h2>
+      <div class="field" [formGroup]="goalsForm">
+        <input
+          type="number"
+          formControlName="targetWeightKg"
+          [placeholder]="units === 'METRIC' ? 'e.g. 80' : 'e.g. 176'"
+          min="1"
+        />
+        <span class="unit-label">{{ units === 'METRIC' ? 'kg' : 'lbs' }}</span>
+      </div>
+    }
+
+    @if (currentStep() === 8) {
+      <h2>What is your timeline? <span class="optional">(optional)</span></h2>
+      <div class="field" [formGroup]="goalsForm">
+        <input type="number" formControlName="timelineWeeks" placeholder="e.g. 12" min="1" />
+        <span class="unit-label">weeks</span>
+      </div>
+    }
+
+    @if (currentStep() === 9) {
+      <h2>What is your calorie goal?</h2>
+      @if (tdee()) {
+        <p class="tdee-display">
+          Your estimated daily burn is <strong>{{ tdee() }} kcal</strong>.
+        </p>
+      }
+      <div class="options" [formGroup]="goalsForm">
+        <label class="option">
+          <input type="radio" formControlName="calorieGoalMode" value="AUTO" />
+          <span>Auto <small>We calculate it from your TDEE</small></span>
+        </label>
+        <label class="option">
+          <input type="radio" formControlName="calorieGoalMode" value="MANUAL" />
+          <span>Manual <small>Set your own target</small></span>
+        </label>
+      </div>
+      @if (isManualCalories) {
+        <div class="field" [formGroup]="goalsForm">
+          <input type="number" formControlName="calorieGoal" placeholder="e.g. 2200" min="500" />
+          <span class="unit-label">kcal / day</span>
+        </div>
+      }
+    }
+
+  </div>
+
+  <div class="nav">
+    @if (currentStep() > 0) {
+      <button type="button" class="nav__back" (click)="back()" [disabled]="loading()">
+        Back
+      </button>
+    }
+    <button
+      type="button"
+      class="nav__next"
+      (click)="next()"
+      [disabled]="!stepValid || loading()"
+    >
+      @if (loading()) { Saving... }
+      @else if (currentStep() === totalSteps - 1) { Finish }
+      @else { Next }
+    </button>
+  </div>
+
+</div>
