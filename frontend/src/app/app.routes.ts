@@ -22,11 +22,44 @@ export const routes: Routes = [
         .then(m => m.OnboardingComponent)
   },
   {
+    // Shell is eager, guards run once here, all tabs inherit protection
     path: 'home',
     canActivate: [authGuard, onboardingGuard],
     loadComponent: () =>
-      import('./features/workouts/components/workouts')
-        .then(m => m.WorkoutsComponent)
+      import('./features/main/components/main-shell')
+        .then(m => m.MainShellComponent),
+    children: [
+      {
+        path: '',
+        redirectTo: 'workouts',
+        pathMatch: 'full'
+      },
+      {
+        path: 'weight-log',
+        loadComponent: () =>
+          import('./features/main/components/weight-log/weight-log')
+            .then(m => m.WeightLogComponent)
+      },
+      {
+        path: 'workouts',
+        loadComponent: () =>
+          import('./features/main/components/workouts/workouts-main')
+            .then(m => m.WorkoutsMainComponent)
+      },
+      {
+        path: 'goals',
+        loadComponent: () =>
+          import('./features/main/components/goals/goals')
+            .then(m => m.GoalsComponent)
+      }
+    ]
+  },
+  {
+    path: 'settings',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/main/components/settings/settings')
+        .then(m => m.SettingsComponent)
   },
   {
     path: '',
