@@ -1,4 +1,249 @@
-.placeholder-text {
+.error-banner {
+  color: #ff6b6b;
+  font-size: 0.875rem;
+  margin: 0 0 1rem;
+}
+
+.state-msg {
   color: #666;
   font-size: 0.9rem;
+}
+
+// No-plan state
+.no-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+
+  &__msg {
+    color: #aaa;
+    font-size: 0.95rem;
+    margin: 0;
+  }
+}
+
+// Active plan view
+.plan-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+
+  &__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  &__name {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin: 0 0 0.25rem;
+    color: #f0f0f0;
+  }
+
+  &__meta {
+    font-size: 0.78rem;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+}
+
+.plan-days {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.plan-day {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 1rem;
+
+  &__label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #e8ff3b;
+    margin: 0 0 0.75rem;
+  }
+}
+
+.exercise-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  &__item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  &__name {
+    font-size: 0.9rem;
+    color: #e0e0e0;
+  }
+
+  &__detail {
+    font-size: 0.8rem;
+    color: #888;
+    white-space: nowrap;
+  }
+}
+
+// Progression model selector
+.progression-section {
+  &__title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #888;
+    margin: 0 0 0.75rem;
+  }
+}
+
+.progression-options {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.progression-btn {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.8rem;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  background: #1a1a1a;
+  color: #aaa;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+
+  &--active {
+    border-color: #e8ff3b;
+    color: #e8ff3b;
+  }
+
+  &:hover:not(.progression-btn--active) {
+    border-color: #444;
+    color: #ccc;
+  }
+}
+
+// Plan list used in both no-plan and plan-view sections
+.plan-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+
+  &__item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.65rem 0.85rem;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+  }
+
+  &__name {
+    font-size: 0.9rem;
+    color: #e0e0e0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+}
+
+.active-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #0f0f0f;
+  background: #e8ff3b;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+}
+
+.other-plans {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+
+  &__title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #888;
+    margin: 0;
+  }
+}
+
+// Shared button styles
+.btn {
+  padding: 0.6rem 1.1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s, opacity 0.15s;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &--primary {
+    background: #e8ff3b;
+    color: #0f0f0f;
+
+    &:hover:not(:disabled) {
+      background: #d4eb2a;
+    }
+  }
+
+  &--danger {
+    background: transparent;
+    color: #ff6b6b;
+    border: 1px solid #ff6b6b;
+
+    &:hover:not(:disabled) {
+      background: rgba(255, 107, 107, 0.1);
+    }
+  }
+
+  &--ghost {
+    background: transparent;
+    color: #aaa;
+    border: 1px solid #2a2a2a;
+
+    &:hover:not(:disabled) {
+      border-color: #444;
+      color: #ccc;
+    }
+  }
+
+  &--sm {
+    padding: 0.35rem 0.7rem;
+    font-size: 0.78rem;
+  }
 }

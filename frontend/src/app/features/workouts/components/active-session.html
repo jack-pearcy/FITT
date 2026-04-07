@@ -1,0 +1,161 @@
+<div class="session">
+
+  @if (view() === 'loading') {
+    <div class="session__loading">
+      <p>Loading your session...</p>
+    </div>
+  }
+
+  @if (view() === 'error') {
+    <div class="session__error">
+      <p>{{ error() ?? 'Something went wrong.' }}</p>
+      <button class="btn btn--ghost" (click)="backToHome()">Back to Home</button>
+    </div>
+  }
+
+  @if (view() === 'active') {
+
+    <header class="session__header">
+      <div class="session__timer">{{ elapsedFormatted() }}</div>
+      <button
+        class="btn btn--primary"
+        (click)="finishSession()"
+        [disabled]="actionLoading()">
+        Finish
+      </button>
+    </header>
+
+    @if (error()) {
+      <p class="session__error-inline">{{ error() }}</p>
+    }
+
+    <div class="session__entries">
+      @for (entry of session()?.exerciseEntries ?? []; track entry.id) {
+        <div
+          class="entry"
+          [class.entry--active]="activeEntryId() === entry.id"
+          (click)="setActive(entry.id)">
+
+          <div class="entry__header">
+            <span class="entry__name">{{ entry.exercise.name }}</span>
+            <span class="entry__group">{{ entry.exercise.muscleGroup }}</span>
+          </div>
+
+          <!-- Completed sets list -->
+          @if (getCompletedSets(entry).length > 0) {
+            <ul class="set-list">
+              @for (set of getCompletedSets(entry); track set.id) {
+                <li class="set-list__item">
+                  <span class="set-list__num">Set {{ set.setNumber }}</span>
+                  <span class="set-list__detail">
+                    {{ set.reps }} reps
+                    @if (set.weight) { &commat; {{ set.weight }} kg }
+                    @if (set.rpe) { &middot; RPE {{ set.rpe }} }
+                  </span>
+                  <span class="set-list__check">&#10003;</span>
+                </li>
+              }
+            </ul>
+          }
+
+          <!-- Log a set inputs (shown when this row is active) -->
+          @if (activeEntryId() === entry.id) {
+            <div class="log-set" (click)="$event.stopPropagation()">
+              <div class="log-set__fields">
+                <label class="log-set__field">
+                  <span>Reps</span>
+                  <input
+                    type="number"
+                    min="0"
+                    class="log-set__input"
+                    [ngModel]="getInput(entry.id).reps"
+                    (ngModelChange)="updateInput(entry.id, 'reps', +$event)" />
+                </label>
+                <label class="log-set__field">
+                  <span>Weight (kg)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    class="log-set__input"
+                    [ngModel]="getInput(entry.id).weight"
+                    (ngModelChange)="updateInput(entry.id, 'weight', +$event)" />
+                </label>
+                <label class="log-set__field">
+                  <span>RPE</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    step="0.5"
+                    class="log-set__input"
+                    [ngModel]="getInput(entry.id).rpe"
+                    (ngModelChange)="updateInput(entry.id, 'rpe', +$event)" />
+                </label>
+              </div>
+              <!-- Wrap button with a check to deactivate once prescribed set amount reached -->
+              @if (getCompletedSets(entry).length < prescribedSets(entry.exercise.id)) {
+                <button
+                  class="btn btn--primary"
+                  (click)="logSet(entry)"
+                  [disabled]="actionLoading()">
+                  Log Set
+                </button>
+              } @else {
+                <p class="log-set__done">All sets complete</p>
+              }
+            </div>
+          }
+
+          <!-- Rest timer shown after a set is logged, updated to deactivate after final set logged -->
+          @if (getRestTimer(entry.id) > 0 && getCompletedSets(entry).length < prescribedSets(entry.exercise.id)) {
+            <div class="rest-timer">
+              Rest: {{ restTimerFormatted(entry.id) }}
+            </div>
+          }
+
+        </div>
+      }
+    </div>
+
+  }
+
+  @if (view() === 'summary') {
+    <div class="summary">
+      <h1 class="summary__title">Session Complete</h1>
+      <p class="summary__time">Total time: {{ elapsedFormatted() }}</p>
+
+      <div class="summary__stats">
+        <div class="summary__stat">
+          <span class="summary__stat-label">Total Volume</span>
+          <span class="summary__stat-value">{{ totalVolume | number: '1.0-1' }} kg</span>
+        </div>
+        <div class="summary__stat">
+          <span class="summary__stat-label">Sets Logged</span>
+          <span class="summary__stat-value">{{ totalSetsLogged }}</span>
+        </div>
+      </div>
+
+      <div class="summary__entries">
+        @for (entry of session()?.exerciseEntries ?? []; track entry.id) {
+          @if (getCompletedSets(entry).length > 0) {
+            <div class="summary__entry">
+              <p class="summary__entry-name">{{ entry.exercise.name }}</p>
+              <ul class="summary__sets">
+                @for (set of getCompletedSets(entry); track set.id) {
+                  <li>
+                    Set {{ set.setNumber }}: {{ set.reps }} reps
+                    @if (set.weight) { &commat; {{ set.weight }} kg }
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+        }
+      </div>
+
+      <button class="btn btn--primary" (click)="backToHome()">Back to Home</button>
+    </div>
+  }
+
+</div>

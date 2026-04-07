@@ -1,1 +1,139 @@
-<p class="placeholder-text">Workouts — coming in Phase 16</p>
+@if (error()) {
+  <p class="error-banner">{{ error() }}</p>
+}
+
+@if (view() === 'loading') {
+  <p class="state-msg">Loading your plans...</p>
+}
+
+@if (view() === 'no-plan') {
+  <div class="no-plan">
+    <p class="no-plan__msg">
+      @if (plans().length > 0) {
+        No active plan. Pick one below or create a new one.
+      } @else {
+        You have no workout plans yet.
+      }
+    </p>
+
+    @if (plans().length > 0) {
+      <ul class="plan-list">
+        @for (plan of plans(); track plan.id) {
+          <li class="plan-list__item">
+            <span class="plan-list__name">{{ plan.name }}</span>
+            <div class="plan-list__actions">
+              <button
+                class="btn btn--sm btn--primary"
+                (click)="activatePlan(plan.id)"
+                [disabled]="actionLoading()">
+                Activate
+              </button>
+              <button
+                class="btn btn--sm btn--danger"
+                (click)="deletePlan(plan.id)"
+                [disabled]="actionLoading()">
+                Delete
+              </button>
+            </div>
+          </li>
+        }
+      </ul>
+    }
+
+    <button class="btn btn--primary" (click)="showCreatePlan()">
+      Create a Plan
+    </button>
+  </div>
+}
+
+@if (view() === 'plan-view') {
+  <div class="plan-view">
+
+    <div class="plan-view__header">
+      <div>
+        <h2 class="plan-view__name">{{ activePlan()?.name }}</h2>
+        <span class="plan-view__meta">
+          {{ activePlan()?.daysPerWeek }}d/wk &middot; {{ activePlan()?.splitType }}
+        </span>
+      </div>
+      <button
+        class="btn btn--primary"
+        (click)="startSession()"
+        [disabled]="actionLoading()">
+        Start Session
+      </button>
+    </div>
+
+    <div class="plan-days">
+      @for (day of activePlan()?.days ?? []; track day.id) {
+        <div class="plan-day">
+          <h3 class="plan-day__label">{{ day.dayLabel }}</h3>
+          <ul class="exercise-list">
+            @for (ex of day.exercises; track ex.id) {
+              <li class="exercise-list__item">
+                <span class="exercise-list__name">{{ ex.exercise.name }}</span>
+                <span class="exercise-list__detail">
+                  {{ ex.sets }} x {{ ex.reps }}
+                </span>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    </div>
+
+    <div class="progression-section">
+      <h3 class="progression-section__title">Progression Model</h3>
+      <div class="progression-options">
+        @for (entry of progressionEntries(); track entry.key) {
+          <button
+            class="progression-btn"
+            [class.progression-btn--active]="progressionModel() === entry.key"
+            (click)="setProgressionModel(entry.key)">
+            {{ entry.label }}
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="other-plans">
+      <h3 class="other-plans__title">Your Plans</h3>
+      <ul class="plan-list">
+        @for (plan of plans(); track plan.id) {
+          <li class="plan-list__item">
+            <span class="plan-list__name">
+              {{ plan.name }}
+              @if (plan.active) { <span class="active-badge">Active</span> }
+            </span>
+            <div class="plan-list__actions">
+              @if (!plan.active) {
+                <button
+                  class="btn btn--sm btn--primary"
+                  (click)="activatePlan(plan.id)"
+                  [disabled]="actionLoading()">
+                  Activate
+                </button>
+              }
+              <button
+                class="btn btn--sm btn--danger"
+                (click)="deletePlan(plan.id)"
+                [disabled]="actionLoading()">
+                Delete
+              </button>
+            </div>
+          </li>
+        }
+      </ul>
+      <button class="btn btn--ghost" (click)="showCreatePlan()">
+        + New Plan
+      </button>
+    </div>
+
+  </div>
+}
+
+@if (view() === 'create-plan') {
+  <app-create-plan-wizard
+    (cancelled)="cancelCreatePlan()"
+    (planCreated)="onPlanCreated($event)" />
+}

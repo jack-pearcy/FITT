@@ -25,4 +25,6 @@ public interface WorkoutSessionService {
     WorkoutSessionResponse logSet(Long ownerUserId, Long sessionId, Long entryId, LogSetRequest request);
 
     WorkoutSessionResponse deleteSet(Long ownerUserId, Long sessionId, Long entryId, Long setId);
+
+    long countCompletedSessions(Long ownerUserId, Long planId);
 }

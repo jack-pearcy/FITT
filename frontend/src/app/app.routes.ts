@@ -55,6 +55,13 @@ export const routes: Routes = [
     ]
   },
   {
+    path: 'session/:sessionId',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/workouts/components/active-session')
+        .then(m => m.ActiveSessionComponent)
+  },
+  {
     path: 'settings',
     canActivate: [authGuard],
     loadComponent: () =>

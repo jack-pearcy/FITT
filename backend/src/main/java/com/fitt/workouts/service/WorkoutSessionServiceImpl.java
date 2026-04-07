@@ -42,6 +42,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         // entity constructor requires ownerUserId and startedAt
         WorkoutSessionEntity session = new WorkoutSessionEntity(ownerUserId, request.startedAt());
         session.setNotes(request.notes());
+        session.setPlanId(request.planId());
         return toResponse(sessionRepository.save(session));
     }
 
@@ -51,6 +52,11 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
                 .stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    @Override
+    public long countCompletedSessions(Long ownerUserId, Long planId) {
+        return sessionRepository.countByOwnerUserIdAndPlanIdAndFinishedAtIsNotNull(ownerUserId, planId);
     }
 
     @Override
@@ -126,6 +132,8 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         // addSetEntry syncs both sides
         entry.addSetEntry(set);
 
+        set.setCompleted(true);
+
         return toResponse(sessionRepository.save(session));
     }
 
@@ -168,6 +176,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         return new WorkoutSessionResponse(
                 entity.getId(),
                 entity.getOwnerUserId(),
+                entity.getPlanId(),
                 entity.getStartedAt(),
                 entity.getFinishedAt(),
                 entity.getNotes(),

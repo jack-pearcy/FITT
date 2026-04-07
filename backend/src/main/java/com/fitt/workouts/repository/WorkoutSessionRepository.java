@@ -16,6 +16,10 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSessionEn
 
     List<WorkoutSessionEntity> findByOwnerUserIdOrderByStartedAtDesc(Long ownerUserId);
 
+    // Counts sessions for a specific plan that have been finished.
+    // Used to determine which day is next in the plan rotation.
+    long countByOwnerUserIdAndPlanIdAndFinishedAtIsNotNull(Long ownerUserId, Long planId);
+
     // Ownership-safe single session fetch. Returns empty if the session exists
     // but belongs to a different user, prevents cross-user data access.
     Optional<WorkoutSessionEntity> findByIdAndOwnerUserId(Long id, Long ownerUserId);
