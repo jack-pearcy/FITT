@@ -8,5 +8,8 @@ public record CreateWorkoutSessionRequest(
         @NotNull(message = "Start time is required")
         Instant startedAt,
 
+        // Null when session is created outside of a plan context
+        Long planId,
+
         String notes
 ) {}

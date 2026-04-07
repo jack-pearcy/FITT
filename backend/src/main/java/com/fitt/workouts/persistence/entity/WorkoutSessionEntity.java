@@ -27,6 +27,11 @@ public class WorkoutSessionEntity {
     @Column(name = "owner_user_id", nullable = false)
     private Long ownerUserId;
 
+    // Nullable — sessions created before plan tracking was added have no planId.
+    // Used to count completed sessions per plan for day progression.
+    @Column(name = "plan_id")
+    private Long planId;
+
     // Instant is timezone-safe. Always stored as UTC in MySQL DATETIME(6).
     @Column(name = "started_at", nullable = false)
     private Instant startedAt;
@@ -67,6 +72,7 @@ public class WorkoutSessionEntity {
     public Instant getStartedAt() { return startedAt; }
     public Instant getFinishedAt() { return finishedAt; }
     public String getNotes() { return notes; }
+    public Long getPlanId() { return planId; }
 
     public List<ExerciseEntryEntity> getExerciseEntries() {
         return Collections.unmodifiableList(exerciseEntries);
@@ -74,4 +80,5 @@ public class WorkoutSessionEntity {
 
     public void setFinishedAt(Instant finishedAt) { this.finishedAt = finishedAt; }
     public void setNotes(String notes) { this.notes = notes; }
+    public void setPlanId(Long planId) { this.planId = planId; }
 }

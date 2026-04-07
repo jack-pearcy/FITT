@@ -1,0 +1,274 @@
+.session {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: #0f0f0f;
+  color: #f0f0f0;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    background: #161616;
+    border-bottom: 1px solid #2a2a2a;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  &__timer {
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #e8ff3b;
+    letter-spacing: 0.05em;
+  }
+
+  &__entries {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1.25rem;
+  }
+
+  &__loading,
+  &__error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    gap: 1rem;
+    padding: 2rem;
+    color: #888;
+  }
+
+  &__error-inline {
+    color: #ff6b6b;
+    font-size: 0.875rem;
+    margin: 0.5rem 1.25rem 0;
+  }
+}
+
+.entry {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 10px;
+  padding: 1rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+
+  &--active {
+    border-color: #e8ff3b;
+  }
+
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  &__name {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #f0f0f0;
+  }
+
+  &__group {
+    font-size: 0.72rem;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+}
+
+.set-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  &__num {
+    color: #888;
+    min-width: 3.5rem;
+  }
+
+  &__detail {
+    flex: 1;
+    color: #ccc;
+  }
+
+  &__check {
+    color: #4caf50;
+    font-size: 1rem;
+  }
+}
+
+.log-set {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #2a2a2a;
+  margin-top: 0.5rem;
+
+  &__fields {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  &__input {
+    width: 5rem;
+    padding: 0.4rem 0.5rem;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 5px;
+    color: #f0f0f0;
+    font-size: 0.95rem;
+    text-align: center;
+
+    &:focus {
+      outline: none;
+      border-color: #e8ff3b;
+    }
+  }
+}
+
+.log-set__done {
+  font-size: 0.85rem;
+  color: #4caf50;
+  margin: 0;
+  font-weight: 600;
+}
+
+.rest-timer {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #e8ff3b;
+  font-variant-numeric: tabular-nums;
+}
+
+// Summary screen
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 2rem 1.25rem;
+
+  &__title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0;
+    color: #e8ff3b;
+  }
+
+  &__time {
+    font-size: 0.9rem;
+    color: #888;
+    margin: 0;
+  }
+
+  &__stats {
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  &__stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  &__stat-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #666;
+  }
+
+  &__stat-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #f0f0f0;
+  }
+
+  &__entries {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  &__entry-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #ccc;
+    margin: 0 0 0.4rem;
+  }
+
+  &__sets {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    font-size: 0.83rem;
+    color: #888;
+  }
+}
+
+.btn {
+  padding: 0.6rem 1.1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s, opacity 0.15s;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &--primary {
+    background: #e8ff3b;
+    color: #0f0f0f;
+
+    &:hover:not(:disabled) { background: #d4eb2a; }
+  }
+
+  &--ghost {
+    background: transparent;
+    color: #aaa;
+    border: 1px solid #2a2a2a;
+
+    &:hover:not(:disabled) {
+      border-color: #444;
+      color: #ccc;
+    }
+  }
+}

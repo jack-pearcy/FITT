@@ -10,13 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -51,6 +45,18 @@ public class WorkoutSessionController {
     ) {
         enforceOwnership(userId, currentUserId(jwt));
         return workoutSessionService.listSessions(userId);
+    }
+
+    // Returns the number of completed sessions for a given plan.
+    // The frontend uses this to determine which plan day comes next.
+    @GetMapping("/count")
+    public ResponseEntity<Long> countCompletedSessions(
+            @PathVariable Long userId,
+            @RequestParam Long planId,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        enforceOwnership(userId, currentUserId(jwt));
+        return ResponseEntity.ok(workoutSessionService.countCompletedSessions(userId, planId));
     }
 
     @GetMapping("/{sessionId}")

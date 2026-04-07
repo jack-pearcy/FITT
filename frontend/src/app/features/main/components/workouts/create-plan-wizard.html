@@ -1,0 +1,176 @@
+<div class="wizard">
+
+  @if (error()) {
+    <p class="wizard__error">{{ error() }}</p>
+  }
+
+  @if (step() === 'name') {
+    <div class="wizard__step">
+      <h2 class="wizard__title">Name your plan</h2>
+      <input
+        class="wizard__input"
+        type="text"
+        placeholder="e.g. Summer Push Pull Legs"
+        [(ngModel)]="planName"
+        maxlength="100" />
+    </div>
+  }
+
+  @if (step() === 'days-per-week') {
+    <div class="wizard__step">
+      <h2 class="wizard__title">How many days per week?</h2>
+      <div class="day-picker">
+        @for (n of [1,2,3,4,5,6,7]; track n) {
+          <button
+            class="day-picker__btn"
+            [class.day-picker__btn--active]="daysPerWeek === n"
+            (click)="daysPerWeek = n">
+            {{ n }}
+          </button>
+        }
+      </div>
+    </div>
+  }
+
+  @if (step() === 'split-type') {
+    <div class="wizard__step">
+      <h2 class="wizard__title">Pick a split</h2>
+      <div class="split-options">
+        @for (s of splitTypes; track s) {
+          <button
+            class="split-option"
+            [class.split-option--active]="splitType() === s"
+            (click)="splitType.set(s)">
+            {{ splitTypeLabels[s] }}
+          </button>
+        }
+      </div>
+    </div>
+  }
+
+  @if (step() === 'build-days') {
+    <div class="wizard__step">
+      <h2 class="wizard__title">
+        Day {{ currentDayIndex() + 1 }} of {{ days().length }}
+      </h2>
+
+      <input
+        class="wizard__input"
+        type="text"
+        placeholder="Day label (e.g. Push)"
+        [ngModel]="currentDay?.dayLabel"
+        (ngModelChange)="updateDayLabel(currentDayIndex(), $event)"
+        maxlength="50" />
+
+      <div class="muscle-filter">
+        @for (group of muscleGroups; track group) {
+          <button
+            class="muscle-btn"
+            [class.muscle-btn--active]="selectedMuscleGroup() === group"
+            (click)="selectedMuscleGroup.set(group)">
+            {{ group }}
+          </button>
+        }
+      </div>
+
+      @if (currentDay && currentDay.exercises.length > 0) {
+        <div class="selected-exercises">
+          <p class="selected-exercises__label">Added to this day:</p>
+          <ul class="selected-exercises__list">
+            @for (ex of currentDay.exercises; track ex.exerciseId) {
+              <li class="selected-exercises__item">
+                <span>{{ getExerciseName(ex.exerciseId) }}</span>
+                <span class="selected-exercises__detail">{{ ex.sets }}x{{ ex.reps }}</span>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
+      @if (libraryLoading()) {
+        <p class="wizard__hint">Loading exercises...</p>
+      } @else {
+        <ul class="exercise-picker">
+          @for (ex of filteredExercises; track ex.id) {
+            <li
+              class="exercise-picker__item"
+              [class.exercise-picker__item--selected]="isSelected(ex.id)"
+              (click)="toggleExercise(ex)">
+              <span class="exercise-picker__name">{{ ex.name }}</span>
+              <span class="exercise-picker__group">{{ ex.muscleGroup }}</span>
+
+              @if (isSelected(ex.id)) {
+                <div class="set-rep-inputs" (click)="$event.stopPropagation()">
+                  <label>
+                    Sets
+                    <input
+                      type="number"
+                      class="set-rep-inputs__field"
+                      min="1" max="20"
+                      [ngModel]="currentDay?.exercises | exerciseSets: ex.id"
+                      (ngModelChange)="updateSets(ex.id, +$event)" />
+                  </label>
+                  <label>
+                    Reps
+                    <input
+                      type="number"
+                      class="set-rep-inputs__field"
+                      min="1" max="100"
+                      [ngModel]="currentDay?.exercises | exerciseReps: ex.id"
+                      (ngModelChange)="updateReps(ex.id, +$event)" />
+                  </label>
+                </div>
+              }
+            </li>
+          }
+        </ul>
+      }
+
+      <p class="wizard__hint">
+        {{ currentDay?.exercises?.length ?? 0 }} exercise(s) selected
+      </p>
+    </div>
+  }
+
+  @if (step() === 'review') {
+    <div class="wizard__step">
+      <h2 class="wizard__title">Review your plan</h2>
+      <p class="wizard__subtitle">{{ planName }} &middot; {{ daysPerWeek }}d/wk &middot; {{ splitTypeLabels[splitType()] }}</p>
+
+      <ul class="review-days">
+        @for (day of days(); track $index) {
+          <li class="review-day">
+            <span class="review-day__label">{{ day.dayLabel }}</span>
+            <ul class="review-exercises">
+              @for (ex of day.exercises; track ex.exerciseId) {
+                <li class="review-exercises__item">
+                  {{ getExerciseName(ex.exerciseId) }} &mdash; {{ ex.sets }}x{{ ex.reps }}
+                </li>
+              }
+              @if (day.exercises.length === 0) {
+                <li class="review-exercises__item review-exercises__item--empty">No exercises</li>
+              }
+            </ul>
+          </li>
+        }
+      </ul>
+    </div>
+  }
+
+  <div class="wizard__nav">
+    <button class="btn btn--ghost" (click)="back()" [disabled]="loading()">
+      @if (step() === 'name') { Cancel } @else { Back }
+    </button>
+    <button
+      class="btn btn--primary"
+      (click)="next()"
+      [disabled]="!stepValid || loading()">
+      @if (step() === 'review') {
+        @if (loading()) { Creating... } @else { Create Plan }
+      } @else {
+        Next
+      }
+    </button>
+  </div>
+
+</div>

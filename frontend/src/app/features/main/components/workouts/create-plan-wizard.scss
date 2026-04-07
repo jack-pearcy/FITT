@@ -1,0 +1,310 @@
+.wizard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+
+  &__title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #f0f0f0;
+    margin: 0 0 1rem;
+  }
+
+  &__subtitle {
+    font-size: 0.85rem;
+    color: #888;
+    margin: 0 0 1.25rem;
+  }
+
+  &__input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.7rem 0.9rem;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    color: #f0f0f0;
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.15s;
+
+    &:focus {
+      border-color: #e8ff3b;
+    }
+  }
+
+  &__hint {
+    font-size: 0.8rem;
+    color: #666;
+    margin: 0;
+  }
+
+  &__error {
+    color: #ff6b6b;
+    font-size: 0.875rem;
+    margin: 0;
+  }
+
+  &__step {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  &__nav {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 0.5rem;
+  }
+}
+
+.day-picker {
+  display: flex;
+  gap: 0.5rem;
+
+  &__btn {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 6px;
+    border: 1px solid #2a2a2a;
+    background: #1a1a1a;
+    color: #aaa;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+
+    &--active {
+      border-color: #e8ff3b;
+      color: #e8ff3b;
+    }
+  }
+}
+
+.split-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.split-option {
+  padding: 0.8rem 1rem;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  color: #ccc;
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+
+  &--active {
+    border-color: #e8ff3b;
+    color: #e8ff3b;
+  }
+}
+
+.muscle-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.muscle-btn {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.75rem;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  background: #1a1a1a;
+  color: #888;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+
+  &--active {
+    border-color: #e8ff3b;
+    color: #e8ff3b;
+  }
+}
+
+.exercise-picker {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 340px;
+  overflow-y: auto;
+
+  &__item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.65rem 0.85rem;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+
+    &--selected {
+      border-color: #e8ff3b;
+    }
+  }
+
+  &__name {
+    flex: 1;
+    font-size: 0.9rem;
+    color: #e0e0e0;
+  }
+
+  &__group {
+    font-size: 0.72rem;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+}
+
+.selected-exercises {
+  background: #111;
+  border: 1px solid #e8ff3b33;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+
+  &__label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #e8ff3b;
+    margin: 0 0 0.5rem;
+  }
+
+  &__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  &__item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: #ccc;
+  }
+
+  &__detail {
+    color: #888;
+    font-size: 0.8rem;
+  }
+}
+
+.set-rep-inputs {
+  width: 100%;
+  display: flex;
+  gap: 1rem;
+  padding-top: 0.4rem;
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    color: #888;
+  }
+
+  &__field {
+    width: 3.5rem;
+    padding: 0.25rem 0.4rem;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 4px;
+    color: #f0f0f0;
+    font-size: 0.85rem;
+    text-align: center;
+  }
+}
+
+.review-days {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.review-day {
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+
+  &__label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #e8ff3b;
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+}
+
+.review-exercises {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+
+  &__item {
+    font-size: 0.85rem;
+    color: #ccc;
+
+    &--empty {
+      color: #555;
+      font-style: italic;
+    }
+  }
+}
+
+// Same button styles as workouts-main
+.btn {
+  padding: 0.6rem 1.1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s, opacity 0.15s;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &--primary {
+    background: #e8ff3b;
+    color: #0f0f0f;
+
+    &:hover:not(:disabled) { background: #d4eb2a; }
+  }
+
+  &--ghost {
+    background: transparent;
+    color: #aaa;
+    border: 1px solid #2a2a2a;
+
+    &:hover:not(:disabled) {
+      border-color: #444;
+      color: #ccc;
+    }
+  }
+}
