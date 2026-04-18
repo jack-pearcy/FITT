@@ -31,4 +31,12 @@ export class MeasurementsService {
       { params: { days: days.toString() } }
     );
   }
+
+  logWeight(userId: number, weight: number): Observable<BodyWeightEntryResponse> {
+    const loggedAt = new Date().toISOString().slice(0, 10);
+    return this.http.post<BodyWeightEntryResponse>(
+      `/api/users/${userId}/measurements/weight`,
+      { loggedAt, weight }
+    );
+  }
 }

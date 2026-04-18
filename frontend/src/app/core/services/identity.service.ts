@@ -30,6 +30,14 @@ export interface TdeeResponse {
   tdee: number;
 }
 
+export interface GoalsResponse {
+  goalDirection:   'BULK' | 'CUT' | 'MAINTAIN';
+  targetWeightKg:  number | null;
+  timelineWeeks:   number | null;
+  calorieGoalMode: 'AUTO' | 'MANUAL';
+  calorieGoal:     number | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class IdentityService {
 
@@ -64,6 +72,12 @@ export class IdentityService {
   getTdee(userId: number): Observable<TdeeResponse> {
     return this.http.get<TdeeResponse>(
       `/api/users/${userId}/identity/onboarding/tdee`
+    );
+  }
+
+  getGoals(userId: number): Observable<GoalsResponse> {
+    return this.http.get<GoalsResponse>(
+      `/api/users/${userId}/identity/onboarding/goals`
     );
   }
 }
