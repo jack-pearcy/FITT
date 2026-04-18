@@ -2,10 +2,7 @@ package com.fitt.identity.service;
 
 import com.fitt.identity.domain.UserBiometricsEntity;
 import com.fitt.identity.domain.UserGoalEntity;
-import com.fitt.identity.dto.OnboardingStatusResponse;
-import com.fitt.identity.dto.SaveBiometricsRequest;
-import com.fitt.identity.dto.SaveGoalsRequest;
-import com.fitt.identity.dto.TdeeResponse;
+import com.fitt.identity.dto.*;
 import com.fitt.identity.repository.UserBiometricsRepository;
 import com.fitt.identity.repository.UserGoalRepository;
 import com.fitt.identity.service.exception.BiometricsNotFoundException;
@@ -115,6 +112,22 @@ public class OnboardingServiceImpl implements OnboardingService {
         );
 
         return new TdeeResponse(tdee);
+    }
+
+    @Override
+    public GoalsResponse getGoals(Long userId) {
+        UserGoalEntity goal = goalRepository.findByOwnerUserId(userId)
+                .orElseThrow(() -> new BiometricsNotFoundException(
+                        "goals not found for user " + userId
+                ));
+
+        return new GoalsResponse(
+                goal.getGoalDirection(),
+                goal.getTargetWeightKg(),
+                goal.getTimelineWeeks(),
+                goal.getCalorieGoalMode(),
+                goal.getCalorieGoal()
+        );
     }
 
     private Integer resolveCalorieGoal(
