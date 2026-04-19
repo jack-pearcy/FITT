@@ -1,1 +1,160 @@
-<p class="placeholder-text">Goals — coming in Phase 17</p>
+<div class="goals">
+
+  @if (mode() === 'loading') {
+    <div class="goals__status">Loading...</div>
+  }
+
+  @if (mode() === 'error') {
+    <div class="goals__error">{{ error() }}</div>
+  }
+
+  @if (mode() === 'view' && goals()) {
+    <div class="goals__view">
+
+      <div class="goals__header">
+        <h2>Your Goals</h2>
+        <button class="goals__edit-btn" (click)="startEdit()">Edit</button>
+      </div>
+
+      <div class="goals__field">
+        <span class="goals__label">Goal direction</span>
+        <span class="goals__value">{{ directionLabel(goals()!.goalDirection) }}</span>
+      </div>
+
+      <div class="goals__field">
+        <span class="goals__label">Target weight</span>
+        <span class="goals__value">
+          @if (goals()!.targetWeightKg !== null) {
+            {{ goals()!.targetWeightKg }} kg
+          } @else {
+            Not set
+          }
+        </span>
+      </div>
+
+      <div class="goals__field">
+        <span class="goals__label">Timeline</span>
+        <span class="goals__value">
+          @if (goals()!.timelineWeeks !== null) {
+            {{ goals()!.timelineWeeks }} weeks
+          } @else {
+            Not set
+          }
+        </span>
+      </div>
+
+      <div class="goals__field">
+        <span class="goals__label">Calorie mode</span>
+        <span class="goals__value">{{ modeLabel(goals()!.calorieGoalMode) }}</span>
+      </div>
+
+      <div class="goals__field">
+        <span class="goals__label">Daily calorie goal</span>
+        <span class="goals__value goals__value--accent">
+          @if (goals()!.calorieGoal !== null) {
+            {{ goals()!.calorieGoal }} kcal
+          } @else {
+            --
+          }
+        </span>
+      </div>
+
+      @if (tdee() !== null) {
+        <div class="goals__field">
+          <span class="goals__label">Estimated TDEE</span>
+          <span class="goals__value">{{ tdee() }} kcal</span>
+        </div>
+      }
+
+    </div>
+  }
+
+  @if (mode() === 'edit') {
+    <div class="goals__edit">
+
+      <h2>Edit Goals</h2>
+
+      @if (error()) {
+        <div class="goals__error">{{ error() }}</div>
+      }
+
+      <div class="goals__form-field">
+        <label class="goals__form-label">Goal direction</label>
+        <div class="goals__options">
+          <label class="goals__option">
+            <input type="radio" [formControl]="goalDirection" name="goalDirection" value="BULK" />
+            <span>Bulk</span>
+          </label>
+          <label class="goals__option">
+            <input type="radio" [formControl]="goalDirection" name="goalDirection" value="CUT" />
+            <span>Cut</span>
+          </label>
+          <label class="goals__option">
+            <input type="radio" [formControl]="goalDirection" name="goalDirection" value="MAINTAIN" />
+            <span>Maintain</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="goals__form-field">
+        <label class="goals__form-label">Target weight (optional)</label>
+        <div class="goals__input-row">
+          <input type="number" [formControl]="targetWeightKg"
+                 placeholder="e.g. 80" min="1" step="0.1" />
+          <span class="goals__unit">kg</span>
+        </div>
+      </div>
+
+      <div class="goals__form-field">
+        <label class="goals__form-label">Timeline (optional)</label>
+        <div class="goals__input-row">
+          <input type="number" [formControl]="timelineWeeks"
+                 placeholder="e.g. 12" min="1" />
+          <span class="goals__unit">weeks</span>
+        </div>
+      </div>
+
+      <div class="goals__form-field">
+        <label class="goals__form-label">Calorie goal mode</label>
+        <div class="goals__options">
+          <label class="goals__option">
+            <input type="radio" [formControl]="calorieGoalMode" name="calorieGoalMode" value="AUTO" />
+            <span>Auto <small>Calculated from your TDEE</small></span>
+          </label>
+          <label class="goals__option">
+            <input type="radio" [formControl]="calorieGoalMode" name="calorieGoalMode" value="MANUAL" />
+            <span>Manual <small>Set your own target</small></span>
+          </label>
+        </div>
+      </div>
+
+      @if (calorieGoalMode.value === 'MANUAL') {
+        <div class="goals__form-field">
+          <label class="goals__form-label">Daily calorie goal</label>
+          <div class="goals__input-row">
+            <input type="number" [formControl]="calorieGoal"
+                   placeholder="e.g. 2200" min="500" />
+            <span class="goals__unit">kcal</span>
+          </div>
+        </div>
+      }
+
+      @if (tdee() !== null) {
+        <p class="goals__tdee-info">
+          Your estimated daily burn (TDEE) is <strong>{{ tdee() }} kcal</strong>
+        </p>
+      }
+
+      <div class="goals__actions">
+        <button class="goals__save-btn" (click)="saveGoals()" [disabled]="saving()">
+          @if (saving()) { Saving... } @else { Save }
+        </button>
+        <button class="goals__cancel-btn" (click)="cancelEdit()" [disabled]="saving()">
+          Cancel
+        </button>
+      </div>
+
+    </div>
+  }
+
+</div>
