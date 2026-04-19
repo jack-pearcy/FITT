@@ -1,1 +1,89 @@
-<p class="placeholder-text">Weight Log — coming in Phase 17</p>
+<div class="weight-log">
+
+  @if (!loading() && !todayLogged()) {
+    <div class="weight-log__prompt">
+      You haven't logged today's weight yet
+    </div>
+  }
+
+  <div class="weight-log__form">
+    <input type="number"
+           #weightInput
+           placeholder="Enter weight"
+           min="1"
+           step="0.1"
+           (keyup.enter)="logWeight(weightInput)" />
+    <button (click)="logWeight(weightInput)" [disabled]="submitting()">
+      @if (submitting()) { Logging... } @else { Log }
+    </button>
+  </div>
+
+  <div class="weight-log__periods">
+    @for (p of periods; track p) {
+      <button class="period-btn"
+              [class.period-btn--active]="selectedPeriod() === p"
+              (click)="changePeriod(p)">
+        {{ p }}d
+      </button>
+    }
+  </div>
+
+  @if (error()) {
+    <div class="weight-log__error">{{ error() }}</div>
+  }
+
+  @if (loading()) {
+    <div class="weight-log__status">Loading...</div>
+  } @else if (chart()) {
+    <div class="weight-log__chart-wrap">
+      <svg viewBox="0 0 1000 400" preserveAspectRatio="none" class="weight-log__chart">
+
+        @for (y of chart()!.gridYs; track y) {
+          <line [attr.x1]="70" [attr.y1]="y"
+                [attr.x2]="980" [attr.y2]="y"
+                stroke="#2a2a2a" stroke-width="1" />
+        }
+
+        <polyline [attr.points]="chart()!.polylinePoints"
+                  fill="none" stroke="#e8ff3b" stroke-width="3"
+                  stroke-linejoin="round" stroke-linecap="round" />
+
+        @for (dot of chart()!.dots; track dot.date) {
+          <circle [attr.cx]="dot.cx" [attr.cy]="dot.cy"
+                  r="6" fill="#e8ff3b" />
+        }
+
+        @for (label of chart()!.yLabels; track label.text) {
+          <text [attr.x]="62" [attr.y]="label.y"
+                text-anchor="end" dominant-baseline="middle"
+                fill="#888" font-size="22">{{ label.text }}</text>
+        }
+
+        @for (label of chart()!.xLabels; track label.text) {
+          <text [attr.x]="label.x" [attr.y]="380"
+                text-anchor="middle"
+                fill="#888" font-size="22">{{ label.text }}</text>
+        }
+
+      </svg>
+    </div>
+  } @else {
+    <div class="weight-log__status">No entries for this period</div>
+  }
+
+  @if (!loading() && entries().length > 0) {
+    <div class="weight-log__list">
+      <div class="weight-log__list-header">
+        <span>Date</span>
+        <span>Weight</span>
+      </div>
+      @for (entry of entries(); track entry.id) {
+        <div class="weight-log__entry">
+          <span class="entry__date">{{ entry.loggedAt }}</span>
+          <span class="entry__weight">{{ entry.weight | number:'1.1-1' }}</span>
+        </div>
+      }
+    </div>
+  }
+
+</div>
