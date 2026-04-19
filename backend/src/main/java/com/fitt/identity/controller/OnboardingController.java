@@ -1,9 +1,6 @@
 package com.fitt.identity.controller;
 
-import com.fitt.identity.dto.OnboardingStatusResponse;
-import com.fitt.identity.dto.SaveBiometricsRequest;
-import com.fitt.identity.dto.SaveGoalsRequest;
-import com.fitt.identity.dto.TdeeResponse;
+import com.fitt.identity.dto.*;
 import com.fitt.identity.service.OnboardingService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -65,6 +62,15 @@ public class OnboardingController {
     ) {
         enforceOwnership(userId, currentUserId(jwt));
         return ResponseEntity.ok(onboardingService.getTdee(userId));
+    }
+
+    @GetMapping("/goals")
+    public ResponseEntity<GoalsResponse> getGoals(
+            @PathVariable Long userId,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        enforceOwnership(userId, currentUserId(jwt));
+        return ResponseEntity.ok(onboardingService.getGoals(userId));
     }
 
     private void enforceOwnership(Long pathUserId, Long currentUserId) {
