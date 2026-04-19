@@ -157,7 +157,12 @@ export class WeightLogComponent implements OnInit, OnDestroy {
     this.loadSub = this.measurements.getEntries(userId, days).subscribe({
       next: entries => {
         this.entries.set(entries);
-        const today = new Date().toISOString().slice(0, 10);
+        const now = new Date();
+        const today = [
+          now.getFullYear(),
+          String(now.getMonth() + 1).padStart(2, '0'),
+          String(now.getDate()).padStart(2, '0')
+        ].join('-');
         this.todayLogged.set(entries.some(e => e.loggedAt === today));
         this.loading.set(false);
       },
@@ -174,6 +179,11 @@ export class WeightLogComponent implements OnInit, OnDestroy {
 
     const weight = parseFloat(input.value);
     if (isNaN(weight) || weight <= 0) return;
+
+    if (this.todayLogged()) {
+      this.error.set("Today's weight is already logged");
+      return;
+    }
 
     this.submitting.set(true);
 

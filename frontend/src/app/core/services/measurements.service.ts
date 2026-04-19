@@ -33,7 +33,12 @@ export class MeasurementsService {
   }
 
   logWeight(userId: number, weight: number): Observable<BodyWeightEntryResponse> {
-    const loggedAt = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const loggedAt = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0')
+    ].join('-');
     return this.http.post<BodyWeightEntryResponse>(
       `/api/users/${userId}/measurements/weight`,
       { loggedAt, weight }
