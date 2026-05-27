@@ -36,20 +36,18 @@ Past 7 days of body weight with date in column format. Dropdown to expand to 30/
 Daily reminder notification at user-set time. Prompt on app open if today not yet logged.
 
 **Workouts Tab**
-Active workout plan displayed in full (e.g. 16-week plan). Each day viewable and editable.
+Active workout plan displayed in full. Each day viewable and editable.
 Dropdown to switch between saved plans with activate/delete options.
-Create plan flow: days per week, day scheme (M-F/EOD/3-on-1-off/Custom),
-split template (PPL/Upper-Lower/Full Body/Custom), exercise population from library.
+Create plan flow: days per week, split template (PPL/Upper-Lower/Full Body/Custom), exercise population from library.
 Exercise library: fixed broad library by muscle group (Chest/Back/Shoulders/Arms/Legs/Glutes)
-plus user-created custom exercises stored locally with edit and delete options.
+plus user-created custom exercises with edit and delete options.
 
 **Active Session Screen**
 Triggered by Today's Lift CTA. Global session timer from start.
-Exercise rows with: exercise name, sets, reps, weight, RPE columns, per-row rest countdown timer.
-After each set: green checkmark, row greys out, next row activates.
-Finish button at bottom leads to workout summary: total volume, total time, PRs hit,
-next session weight suggestions from progressive overload algorithm.
-Progression model selectable by user with info icon explaining each model.
+Exercise rows from the active plan's current day. Set logging with reps, weight, and RPE inputs.
+Prescribed set cap per exercise from the plan. Per-row rest countdown timer that disappears after all sets complete.
+Finish button leads to an inline session summary: total volume, total time, sets logged.
+Progression model selectable by user on the Workouts tab.
 
 **Goals Tab**
 Bulk/Cut/Maintain selection, target weight, timeline, auto/manual calorie goal toggle with info icon,
@@ -177,7 +175,7 @@ Outcome: a frontend that communicates correctly with the backend.
 
 ---
 
-## Phase 9 — Full-Stack Integration
+## Phase 9 — Full-Stack Integration (Complete)
 
 This phase connects frontend and backend into a single system and prepares the infrastructure for all future phases.
 
@@ -189,7 +187,7 @@ Outcome: the ability to reason about the entire system as one unit.
 
 ---
 
-## Phase 10 — Domain Expansion: Identity and Onboarding
+## Phase 10 — Domain Expansion: Identity and Onboarding (Complete)
 
 Real user registration replaces the hardcoded uid=1L placeholder throughout the system.
 
@@ -201,7 +199,7 @@ Outcome: real multi-user identity with secure, user-scoped data access.
 
 ---
 
-## Phase 11 — Domain Expansion: Workouts Full Implementation
+## Phase 11 — Domain Expansion: Workouts Full Implementation (Complete)
 
 The Workout placeholder is replaced with the full domain model from Phase 2.
 
@@ -213,7 +211,7 @@ Outcome: a complete, production-grade workouts domain.
 
 ---
 
-## Phase 12 — Domain Expansion: Measurements
+## Phase 12 — Domain Expansion: Measurements (Complete)
 
 Body weight logging introduced as a first-class domain.
 
@@ -224,7 +222,7 @@ Outcome: a complete measurements domain ready for frontend integration.
 
 ---
 
-## Phase 13 — Progressive Overload Algorithm
+## Phase 13 — Progressive Overload Algorithm (Complete)
 
 Science-backed progression logic implemented as a backend service.
 
@@ -236,18 +234,18 @@ Outcome: a defensible, evidence-based progression engine.
 
 ---
 
-## Phase 14 — Frontend Rebuild: Authentication and Onboarding
+## Phase 14 — Frontend Rebuild: Authentication and Onboarding (Complete)
 
 Login and sign up screens rebuilt to production quality.
 
 Slideshow onboarding flow wired to Phase 10 backend. Units preference, biometrics, goals, TDEE display.
-Smooth screen transitions. Form validation and error handling at every step.
+Form validation and error handling at every step.
 
-Outcome: a complete, polished authentication and onboarding experience.
+Outcome: a complete authentication and onboarding experience.
 
 ---
 
-## Phase 15 — Frontend Rebuild: Main Screen and Navigation
+## Phase 15 — Frontend Rebuild: Main Screen and Navigation (Complete)
 
 Tab navigation shell established as the permanent application frame.
 
@@ -258,36 +256,43 @@ Outcome: a fully navigable application shell.
 
 ---
 
-## Phase 16 — Frontend Rebuild: Workouts
+## Phase 16 — Frontend Rebuild: Workouts (Complete)
 
 Full workout plan builder UI with all active session features.
 
 Exercise library with muscle group sections and custom exercise management.
-Active session screen: global timer, per-row rest timer, set logging, green checkmark flow,
-Finish button, workout summary screen with volume, time, PRs, and next session suggestions.
-Date navigator (MyFitnessPal style) for session history.
+Active session screen: global timer, per-row rest timer, set logging, prescribed set cap per exercise,
+Finish button leading to inline session summary with volume, time, and sets logged.
 
-Outcome: the core product feature, fully functional and polished.
+Outcome: the core product feature functional end-to-end.
 
 ---
 
-## Phase 17 — Frontend Rebuild: Weight Log and Goals
+## Phase 17 — Frontend Rebuild: Weight Log and Goals (Complete)
 
-Weight log tab with 7/30/60/90 day views and daily prompt on app open.
+Weight log tab with 7/30/60/90 day views, SVG line chart, and daily prompt on app open.
 Goals tab: Bulk/Cut/Maintain, target weight, timeline, TDEE calorie goal, auto/manual toggle with info icons.
+Edit-in-place pattern for goals with forkJoin parallel loading.
 
 Outcome: all remaining product screens complete.
 
 ---
 
-## Phase 18 — Testing Strategy
+## Phase 18 — Testing Strategy (In Progress)
 
 Testing introduced as a tool for confidence, not ceremony.
 
-Unit and integration testing across all domains. Testcontainers for database-backed integration tests.
-Frontend component testing. Decisions made about what should and should not be tested.
+Strategy: bottom-up coverage starting with pure unit tests, then service-layer tests with mocked collaborators,
+then controller tests with MockMvc and the full Spring context, then repository integration tests against a real
+MySQL instance via Testcontainers. Frontend testing planned next using Vitest for service tests and TestBed for
+component tests on the signal-heavy components.
 
-Outcome: tests that add value rather than friction.
+Current status: backend coverage in place for the identity bounded context (auth controller, onboarding controller,
+onboarding service, TDEE service), the progression slice of the workouts bounded context (three strategies, resolver,
+service, controller, repository integration), and the measurements bounded context (body weight controller).
+Frontend testing has not yet started.
+
+Outcome: tests that add value rather than friction, with documented conventions for both backend and frontend.
 
 ---
 
@@ -308,6 +313,8 @@ Outcome: a clear understanding of how software leaves the development machine.
 This phase prepares the project for external review.
 
 Codebase reviewed for quality and clarity. Dead code removed. Naming improved.
+Active session UX polish: green checkmark per completed set, row state transitions, next session weight pre-fill,
+progression suggestions inline per exercise. Other deferred UX items addressed.
 Architectural decisions documented. Study guide produced covering the full stack.
 Project prepared to be explained confidently in interviews.
 
