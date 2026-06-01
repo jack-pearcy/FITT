@@ -231,7 +231,7 @@ class WorkoutSessionServiceImplTest {
         SetEntryEntity newSet = entry.getSetEntries().get(1);
         assertThat(newSet.getSetNumber()).isEqualTo(2);
         assertThat(newSet.getReps()).isEqualTo(8);
-        // BigDecimal compareTo ignores scale; equals does not.
+        // BigDecimal compareTo ignores scale, equals does not.
         assertThat(newSet.getWeight()).isEqualByComparingTo(new BigDecimal("105"));
         assertThat(newSet.getRpe()).isEqualByComparingTo(new BigDecimal("8.5"));
         // Service marks the set completed immediately after creating it.
