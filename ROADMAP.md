@@ -278,7 +278,7 @@ Outcome: all remaining product screens complete.
 
 ---
 
-## Phase 18 — Testing Strategy (In Progress)
+## Phase 18 — Testing Strategy (Complete)
 
 Testing introduced as a tool for confidence, not ceremony.
 
@@ -287,10 +287,12 @@ then controller tests with MockMvc and the full Spring context, then repository 
 MySQL instance via Testcontainers. Frontend testing planned next using Vitest for service tests and TestBed for
 component tests on the signal-heavy components.
 
-Current status: backend coverage in place for the identity bounded context (auth controller, onboarding controller,
-onboarding service, TDEE service), the progression slice of the workouts bounded context (three strategies, resolver,
-service, controller, repository integration), and the measurements bounded context (body weight controller).
-Frontend testing has not yet started.
+Coverage in place across backend and frontend. Backend: the identity bounded context (auth controller, onboarding
+controller, onboarding service, TDEE service), the progression slice of the workouts bounded context (three strategies,
+resolver, service, controller, repository integration), and the measurements bounded context (body weight controller).
+Frontend: Vitest with the Angular TestBed and the official HttpClient testing harness, covering the auth and onboarding
+guards, the auth interceptor, the auth, identity, measurements, and workout services, and component-level tests for the
+goals, weight log, and active session screens.
 
 Outcome: tests that add value rather than friction, with documented conventions for both backend and frontend.
 
