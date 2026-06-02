@@ -26,9 +26,8 @@ FROM caddy:2-alpine
 
 # The Angular build output goes where Caddy serves static files from.
 # Only the browser subfolder is the real web root for the application
-# builder. Copying the parent dist/frontend would put an extra folder
+# builder. Copying the parent dist/fitt-web would put an extra folder
 # level in front of index.html and every asset path would 404.
-COPY --from=build /app/dist/frontend/browser /srv
-
+COPY --from=build /app/dist/fitt-web/browser /srv
 # The proxy and SPA-fallback config.
 COPY Caddyfile /etc/caddy/Caddyfile
