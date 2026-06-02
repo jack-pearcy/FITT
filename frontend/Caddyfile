@@ -1,0 +1,30 @@
+# The site address comes from an environment variable so the same config
+# works locally (set DOMAIN=localhost) and in production (set DOMAIN to
+# the real domain). Caddy issues a Let's Encrypt certificate automatically
+# for any public hostname, and uses its internal CA for localhost.
+{$DOMAIN} {
+
+	# API calls keep the /api prefix. The backend controllers are all
+	# mapped under /api, so the prefix must reach the backend untouched.
+	# handle (not handle_path) passes the path through as-is.
+	handle /api/* {
+		reverse_proxy backend:8080
+	}
+
+	# Everything else is the Angular single-page app.
+	handle {
+		root * /srv
+
+		# Client-side routing means deep links like /workouts have no
+		# matching file on disk. Serve the requested file when it exists,
+		# otherwise fall back to index.html and let the Angular router
+		# take over.
+		try_files {path} /index.html
+
+		file_server
+	}
+
+	# Compress text responses. Caddy picks zstd or gzip based on what
+	# the client accepts.
+	encode zstd gzip
+}
