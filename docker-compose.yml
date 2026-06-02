@@ -36,5 +36,24 @@ services:
         # Wait for the healthcheck, not just for the container to exist.
         condition: service_healthy
 
+  caddy:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+
 volumes:
   fitt-mysql-data:
+  caddy-data:
+  caddy-config:
