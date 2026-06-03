@@ -278,7 +278,7 @@ Outcome: all remaining product screens complete.
 
 ---
 
-## Phase 18 — Testing Strategy (In Progress)
+## Phase 18 — Testing Strategy (Complete)
 
 Testing introduced as a tool for confidence, not ceremony.
 
@@ -287,22 +287,42 @@ then controller tests with MockMvc and the full Spring context, then repository 
 MySQL instance via Testcontainers. Frontend testing planned next using Vitest for service tests and TestBed for
 component tests on the signal-heavy components.
 
-Current status: backend coverage in place for the identity bounded context (auth controller, onboarding controller,
-onboarding service, TDEE service), the progression slice of the workouts bounded context (three strategies, resolver,
-service, controller, repository integration), and the measurements bounded context (body weight controller).
-Frontend testing has not yet started.
+Coverage in place across backend and frontend. Backend: the identity bounded context (auth controller, onboarding
+controller, onboarding service, TDEE service), the progression slice of the workouts bounded context (three strategies,
+resolver, service, controller, repository integration), and the measurements bounded context (body weight controller).
+Frontend: Vitest with the Angular TestBed and the official HttpClient testing harness, covering the auth and onboarding
+guards, the auth interceptor, the auth, identity, measurements, and workout services, and component-level tests for the
+goals, weight log, and active session screens.
 
 Outcome: tests that add value rather than friction, with documented conventions for both backend and frontend.
 
 ---
 
-## Phase 19 — Build, Docker, and Deployment
+## Phase 19 — Build, Docker, and Deployment (In Progress)
 
 This phase focuses on delivery.
 
 Maven lifecycle revisited. Docker fundamentals explained including image creation and container behavior.
 Environment variables handled correctly. Production CORS locked to deployed frontend URL.
 Differences between local and cloud environments understood.
+
+Scope (locked 2026-05-31):
+- Multi-stage Dockerfile for the Spring Boot backend with a layered JAR and a non-root runtime user.
+- Multi-stage Dockerfile for the Angular frontend served by nginx on alpine.
+- Docker Compose stack: mysql, backend, frontend, caddy. Named volumes and Compose secrets.
+- Caddy reverse proxy with automatic Let's Encrypt over the HTTP-01 challenge.
+- Production Spring profile reading every secret and connection string from environment variables and mounted secret files.
+- GitHub Actions pipeline: build, test, push images to ghcr.io, manual approval gate before remote deploy.
+- Target host: Hetzner CPX22 VPS.
+- Deployment runbook at docs/deployment/RUNBOOK.md.
+
+Deferred out of Phase 19:
+- CDN (Cloudflare or CloudFront).
+- Managed database migration.
+- Monitoring stack (Prometheus, Grafana, Loki).
+- Automated database backups beyond a documented manual procedure.
+
+Branch: feature/phase-19-build-docker-deploy.
 
 Outcome: a clear understanding of how software leaves the development machine.
 

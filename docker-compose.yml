@@ -1,0 +1,59 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${FITT_DB_NAME}
+      MYSQL_USER: ${FITT_DB_USERNAME}
+      MYSQL_PASSWORD: ${FITT_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${FITT_DB_ROOT_PASSWORD}
+    volumes:
+      - fitt-mysql-data:/var/lib/mysql
+    healthcheck:
+      # Use the container's own root password env at check time. $$ stops
+      # Compose from substituting it too early. start_period gives MySQL
+      # room to run its first-boot setup before checks start counting.
+      test: [ "CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      FITT_DB_URL: jdbc:mysql://mysql:3306/${FITT_DB_NAME}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      FITT_DB_USERNAME: ${FITT_DB_USERNAME}
+      FITT_DB_PASSWORD: ${FITT_DB_PASSWORD}
+      FITT_JWT_SECRET_VALUE: ${FITT_JWT_SECRET_VALUE}
+      FITT_JWT_ISSUER: ${FITT_JWT_ISSUER}
+      FITT_JWT_TTL_SECONDS: ${FITT_JWT_TTL_SECONDS}
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        # Wait for the healthcheck, not just for the container to exist.
+        condition: service_healthy
+
+  caddy:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+
+volumes:
+  fitt-mysql-data:
+  caddy-data:
+  caddy-config:

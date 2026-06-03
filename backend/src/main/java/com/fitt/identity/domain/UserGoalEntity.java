@@ -28,7 +28,7 @@ public class UserGoalEntity {
     private GoalDirection goalDirection;
 
     // Nullable. User can skip target weight during onboarding.
-    @Column
+    @Column(precision = 5, scale = 2)
     private BigDecimal targetWeightKg;
 
     // Nullable. User can skip timeline.

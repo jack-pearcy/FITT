@@ -26,10 +26,10 @@ public class UserBiometricsEntity {
     private Long ownerUserId;
 
     // Always stored in metric internally. Frontend converts for display.
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 5, scale = 2)
     private BigDecimal heightCm;
 
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 5, scale = 2)
     private BigDecimal weightKg;
 
     @Column(nullable = false)

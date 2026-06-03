@@ -9,3 +9,7 @@ backend/src/main/resources/application-local.properties
 structure_exports/
 project_dump.txt
 FITT_TRANSITION_PROMPT_claude.txt
+
+# Environment variables
+.env.DS_Store
+.DS_Store
