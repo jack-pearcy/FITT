@@ -8,13 +8,12 @@ name: Deploy
 
 "on":
   # Run by hand from the Actions tab. The image tag to deploy is chosen at
-  # trigger time, defaulting to the latest commit on main.
+  # trigger time. Use the commit SHA of the images CI built and pushed.
   workflow_dispatch:
     inputs:
       image_tag:
         description: "Image tag (commit SHA) to deploy"
         required: true
-        default: main
 
 jobs:
   deploy:
@@ -23,21 +22,46 @@ jobs:
     # protection rule on that environment is what pauses the job for approval
     # before any of the steps below run.
     environment: production
+    # The run-scoped token needs read access to the packages to pull them.
+    permissions:
+      contents: read
+      packages: read
     steps:
       # SSH to the server and roll the new images. The server already holds
       # docker-compose.prod.yml and the production .env; this only updates the
       # image tag, logs in to GHCR, pulls, and restarts.
+      #
+      # GHCR auth uses the token GitHub mints for this run, passed in over SSH
+      # as an env var. The server stores no standing registry credential; the
+      # login lasts only as long as the deploy.
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_ACTOR: ${{ github.actor }}
+          IMAGE_TAG: ${{ github.event.inputs.image_tag }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # Pass the env vars above into the remote shell session.
+          envs: GHCR_TOKEN,GHCR_ACTOR,IMAGE_TAG
           script: |
             set -e
             cd /opt/fitt
-            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${{ github.event.inputs.image_tag }}/" .env
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USER }}" --password-stdin
+
+            # Point the stack at the tag chosen for this deploy. Rewrites the
+            # IMAGE_TAG line in the server's .env in place.
+            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${IMAGE_TAG}/" .env
+
+            # Authenticate to GHCR with the run-scoped token, then log out at
+            # the end so nothing is left on the box.
+            echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_ACTOR}" --password-stdin
+
+            # Pull the new images and recreate. MySQL keeps its data volume.
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            # Remove the stored credential and clean up old image layers.
+            docker logout ghcr.io
             docker image prune -f
