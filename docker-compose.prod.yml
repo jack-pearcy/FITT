@@ -13,6 +13,7 @@ services:
       MYSQL_USER: ${FITT_DB_USERNAME}
       MYSQL_PASSWORD: ${FITT_DB_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${FITT_DB_ROOT_PASSWORD}
+      FITT_CORS_ALLOWED_ORIGINS: ${FITT_CORS_ALLOWED_ORIGINS}
     volumes:
       - fitt-mysql-data:/var/lib/mysql
     healthcheck:

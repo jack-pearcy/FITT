@@ -3,6 +3,7 @@ package com.fitt.shared.config;
 import com.fitt.identity.service.IdentityUserDetailsService;
 import com.fitt.shared.security.RestAccessDeniedHandler;
 import com.fitt.shared.security.RestAuthenticationEntryPoint;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -28,7 +29,8 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             RestAuthenticationEntryPoint authenticationEntryPoint,
-            RestAccessDeniedHandler accessDeniedHandler
+            RestAccessDeniedHandler accessDeniedHandler,
+            CorsConfigurationSource corsConfigurationSource
     ) throws Exception {
 
         return http
@@ -37,7 +39,7 @@ public class SecurityConfig {
                 // Configured here rather than at the MVC layer because Spring Security
                 // filters run before the DispatcherServlet. A preflight OPTIONS request
                 // would be rejected with 401 before MVC ever sees it without this.
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
 
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
@@ -59,12 +61,14 @@ public class SecurityConfig {
                 .build();
     }
 
-    // X-Request-ID is listed so the correlation ID header passes the preflight check.
-    // allowCredentials(true) requires a named origin, wildcard is not allowed with credentials.
+    // Allowed origins come from config so dev uses localhost and prod uses the
+    // real domain, same image either way. Comma separated in the property.
     @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
+    public CorsConfigurationSource corsConfigurationSource(
+            @Value("${fitt.cors.allowed-origins}") List<String> allowedOrigins
+    ) {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:4200"));
+        config.setAllowedOrigins(allowedOrigins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Request-ID"));
         config.setExposedHeaders(List.of("X-Request-ID"));
