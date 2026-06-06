@@ -1,0 +1,43 @@
+# Deploys FITT to the production server.
+# This is deliberately separate from CI. CI builds and publishes images on
+# every push to main. This workflow takes a published image and rolls it onto
+# the live box, but only after a human approves the production environment.
+# That approval gate is what makes this Continuous Delivery rather than
+# Continuous Deployment.
+name: Deploy
+
+"on":
+  # Run by hand from the Actions tab. The image tag to deploy is chosen at
+  # trigger time, defaulting to the latest commit on main.
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag (commit SHA) to deploy"
+        required: true
+        default: main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Links this job to the production environment. The required-reviewers
+    # protection rule on that environment is what pauses the job for approval
+    # before any of the steps below run.
+    environment: production
+    steps:
+      # SSH to the server and roll the new images. The server already holds
+      # docker-compose.prod.yml and the production .env; this only updates the
+      # image tag, logs in to GHCR, pulls, and restarts.
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/fitt
+            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${{ github.event.inputs.image_tag }}/" .env
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USER }}" --password-stdin
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker image prune -f

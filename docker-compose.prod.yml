@@ -1,0 +1,65 @@
+# Production stack for FITT on the server.
+# Unlike the local docker-compose.yml, does not build anything. It pulls
+# the images that CI already built and pushed to GHCR, pinned to a commit SHA
+# so a deploy is an exact, repeatable thing. The IMAGE_OWNER and IMAGE_TAG
+# values come from the .env file on the server, which the deploy workflow
+# rewrites on every deploy.
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${FITT_DB_NAME}
+      MYSQL_USER: ${FITT_DB_USERNAME}
+      MYSQL_PASSWORD: ${FITT_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${FITT_DB_ROOT_PASSWORD}
+      FITT_CORS_ALLOWED_ORIGINS: ${FITT_CORS_ALLOWED_ORIGINS}
+    volumes:
+      - fitt-mysql-data:/var/lib/mysql
+    healthcheck:
+      # $$ stops Compose from expanding the variable too early; the shell
+      # inside the container reads it at check time. start_period gives MySQL
+      # room for first-boot setup before checks start counting.
+      test: [ "CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  backend:
+    image: ghcr.io/${IMAGE_OWNER}/fitt-backend:${IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      FITT_DB_URL: jdbc:mysql://mysql:3306/${FITT_DB_NAME}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      FITT_DB_USERNAME: ${FITT_DB_USERNAME}
+      FITT_DB_PASSWORD: ${FITT_DB_PASSWORD}
+      FITT_JWT_SECRET_VALUE: ${FITT_JWT_SECRET_VALUE}
+      FITT_JWT_ISSUER: ${FITT_JWT_ISSUER}
+      FITT_JWT_TTL_SECONDS: ${FITT_JWT_TTL_SECONDS}
+    # No host port published. The backend is reachable only by Caddy over the
+    # internal Docker network. Publishing 8080 was fine locally but would
+    # expose the API directly to the internet in production.
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  caddy:
+    image: ghcr.io/${IMAGE_OWNER}/fitt-frontend:${IMAGE_TAG}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+
+volumes:
+  fitt-mysql-data:
+  caddy-data:
+  caddy-config:
