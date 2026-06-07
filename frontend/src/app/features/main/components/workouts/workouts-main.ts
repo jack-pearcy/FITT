@@ -4,7 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthService } from '../../../../core/services/auth.service';
 import { WorkoutService } from '../../../../core/services/workout.service';
 import { CreatePlanWizardComponent } from './create-plan-wizard';
-import { forkJoin } from 'rxjs';
+import {forkJoin, switchMap} from 'rxjs';
 import {
   ProgressionModel,
   WorkoutPlanResponse
@@ -161,56 +161,19 @@ export class WorkoutsMainComponent implements OnInit {
 
     this.actionLoading.set(true);
 
-    // Count finished sessions for this plan to determine which day is next
-    this.workouts.countCompletedSessions(userId, plan.id)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: completedCount => {
-          // Sort days by orderIndex so the rotation is always consistent
-          const sortedDays = plan.days.slice().sort((a, b) => a.orderIndex - b.orderIndex);
-          const dayIndex   = Number(completedCount) % sortedDays.length;
-          const planDay    = sortedDays[dayIndex];
-
-          this.workouts.createSession(userId, {
-            startedAt: new Date().toISOString(),
-            planId:    plan.id
-          }).pipe(takeUntilDestroyed(this.destroyRef))
-            .subscribe({
-              next: session => {
-                const exercises = planDay.exercises.map(ex =>
-                  this.workouts.addExerciseEntry(userId, session.id, { exerciseId: ex.exercise.id })
-                );
-
-                if (exercises.length === 0) {
-                  this.router.navigate(['/session', session.id]);
-                  this.actionLoading.set(false);
-                  return;
-                }
-
-                forkJoin(exercises)
-                  .pipe(takeUntilDestroyed(this.destroyRef))
-                  .subscribe({
-                    next: () => {
-                      this.router.navigate(['/session', session.id]);
-                      this.actionLoading.set(false);
-                    },
-                    error: () => {
-                      this.error.set('Could not populate your session. Try again.');
-                      this.actionLoading.set(false);
-                    }
-                  });
-              },
-              error: () => {
-                this.error.set('Could not start your session. Try again.');
-                this.actionLoading.set(false);
-              }
-            });
-        },
-        error: () => {
-          this.error.set('Could not start your session. Try again.');
-          this.actionLoading.set(false);
-        }
-      });
+    this.workouts.getTodaysDay(userId, plan).pipe(
+      switchMap(day => this.workouts.startSessionForDay(userId, plan.id, day)),
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe({
+      next: session => {
+        void this.router.navigate(['/session', session.id]);
+        this.actionLoading.set(false);
+      },
+      error: () => {
+        this.error.set('Could not start your session. Try again.');
+        this.actionLoading.set(false);
+      }
+    });
   }
 
   showCreatePlan(): void {

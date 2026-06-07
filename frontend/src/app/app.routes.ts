@@ -51,6 +51,12 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/main/components/goals/goals')
             .then(m => m.GoalsComponent)
+      },
+      {
+        path: 'todays-lift',
+        loadComponent: () =>
+          import('./features/main/components/todays-lift/todays-lift')
+            .then(m => m.TodaysLift)
       }
     ]
   },

@@ -1,0 +1,113 @@
+.todays-lift {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+// Loading and empty states
+.todays-lift__status {
+  text-align: center;
+  color: #666;
+  padding: 2rem;
+  font-size: 0.9rem;
+}
+
+// Error banner
+.todays-lift__error {
+  background-color: rgba(255, 60, 60, 0.1);
+  border: 1px solid rgba(255, 60, 60, 0.25);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  color: #ff6b6b;
+  font-size: 0.85rem;
+}
+
+// Day header
+.todays-lift__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.todays-lift__title {
+  margin: 0;
+  font-size: 1.3rem;
+  color: #f0f0f0;
+}
+
+.todays-lift__count {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+// Exercise list
+.todays-lift__list {
+  display: flex;
+  flex-direction: column;
+}
+
+.todays-lift__exercise {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.exercise__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.exercise__name {
+  color: #f0f0f0;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.exercise__group {
+  color: #666;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.exercise__scheme {
+  color: #e8ff3b;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+// Start session button
+.todays-lift__start {
+  padding: 0.8rem 1.2rem;
+  background-color: #e8ff3b;
+  color: #0f0f0f;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+
+  &:hover {
+    background-color: #d4eb2a;
+  }
+}
+
+// Back link
+.todays-lift__back {
+  padding: 0.6rem 1.2rem;
+  background-color: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  color: #888;
+  font-size: 0.85rem;
+  cursor: pointer;
+
+  &:hover {
+    color: #f0f0f0;
+    border-color: #444;
+  }
+}

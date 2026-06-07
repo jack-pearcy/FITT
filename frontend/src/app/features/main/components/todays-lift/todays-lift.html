@@ -1,0 +1,38 @@
+<div class="todays-lift">
+
+  @if (loading()) {
+    <div class="todays-lift__status">Loading...</div>
+  } @else if (error()) {
+    <div class="todays-lift__error">{{ error() }}</div>
+  } @else if (noActivePlan()) {
+    <div class="todays-lift__status">No active plan. Set one as active to see today's lift.</div>
+  } @else if (todayDay(); as day) {
+
+    <div class="todays-lift__header">
+      <h2 class="todays-lift__title">{{ day.dayLabel }}</h2>
+      <span class="todays-lift__count">{{ day.exercises.length }} exercises</span>
+    </div>
+
+    <div class="todays-lift__list">
+      @for (ex of day.exercises; track ex.id) {
+        <div class="todays-lift__exercise">
+          <div class="exercise__main">
+            <span class="exercise__name">{{ ex.exercise.name }}</span>
+            <span class="exercise__group">{{ ex.exercise.muscleGroup }}</span>
+          </div>
+          <span class="exercise__scheme">{{ ex.sets }} × {{ ex.reps }}</span>
+        </div>
+      }
+    </div>
+
+    <button class="todays-lift__start" (click)="startSession()">
+      Start Session
+    </button>
+
+  }
+
+  <button class="todays-lift__back" (click)="goBack()">
+    Back to Workouts
+  </button>
+
+</div>

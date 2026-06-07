@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import {forkJoin, Observable, of, switchMap} from 'rxjs';
 import {
   AddExerciseEntryRequest,
   CreateExerciseRequest,
@@ -11,10 +11,11 @@ import {
   MuscleGroup,
   ProgressionModel,
   ProgressionSuggestionResponse,
-  UpdateProgressionPreferenceRequest,
+  UpdateProgressionPreferenceRequest, WorkoutPlanDayResponse,
   WorkoutPlanResponse,
   WorkoutSessionResponse
 } from '../../features/workouts/models/workout.model';
+import {map} from 'rxjs/operators';
 
 @Injectable({ providedIn: 'root' })
 export class WorkoutService {
@@ -96,6 +97,40 @@ export class WorkoutService {
   getSession(userId: number, sessionId: number): Observable<WorkoutSessionResponse> {
     return this.http.get<WorkoutSessionResponse>(
       `/api/users/${userId}/workout-sessions/${sessionId}`
+    );
+  }
+
+  // Creates a session for the given day and populates it with that day's
+  // exercises, then emits the created session so the caller can route to it.
+  startSessionForDay(userId: number, planId: number, day: WorkoutPlanDayResponse): Observable<WorkoutSessionResponse> {
+    return this.createSession(userId, {
+      startedAt: new Date().toISOString(),
+      planId
+    }).pipe(
+      switchMap(session => {
+        const entries = day.exercises.map(ex =>
+          this.addExerciseEntry(userId, session.id, { exerciseId: ex.exercise.id })
+        );
+
+        // A day with no exercises still produces a valid empty session.
+        if (entries.length === 0) {
+          return of(session);
+        }
+
+        // Add all entries in parallel, then emit the session itself.
+        return forkJoin(entries).pipe(map(() => session));
+      })
+    );
+  }
+
+  // Reusable method that calculates today's current session
+  getTodaysDay(userId: number, plan: WorkoutPlanResponse): Observable<WorkoutPlanDayResponse> {
+    return this.countCompletedSessions(userId, plan.id).pipe(
+      map(completedCount => {
+        const sortedDays = plan.days.slice().sort((a, b) => a.orderIndex - b.orderIndex);
+        const dayIndex   = Number(completedCount) % sortedDays.length;
+        return sortedDays[dayIndex];
+      })
     );
   }
 
