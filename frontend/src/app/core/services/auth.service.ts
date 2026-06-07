@@ -1,6 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
+import { Router } from '@angular/router';
 
 interface RegisterRequest {
   email: string;
@@ -22,6 +23,8 @@ export class AuthService {
   private readonly TOKEN_KEY = 'fitt_token';
 
   private http = inject(HttpClient);
+
+  private router = inject(Router)
 
   isLoggedIn         = signal<boolean>(this.hasToken());
   onboardingComplete = signal<boolean>(false);
@@ -58,6 +61,12 @@ export class AuthService {
     localStorage.removeItem(this.TOKEN_KEY);
     this.isLoggedIn.set(false);
     this.onboardingComplete.set(false);
+  }
+
+  onTokenExpiration(): void {
+    localStorage.removeItem(this.TOKEN_KEY);
+    this.isLoggedIn.set(false);
+    this.router.navigate(['/login']);
   }
 
   getToken(): string | null {
