@@ -39,12 +39,13 @@ public class WorkoutPlanEntity {
     @Column(name = "is_active", nullable = false)
     private boolean isActive = false;
 
-    // Inverse side — full cascade means saving the plan saves all its days
+    // Inverse side, full cascade means saving the plan saves all its days
     // and their exercises. Deleting the plan cascades all the way down.
     @OneToMany(mappedBy = "workoutPlan", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<WorkoutPlanDayEntity> days = new ArrayList<>();
 
-    protected WorkoutPlanEntity() {}
+    protected WorkoutPlanEntity() {
+    }
 
     public WorkoutPlanEntity(Long ownerUserId, String name, int daysPerWeek, String splitType) {
         this.ownerUserId = ownerUserId;
@@ -63,19 +64,53 @@ public class WorkoutPlanEntity {
         day.setWorkoutPlan(null);
     }
 
-    public Long getId() { return id; }
-    public Long getOwnerUserId() { return ownerUserId; }
-    public String getName() { return name; }
-    public int getDaysPerWeek() { return daysPerWeek; }
-    public String getSplitType() { return splitType; }
-    public boolean isActive() { return isActive; }
+    // a full plan edit clears every day before the new set is added.
+    // orphanRemoval deletes the detached rows on flush and the cascade takes the exercises too.
+    public void clearDays() {
+        days.clear();
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public Long getOwnerUserId() {
+        return ownerUserId;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public int getDaysPerWeek() {
+        return daysPerWeek;
+    }
+
+    public String getSplitType() {
+        return splitType;
+    }
+
+    public boolean isActive() {
+        return isActive;
+    }
 
     public List<WorkoutPlanDayEntity> getDays() {
         return Collections.unmodifiableList(days);
     }
 
-    public void setName(String name) { this.name = name; }
-    public void setDaysPerWeek(int daysPerWeek) { this.daysPerWeek = daysPerWeek; }
-    public void setSplitType(String splitType) { this.splitType = splitType; }
-    public void setActive(boolean active) { this.isActive = active; }
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public void setDaysPerWeek(int daysPerWeek) {
+        this.daysPerWeek = daysPerWeek;
+    }
+
+    public void setSplitType(String splitType) {
+        this.splitType = splitType;
+    }
+
+    public void setActive(boolean active) {
+        this.isActive = active;
+    }
 }

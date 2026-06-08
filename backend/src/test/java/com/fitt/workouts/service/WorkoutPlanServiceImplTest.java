@@ -1,11 +1,9 @@
 package com.fitt.workouts.service;
 
 import com.fitt.workouts.domain.SplitType;
-import com.fitt.workouts.dto.AddPlanDayExerciseRequest;
-import com.fitt.workouts.dto.CreateWorkoutPlanDayRequest;
-import com.fitt.workouts.dto.CreateWorkoutPlanRequest;
-import com.fitt.workouts.dto.WorkoutPlanResponse;
+import com.fitt.workouts.dto.*;
 import com.fitt.workouts.persistence.entity.ExerciseEntity;
+import com.fitt.workouts.persistence.entity.WorkoutPlanDayEntity;
 import com.fitt.workouts.persistence.entity.WorkoutPlanEntity;
 import com.fitt.workouts.repository.ExerciseRepository;
 import com.fitt.workouts.repository.WorkoutPlanRepository;
@@ -101,6 +99,81 @@ class WorkoutPlanServiceImplTest {
                 .isInstanceOf(ExerciseNotFoundException.class);
 
         verify(planRepository, never()).save(any(WorkoutPlanEntity.class));
+    }
+
+    @Test
+    void updatePlan_replacesDaysAndScalars_preservesActiveFlag() {
+        // existing plan already has a day and is active, owned by USER_ID
+        WorkoutPlanEntity existing = samplePlan("Old name", true);
+        existing.addDay(new WorkoutPlanDayEntity("Old day", 0));
+        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(existing));
+
+        // request rebuilds the plan with new scalars and a different day
+        AddPlanDayExerciseRequest exReq = new AddPlanDayExerciseRequest(EXERCISE_ID, 4, 8);
+        CreateWorkoutPlanDayRequest dayReq = new CreateWorkoutPlanDayRequest(0, "Pull", List.of(exReq));
+        UpdateWorkoutPlanRequest request = new UpdateWorkoutPlanRequest(
+                "New name", 4, SplitType.UPPER_LOWER, List.of(dayReq));
+
+        when(exerciseRepository.findById(EXERCISE_ID))
+                .thenReturn(Optional.of(sampleExercise("Row")));
+
+        WorkoutPlanResponse response = service.updatePlan(USER_ID, PLAN_ID, request);
+
+        // scalars applied to the managed entity
+        assertThat(existing.getName()).isEqualTo("New name");
+        assertThat(existing.getDaysPerWeek()).isEqualTo(4);
+        assertThat(existing.getSplitType()).isEqualTo("UPPER_LOWER");
+
+        // old day gone, exactly the new one present
+        assertThat(existing.getDays()).hasSize(1);
+        assertThat(existing.getDays().get(0).getDayLabel()).isEqualTo("Pull");
+        assertThat(existing.getDays().get(0).getExercises()).hasSize(1);
+
+        // an edit must not touch the active flag, activation is its own endpoint
+        assertThat(existing.isActive()).isTrue();
+
+        // response reflects the rebuilt plan
+        assertThat(response.name()).isEqualTo("New name");
+        assertThat(response.days()).hasSize(1);
+    }
+
+    @Test
+    void updatePlan_exerciseNotFound_throwsExerciseNotFoundException() {
+        WorkoutPlanEntity existing = samplePlan("Old name", false);
+        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(existing));
+
+        AddPlanDayExerciseRequest exReq = new AddPlanDayExerciseRequest(EXERCISE_ID, 3, 10);
+        CreateWorkoutPlanDayRequest dayReq = new CreateWorkoutPlanDayRequest(0, "Push", List.of(exReq));
+        UpdateWorkoutPlanRequest request = new UpdateWorkoutPlanRequest(
+                "New name", 4, SplitType.PPL, List.of(dayReq));
+
+        when(exerciseRepository.findById(EXERCISE_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.updatePlan(USER_ID, PLAN_ID, request))
+                .isInstanceOf(ExerciseNotFoundException.class);
+    }
+
+    @Test
+    void updatePlan_planNotFound_throwsWorkoutPlanNotFoundException() {
+        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.empty());
+
+        UpdateWorkoutPlanRequest request = new UpdateWorkoutPlanRequest(
+                "New name", 4, SplitType.PPL, List.of());
+
+        assertThatThrownBy(() -> service.updatePlan(USER_ID, PLAN_ID, request))
+                .isInstanceOf(WorkoutPlanNotFoundException.class);
+    }
+
+    @Test
+    void updatePlan_notOwned_throwsAccessDeniedException() {
+        WorkoutPlanEntity foreign = new WorkoutPlanEntity(OTHER_USER_ID, "Their plan", 6, "PPL");
+        when(planRepository.findById(PLAN_ID)).thenReturn(Optional.of(foreign));
+
+        UpdateWorkoutPlanRequest request = new UpdateWorkoutPlanRequest(
+                "New name", 4, SplitType.PPL, List.of());
+
+        assertThatThrownBy(() -> service.updatePlan(USER_ID, PLAN_ID, request))
+                .isInstanceOf(AccessDeniedException.class);
     }
 
     @Test
