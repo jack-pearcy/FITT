@@ -298,47 +298,186 @@ Outcome: tests that add value rather than friction, with documented conventions 
 
 ---
 
-## Phase 19 — Build, Docker, and Deployment (In Progress)
+## Phase 19 — Build, Docker, and Deployment (Complete)
 
-This phase focuses on delivery.
+This phase took FITT from code-on-a-laptop to a live, HTTPS production deployment with an automated CI/CD pipeline.
 
-Maven lifecycle revisited. Docker fundamentals explained including image creation and container behavior.
-Environment variables handled correctly. Production CORS locked to deployed frontend URL.
-Differences between local and cloud environments understood.
+What shipped:
+- Multi-stage Dockerfile for the Spring Boot backend producing a slim runtime image from the jar.
+- Multi-stage Dockerfile for the Angular frontend: builds the app, then copies the production output
+  (dist/fitt-web/browser) into a Caddy image, so the frontend ships as one self-contained container.
+- Caddy reverse proxy as the single public door: terminates TLS, routes /api/* to the backend with the
+  prefix passed through intact (handle, not handle_path), serves the Angular SPA with index.html fallback
+  for everything else. Automatic HTTPS via the DOMAIN env var (localhost uses Caddy's internal CA; a real
+  domain triggers Let's Encrypt).
+- docker-compose.prod.yml: mysql, backend, caddy. Caddy is the only service publishing host ports; backend
+  (8080) and MySQL (3306) stay private on the internal Docker network. Pulls SHA-tagged images from GHCR
+  rather than building. Cert state and DB data on named volumes.
+- Flyway baseline migration for the production schema.
+- CI pipeline (.github/workflows/ci.yml): on push to main, runs the full backend test suite on a clean
+  runner (H2 unit tests plus one MySQL integration test via Testcontainers using the runner's Docker), then
+  builds both images and pushes to ghcr.io tagged by commit SHA. Owner lowercased pre-emptively; on: quoted.
+- Gated deploy workflow (.github/workflows/deploy.yml): manual workflow_dispatch with the image SHA as input,
+  references environment: production, SSHes to the server, rewrites IMAGE_TAG in the server .env, logs into
+  GHCR with the run-scoped GITHUB_TOKEN (no standing credential on the box; logs out after), pulls, and
+  recreates the stack.
 
-Scope (locked 2026-05-31):
-- Multi-stage Dockerfile for the Spring Boot backend with a layered JAR and a non-root runtime user.
-- Multi-stage Dockerfile for the Angular frontend served by nginx on alpine.
-- Docker Compose stack: mysql, backend, frontend, caddy. Named volumes and Compose secrets.
-- Caddy reverse proxy with automatic Let's Encrypt over the HTTP-01 challenge.
-- Production Spring profile reading every secret and connection string from environment variables and mounted secret files.
-- GitHub Actions pipeline: build, test, push images to ghcr.io, manual approval gate before remote deploy.
-- Target host: Hetzner CPX22 VPS.
-- Deployment runbook at docs/deployment/RUNBOOK.md.
+Production environment:
+- Live at https://fittapp.dev with a real Let's Encrypt certificate.
+- Domain registered via Cloudflare (DNS-only / grey cloud A records for apex and www).
+- Host: Hetzner CPX21 (Hillsboro, Ubuntu 24.04). Initially deployed to DigitalOcean (Hetzner verification was
+  delayed), then migrated to Hetzner to save cost; DigitalOcean droplet destroyed after cutover.
+- Server hardened per the runbook: non-root deploy user, ufw (SSH/80/443 only), Docker via the official script.
 
-Deferred out of Phase 19:
-- CDN (Cloudflare or CloudFront).
-- Managed database migration.
-- Monitoring stack (Prometheus, Grafana, Loki).
-- Automated database backups beyond a documented manual procedure.
+Key decisions and lessons:
+- handle vs handle_path: backend controllers are all under /api, so the prefix must reach the backend
+  untouched. handle_path would strip it and 404 everything.
+- @angular/build:application nests servable output under dist/<project-name>/browser. Project name is
+  fitt-web (from angular.json, NOT package.json which says "frontend"). Copying the wrong level breaks asset paths.
+- Production CORS bug: the Phase 9 CORS config hardcoded http://localhost:4200, dev-correct but rejected the
+  production origin with 403. Fixed by making allowed origins config-driven (fitt.cors.allowed-origins,
+  env-supplied in prod). A second bug compounded it: the CORS env var was placed in the wrong compose service
+  (mysql instead of backend), causing a fail-fast crash loop. Lesson reinforced: read the actual file/logs, do
+  not infer.
+- Required-reviewers approval gate is Enterprise-only on private repos (Pro/Team get it only on public repos).
+  Using manual workflow_dispatch as the human gate instead; formal approval gate is a future item if the repo
+  goes public or onto Enterprise.
+- GHCR auth: the server holds no standing token. The deploy workflow authenticates with the run-scoped
+  GITHUB_TOKEN over SSH and logs out after, so no credential persists on the box.
 
-Branch: feature/phase-19-build-docker-deploy.
+Deferred out of Phase 19 (see Phase 20 / monetization):
+- CDN (Cloudflare proxy / orange-cloud), managed database migration, monitoring stack, automated DB backups.
 
-Outcome: a clear understanding of how software leaves the development machine.
+Outcome: a complete, production-grade CI/CD setup with a live HTTPS deployment.
 
 ---
 
-## Phase 20 — Polish and Portfolio Readiness
+## Phase 20 — Polish and Portfolio Readiness (In Progress)
 
-This phase prepares the project for external review.
+STRATEGIC DECISION (resolved 2026-06-07, governs this whole phase): the sequencing question is answered —
+iOS informs Phase 20. The Angular web app is a COMPLETE THROWAWAY, kept only as a working test harness to
+verify backend/API behavior until the iOS app exists, then replaced by a simple info/marketing site. iOS
+(Phase 21, native SwiftUI) is the real product.
 
-Codebase reviewed for quality and clarity. Dead code removed. Naming improved.
-Active session UX polish: green checkmark per completed set, row state transitions, next session weight pre-fill,
-progression suggestions inline per exercise. Other deferred UX items addressed.
-Architectural decisions documented. Study guide produced covering the full stack.
-Project prepared to be explained confidently in interviews.
+THE RULE for all Phase 20 work: keep every backend, data, and API item (the shared foundation iOS sits on);
+drop all web-presentation polish (no further investment in Angular screens). The API IS the product now, so an
+API-completeness audit is a high priority. Most dropped web-UI items have a backend twin that STAYS because
+iOS needs it (edit-plan UI dropped but the plan update endpoint stays and must be built; add-custom-exercise UI
+dropped but the create endpoint stays; edit/remove-weight UI dropped but those endpoints stay).
 
-Outcome: a portfolio-ready project that can be defended technically and verbally.
+Completed this phase:
+- Exercise library seed shipped (V2__seed_exercise_library.sql; 54 global exercises, owner_user_id NULL,
+  is_custom 0). The library is GLOBAL, not per-user (service query findByOwnerUserIdIsNullOrOwnerUserId);
+  seeded muscle_group strings match the MuscleGroup enum tokens exactly. Verified on a fresh volume, deployed.
+- Auth 401 recovery shipped: interceptor clears the token and redirects to login on a 401 (401 only; 403
+  passes through). Also fixed a compounding bug — the interceptor was attaching the stale token to the login
+  request itself, so login was rejected with a malformed-token 401 before credentials were checked; now the
+  token is skipped on /api/identity/auth/ endpoints. Verified live, deployed.
+- Weight date "carry-over" investigated and resolved as NOT-a-bug (every layer computes the local calendar day
+  correctly; the report was a genuine past-midnight log).
+- Today's Lift page built (web; a demo artifact only, no further investment per the iOS-first rule). Two DRY
+  extractions in the workout service, shared by workouts-main and today's-lift so they cannot drift:
+  getTodaysDay (day-selection rotation) and startSessionForDay (createSession + populate, emits the session).
+
+Backend endpoints to build (surviving twins of dropped web UIs; iOS needs them):
+- Plan update endpoint (PUT/PATCH) for edit-plan (full structural edit: sets, reps, exercises, plan type, days).
+- Create-custom-exercise endpoint (data model already supports per-user customs via owner_user_id / is_custom).
+- Weight edit / remove endpoints.
+
+Data / correctness (backend, client-agnostic):
+- TDEE vs calorie goal: on a bulk the TDEE and the daily calorie goal show the SAME number; the surplus/deficit
+  (bulk surplus / cut deficit / maintain) adjustment is likely not applied. Check the TDEE/goal calc.
+- CORE/abs MuscleGroup enum value missing, so the V2 seed omits all core work. Add CORE plus the frontend group
+  list (muscle_group is varchar, no DB migration needed).
+- Cross-group compound classifications in the seed (deadlift, RDL, shrug, face pull, step up) — grouping pass.
+- Forgot-password flow: needs a transactional email provider (Resend) to send reset emails. Backend + infra.
+
+Data seeding (feature):
+- Seed well-regarded pre-built splits (PPL, upper/lower, full-body) as GLOBAL read-only templates users clone
+  into their own plan (likely needs a copy-template flow). A split is a structured plan graph (plan -> days ->
+  day-exercises with sets/reps/orderIndex, FKs into the seeded library), so a multi-table seed. Source real
+  reputable programs; do not invent.
+
+API completeness (surface what the engine already computes; the gap is exposing it on the API for a client):
+- Week position + deload status (engine already computes them: linear periodization, deload on week 4 at 60%,
+  derived from completed-session count). Expose cleanly on the API.
+- Progression auto-increase (engine already computes it: WEIGHT_INCREMENT 2.5, returns a reasoning string).
+  Expose the suggestion + reasoning clearly; add a user preference (opt in/out, set increment), ideally at
+  onboarding. A selectable per-user progression model already exists.
+- Customizable current-position-in-plan: needs backend support for stored/derived position (open question:
+  does a day/week counter exist, derived or stored?).
+- Already-trained-today detection: a "session completed on the current local calendar day" check so a client
+  can prompt before launching a duplicate session.
+- API CONTRACT AUDIT (elevated): the API is the product — audit every action the app performs and confirm each
+  has a clean, complete endpoint iOS can consume.
+
+Infra / security / tooling (permanent, client-agnostic):
+- Show the git branch in the shell prompt (prevents committing on main; a slip happened this phase).
+- Automate conventional PR-title enforcement (semantic-PR-title action, or set the repo squash-merge message to
+  derive from the PR title).
+- Add Hetzner cloud firewall as a second layer on top of ufw (defense in depth).
+- Separate the backend test suite in CI: fast H2 unit tests vs the Testcontainers integration test (tag-based).
+- Add pull_request trigger to CI so PRs are gated on green tests before merge.
+- Add image vulnerability scanning (Trivy or similar) to the pipeline.
+- caddy fmt --overwrite to clear the Caddyfile formatting warning.
+
+Audit / testing:
+- Full project + git/history audit (standing item from the Phase 18 trust-hit and the Phase 19 read-the-file
+  lessons). Comments verified human (no Latin abbreviations, no AI phrasing, single-author voice).
+- Backend integration tests against real MySQL (deferred pending Phase 21 CI).
+
+Dropped (web presentation; throwaway client): light/dark toggle, sign-up screen color, FITT-icon-routes-home,
+hover icon on progression models, the today's-lift web page (demo artifact only), the Angular auth-guard
+missing-token redirect (API-level behavior matters, the Angular guard does not), edit/remove-weight UI,
+add-custom-exercise UI, enter-weight-on-new-day prompt, active-session web UX polish, E2E browser tests,
+performance regression tests. Each dropped item whose value is real survives as a backend endpoint above.
+
+Outcome: a complete, correct, well-documented backend/API foundation ready for the iOS client, plus a
+portfolio-ready project that can be defended technically and verbally.
+
+---
+
+## Monetization Phase (Conditional — only if FITT goes public/commercial)
+
+Tracked for the future; not scheduled.
+
+- Freemium model: short full-access trial leading to a paywall on advanced features. Subscriptions outperform
+  ads for solo indie fitness apps.
+- Business email at the domain (Cloudflare Email Routing is the free receiving option; a hosted mailbox only if
+  a team forms).
+- Hetzner automated backups (worth the cost once there is real user data to protect).
+- Cloud-config / infrastructure-as-code provisioning (fold the runbook into an automated bootstrap script).
+- Cloudflare proxy / CDN (orange cloud) in front, with SSL mode Full (strict) to avoid loops.
+- Formal required-reviewers approval gate (needs public repo or Enterprise).
+- Secret rotation: the dev DB password and JWT secret were exposed in chat; production uses freshly generated
+  values, and any further rotation should follow.
+
+---
+
+## Interview Readiness (cross-cutting, ongoing)
+
+- Skills-fluency practice track: deliberately drill every technology FITT touched (Spring Boot, Spring Security,
+  JPA, bounded contexts, Flyway; Angular signals/RxJS/guards/interceptors/TestBed; JUnit/Mockito/Testcontainers/
+  Vitest; Docker/Compose/Caddy/GitHub Actions/GHCR; Linux hardening, DNS, ACME; MySQL, JWT) until each can be
+  explained and re-derived under questioning. Method: explain cold (quiz gate), rebuild small isolated versions
+  in senior-dev mode, anticipate follow-ups (why this not the alternative, what I'd do differently).
+- Mock-interviewer quizzing mode drilling stack choices, architecture, request lifecycle, security, testing,
+  deploy, tradeoffs.
+- FITT Mega Project Guide (post-development): cover-to-cover guide teaching all of FITT from the ground up,
+  PLUS a complete set of project flowcharts, every relevant file, component, flow, bounded context, request
+  lifecycle, data model/ERD, and frontend flow charted so the whole system is understandable from the diagrams.
+- Interview cheat sheet: trimmed (<=2 page) FITT Bible covering stack, architecture decisions, key lessons, and
+  what would be done differently.
+- AI tool framing: transparent about AI use, framed as interactive learning with personal accountability (the
+  quiz gate is the concrete proof point), not passive reliance.
+
+---
+
+## Post-FITT — Second Portfolio Project (planned working agreement)
+
+Senior-dev mode: no Claude lectures. Claude directs to official docs (angular.dev, docs.spring.io,
+typescriptlang.org), reviews the work, and pushes back. Lean practice toward Angular and TypeScript before
+backend topics, since frontend is the weaker side.
 
 ---
 

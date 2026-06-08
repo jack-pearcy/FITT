@@ -27,3 +27,4 @@ pnpm-debug.log*
 !*.env.example
 
 Test Results - *.html
+FITT_TRANSITION_PROMPT.txt
