@@ -12,6 +12,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+
 
 import java.util.List;
 
@@ -41,13 +43,26 @@ class WorkoutPlanControllerTest {
     private static final long PLAN_ID = 200L;
 
     private static final String CREATE_BODY = """
-            {
-              "name": "PPL 6-day",
-              "daysPerWeek": 6,
-              "splitType": "PPL",
-              "days": []
-            }
-            """;
+        {
+          "name": "PPL 6-day",
+          "daysPerWeek": 6,
+          "splitType": "PPL",
+          "days": [
+            { "orderIndex": 0, "dayLabel": "Push", "exercises": [] }
+          ]
+        }
+        """;
+
+    private static final String UPDATE_BODY = """
+        {
+          "name": "Upper Lower 4-day",
+          "daysPerWeek": 4,
+          "splitType": "UPPER_LOWER",
+          "days": [
+            { "orderIndex": 0, "dayLabel": "Upper", "exercises": [] }
+          ]
+        }
+        """;
 
     @Autowired
     private MockMvc mockMvc;
@@ -69,6 +84,33 @@ class WorkoutPlanControllerTest {
                 .andExpect(jsonPath("$.name").value("PPL 6-day"))
                 .andExpect(jsonPath("$.splitType").value("PPL"))
                 .andExpect(jsonPath("$.active").value(false));
+    }
+
+    @Test
+    void updatePlan_validOwnership_returns200WithBody() throws Exception {
+        when(workoutPlanService.updatePlan(eq(USER_ID), eq(PLAN_ID), any()))
+                .thenReturn(samplePlan("Upper Lower 4-day", true));
+
+        mockMvc.perform(put("/api/users/{userId}/workout-plans/{planId}", USER_ID, PLAN_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(UPDATE_BODY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(PLAN_ID))
+                .andExpect(jsonPath("$.name").value("Upper Lower 4-day"));
+    }
+
+    @Test
+    void updatePlan_ownershipMismatch_returns403() throws Exception {
+        // valid body, so validation passes and the request reaches enforceOwnership,
+        // which is what we want to assert here rather than a 400
+        mockMvc.perform(put("/api/users/{userId}/workout-plans/{planId}", USER_ID, PLAN_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", OTHER_USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(UPDATE_BODY))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(workoutPlanService);
     }
 
     @Test

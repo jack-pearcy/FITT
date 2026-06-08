@@ -2,13 +2,7 @@ package com.fitt.workouts.service;
 
 import com.fitt.workouts.domain.MuscleGroup;
 import com.fitt.workouts.domain.SplitType;
-import com.fitt.workouts.dto.AddPlanDayExerciseRequest;
-import com.fitt.workouts.dto.CreateWorkoutPlanDayRequest;
-import com.fitt.workouts.dto.CreateWorkoutPlanRequest;
-import com.fitt.workouts.dto.ExerciseResponse;
-import com.fitt.workouts.dto.PlanDayExerciseResponse;
-import com.fitt.workouts.dto.WorkoutPlanDayResponse;
-import com.fitt.workouts.dto.WorkoutPlanResponse;
+import com.fitt.workouts.dto.*;
 import com.fitt.workouts.persistence.entity.ExerciseEntity;
 import com.fitt.workouts.persistence.entity.PlanDayExerciseEntity;
 import com.fitt.workouts.persistence.entity.WorkoutPlanDayEntity;
@@ -47,34 +41,29 @@ public class WorkoutPlanServiceImpl implements WorkoutPlanService {
                 request.splitType().name()
         );
 
-        for (CreateWorkoutPlanDayRequest dayReq : request.days()) {
-            // entity constructor: dayLabel, orderIndex
-            WorkoutPlanDayEntity day = new WorkoutPlanDayEntity(dayReq.dayLabel(), dayReq.orderIndex());
-
-            if (dayReq.exercises() != null) {
-                int order = 0;
-                for (AddPlanDayExerciseRequest exReq : dayReq.exercises()) {
-                    ExerciseEntity exercise = exerciseRepository.findById(exReq.exerciseId())
-                            .orElseThrow(() -> new ExerciseNotFoundException(exReq.exerciseId()));
-
-                    // entity constructor: exercise, sets, reps, orderIndex
-                    PlanDayExerciseEntity slot = new PlanDayExerciseEntity(
-                            exercise,
-                            exReq.sets(),
-                            exReq.reps(),
-                            order++
-                    );
-
-                    // addExercise syncs both sides
-                    day.addExercise(slot);
-                }
-            }
-
-            // addDay syncs both sides
-            plan.addDay(day);
-        }
+        addDaysFromRequest(plan, request.days());
 
         return toResponse(planRepository.save(plan));
+    }
+
+    @Override
+    @Transactional
+    public WorkoutPlanResponse updatePlan(Long ownerUserId, Long planId, UpdateWorkoutPlanRequest request) {
+        // load the existing plan, which also runs the ownership check and 404
+        WorkoutPlanEntity plan = loadAndVerify(ownerUserId, planId);
+
+        // scalars go straight onto the managed entity
+        plan.setName(request.name());
+        plan.setDaysPerWeek(request.daysPerWeek());
+        plan.setSplitType(request.splitType().name());
+
+        // full replace: drop the old days before rebuilding from the request
+        plan.clearDays();
+
+        addDaysFromRequest(plan, request.days());
+
+        // plan is managed so dirty checking flushes the changes at commit. no save needed.
+        return toResponse(plan);
     }
 
     @Override
@@ -123,6 +112,37 @@ public class WorkoutPlanServiceImpl implements WorkoutPlanService {
         }
 
         return plan;
+    }
+
+    // shared by createPlan and updatePlan so both build the day graph the same way.
+    // works on the passed in plan and syncs both sides through addDay/addExercise.
+    private void addDaysFromRequest(WorkoutPlanEntity plan, List<CreateWorkoutPlanDayRequest> dayReqs) {
+        for (CreateWorkoutPlanDayRequest dayReq : dayReqs) {
+            // entity constructor: dayLabel, orderIndex
+            WorkoutPlanDayEntity day = new WorkoutPlanDayEntity(dayReq.dayLabel(), dayReq.orderIndex());
+
+            if (dayReq.exercises() != null) {
+                int order = 0;
+                for (AddPlanDayExerciseRequest exReq : dayReq.exercises()) {
+                    ExerciseEntity exercise = exerciseRepository.findById(exReq.exerciseId())
+                            .orElseThrow(() -> new ExerciseNotFoundException(exReq.exerciseId()));
+
+                    // entity constructor, exercise, sets, reps, orderIndex
+                    PlanDayExerciseEntity slot = new PlanDayExerciseEntity(
+                            exercise,
+                            exReq.sets(),
+                            exReq.reps(),
+                            order++
+                    );
+
+                    // addExercise syncs both sides
+                    day.addExercise(slot);
+                }
+            }
+
+            // addDay syncs both sides
+            plan.addDay(day);
+        }
     }
 
     private WorkoutPlanResponse toResponse(WorkoutPlanEntity entity) {
