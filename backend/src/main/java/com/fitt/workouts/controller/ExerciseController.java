@@ -4,6 +4,7 @@ import com.fitt.workouts.domain.MuscleGroup;
 import com.fitt.workouts.dto.CreateExerciseRequest;
 import com.fitt.workouts.dto.ExerciseResponse;
 import com.fitt.workouts.service.ExerciseService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -47,7 +48,7 @@ public class ExerciseController {
     @PostMapping
     public ResponseEntity<ExerciseResponse> createCustomExercise(
             @PathVariable Long userId,
-            @RequestBody CreateExerciseRequest request,
+            @Valid @RequestBody CreateExerciseRequest request,
             @AuthenticationPrincipal Jwt jwt
     ) {
         enforceOwnership(userId, currentUserId(jwt));
