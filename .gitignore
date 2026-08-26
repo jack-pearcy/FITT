@@ -11,5 +11,5 @@ project_dump.txt
 FITT_TRANSITION_PROMPT_claude.txt
 
 # Environment variables
-.env.DS_Store
+.env
 .DS_Store
