@@ -30,7 +30,7 @@ public class WorkoutPlanController {
     @PostMapping
     public ResponseEntity<WorkoutPlanResponse> createPlan(
             @PathVariable Long userId,
-            @RequestBody CreateWorkoutPlanRequest request,
+            @Valid @RequestBody CreateWorkoutPlanRequest request,
             @AuthenticationPrincipal Jwt jwt
     ) {
         enforceOwnership(userId, currentUserId(jwt));
