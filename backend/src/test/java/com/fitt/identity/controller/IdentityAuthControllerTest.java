@@ -12,8 +12,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -28,10 +27,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class IdentityAuthControllerTest {
 
     private static final String VALID_EMAIL = "test@example.com";
-    private static final String VALID_PASSWORD = "password123";
+    private static final String VALID_PASSWORD = "password1234";
     private static final String FAKE_TOKEN = "fake-jwt-token-for-test";
     private static final String REQUEST_BODY =
-            "{\"email\":\"test@example.com\",\"password\":\"password123\"}";
+            "{\"email\":\"test@example.com\",\"password\":\"password1234\"}";
 
     @Autowired
     private MockMvc mockMvc;
@@ -50,6 +49,30 @@ class IdentityAuthControllerTest {
                 .andExpect(jsonPath("$.token").value(FAKE_TOKEN));
 
         verify(identityAuthService).register(VALID_EMAIL, VALID_PASSWORD);
+    }
+
+
+    @Test
+    void register_shortPassword_returns400() throws Exception {
+        String shortPasswordBody = "{\"email\":\"test@example.com\",\"password\":\"short\"}";
+
+        mockMvc.perform(post("/api/identity/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(shortPasswordBody))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(identityAuthService);
+    }
+    @Test
+    void register_invalidEmail_returns400() throws Exception{
+        String invalidEmailBody = "{\"email\":\"test!example#com\",\"password\":\"password1234\"}";
+
+        mockMvc.perform(post("/api/identity/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidEmailBody))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(identityAuthService);
     }
 
     @Test

@@ -1,20 +1,16 @@
 package com.fitt.identity.dto;
 
+import jakarta.validation.constraints.NotBlank;
+
 // Inbound DTO for the login endpoint.
-public class LoginRequest {
+// Only non-blank is enforced. Login must not leak password rules or block
+// accounts made under older policies, so no format or length checks here.
+public record LoginRequest(
 
-    private String email;
-    private String password;
+        @NotBlank(message = "Email is required")
+        String email,
 
-    // Jackson needs this to deserialize the request body.
-    // Protected so nothing in application code constructs this directly.
-    protected LoginRequest() {}
-
-    public String getEmail() {
-        return email;
-    }
-
-    public String getPassword() {
-        return password;
-    }
+        @NotBlank(message = "Password is required")
+        String password
+) {
 }
