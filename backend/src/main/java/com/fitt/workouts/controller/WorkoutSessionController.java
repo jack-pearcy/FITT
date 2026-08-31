@@ -5,6 +5,7 @@ import com.fitt.workouts.dto.CreateWorkoutSessionRequest;
 import com.fitt.workouts.dto.LogSetRequest;
 import com.fitt.workouts.dto.WorkoutSessionResponse;
 import com.fitt.workouts.service.WorkoutSessionService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -30,7 +31,7 @@ public class WorkoutSessionController {
     @PostMapping
     public ResponseEntity<WorkoutSessionResponse> createSession(
             @PathVariable Long userId,
-            @RequestBody CreateWorkoutSessionRequest request,
+            @Valid @RequestBody CreateWorkoutSessionRequest request,
             @AuthenticationPrincipal Jwt jwt
     ) {
         enforceOwnership(userId, currentUserId(jwt));
@@ -97,7 +98,7 @@ public class WorkoutSessionController {
     public WorkoutSessionResponse addExerciseEntry(
             @PathVariable Long userId,
             @PathVariable Long sessionId,
-            @RequestBody AddExerciseEntryRequest request,
+            @Valid @RequestBody AddExerciseEntryRequest request,
             @AuthenticationPrincipal Jwt jwt
     ) {
         enforceOwnership(userId, currentUserId(jwt));
@@ -122,7 +123,7 @@ public class WorkoutSessionController {
             @PathVariable Long userId,
             @PathVariable Long sessionId,
             @PathVariable Long entryId,
-            @RequestBody LogSetRequest request,
+            @Valid @RequestBody LogSetRequest request,
             @AuthenticationPrincipal Jwt jwt
     ) {
         enforceOwnership(userId, currentUserId(jwt));
