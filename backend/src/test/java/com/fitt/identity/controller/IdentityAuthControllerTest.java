@@ -10,6 +10,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.Mockito.*;
@@ -68,8 +69,34 @@ class IdentityAuthControllerTest {
         String invalidEmailBody = "{\"email\":\"test!example#com\",\"password\":\"password1234\"}";
 
         mockMvc.perform(post("/api/identity/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
+                        .contentType(MediaType.APPLICATION_JSON) 
                         .content(invalidEmailBody))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(identityAuthService);
+    }
+
+    @Test
+    void register_shortPassword_returnsFieldErrorForPassword() throws Exception {
+        String shortPasswordBody = "{\"email\":\"test@example.com\",\"password\":\"short\"}";
+
+        mockMvc.perform(post("/api/identity/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(shortPasswordBody))
+                .andDo(print())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.properties.errors.password").exists());
+
+        verifyNoInteractions(identityAuthService);
+    }
+
+    @Test
+    void register_malformedJson_returns400() throws Exception {
+        String brokenJson = "{\"email\":\"test@example.com\",\"password\":";
+
+        mockMvc.perform(post("/api/identity/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(brokenJson))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(identityAuthService);
