@@ -18,7 +18,10 @@ public class RpeAutoregulationStrategy implements ProgressionStrategy {
     private static final BigDecimal WEIGHT_ADJUSTMENT_PERCENT = new BigDecimal("0.025");
 
     @Override
-    public ProgressionSuggestion suggest(Long exerciseId, List<WorkoutSessionEntity> recentSessions) {
+    public ProgressionSuggestion suggest(ProgressionContext context) {
+        Long exerciseId = context.exerciseId();
+        List<WorkoutSessionEntity> recentSessions = context.recentSessions();
+
         if (recentSessions.isEmpty()) {
             return new ProgressionSuggestion(
                     exerciseId, BigDecimal.ZERO, 8, 3,

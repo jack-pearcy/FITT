@@ -30,7 +30,7 @@ class DoubleProgressionStrategyTest {
 
     @Test
     void suggest_noSessionHistory_returnsColdStartSuggestion() {
-        ProgressionSuggestion suggestion = strategy.suggest(EXERCISE_ID, List.of());
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of()));
 
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("0");
         assertThat(suggestion.suggestedReps()).isEqualTo(8);
@@ -42,7 +42,7 @@ class DoubleProgressionStrategyTest {
         ExerciseEntity otherExercise = exerciseWithId(OTHER_EXERCISE_ID);
         WorkoutSessionEntity session = sessionWith(otherExercise, new BigDecimal("100"), 10, 3);
 
-        ProgressionSuggestion suggestion = strategy.suggest(EXERCISE_ID, List.of(session));
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session)));
 
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("0");
         assertThat(suggestion.suggestedReps()).isEqualTo(8);
@@ -54,7 +54,7 @@ class DoubleProgressionStrategyTest {
         ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
         WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 12, 3);
 
-        ProgressionSuggestion suggestion = strategy.suggest(EXERCISE_ID, List.of(session));
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session)));
 
         // 1 session only. Need 2 to progress. Reps at 12 but weight holds.
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("100");
@@ -67,8 +67,7 @@ class DoubleProgressionStrategyTest {
         WorkoutSessionEntity recent = sessionWith(squat, new BigDecimal("100"), 10, 3);
         WorkoutSessionEntity previous = sessionWith(squat, new BigDecimal("100"), 10, 3);
 
-        ProgressionSuggestion suggestion =
-                strategy.suggest(EXERCISE_ID, List.of(recent, previous));
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(recent, previous)));
 
         // 2 sessions but reps below 12. Holds.
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("100");
@@ -81,8 +80,7 @@ class DoubleProgressionStrategyTest {
         WorkoutSessionEntity recent = sessionWith(squat, new BigDecimal("100"), 12, 3);
         WorkoutSessionEntity previous = sessionWith(squat, new BigDecimal("100"), 12, 3);
 
-        ProgressionSuggestion suggestion =
-                strategy.suggest(EXERCISE_ID, List.of(recent, previous));
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(recent, previous)));
 
         // 2 sessions, all sets at 12 reps. Progress: +2.5, reset to 8 reps.
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("102.5");
@@ -97,7 +95,13 @@ class DoubleProgressionStrategyTest {
         return exercise;
     }
 
-    // One session, one exercise entry, N identical sets.
+    // Double progression only reads exerciseId and recentSessions off the context.
+    // The program level fields do not affect its logic, so zeros are okay.
+    private ProgressionContext ctx(List<WorkoutSessionEntity> sessions) {
+        return new ProgressionContext(EXERCISE_ID, sessions, 0, 0);
+    }
+
+    // One session and one exercise entry, N identical sets.
     private WorkoutSessionEntity sessionWith(ExerciseEntity exercise, BigDecimal weight,
                                              int reps, int setCount) {
         WorkoutSessionEntity session = new WorkoutSessionEntity(1L, Instant.EPOCH);

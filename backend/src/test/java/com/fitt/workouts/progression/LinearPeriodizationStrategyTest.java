@@ -15,11 +15,14 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 // Plain unit test. No Spring, no DB, no mocks.
-// Strategy has no dependencies so we use it directly.
+// The week in the cycle is driven by completed sessions divided by rotation length,
+// so each test sets a completed-session count that lands on the week it is checking.
+// A 3-day split is used throughout, so 3 completed sessions is one full rotation.
 class LinearPeriodizationStrategyTest {
 
     private static final long EXERCISE_ID = 1L;
     private static final long OTHER_EXERCISE_ID = 999L;
+    private static final int DAYS_IN_ROTATION = 3;
 
     private LinearPeriodizationStrategy strategy;
 
@@ -30,7 +33,7 @@ class LinearPeriodizationStrategyTest {
 
     @Test
     void suggest_noSessionHistory_returnsColdStartSuggestion() {
-        ProgressionSuggestion suggestion = strategy.suggest(EXERCISE_ID, List.of());
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(), 0));
 
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("0");
         assertThat(suggestion.suggestedReps()).isEqualTo(10);
@@ -42,7 +45,7 @@ class LinearPeriodizationStrategyTest {
         ExerciseEntity otherExercise = exerciseWithId(OTHER_EXERCISE_ID);
         WorkoutSessionEntity session = sessionWith(otherExercise, new BigDecimal("100"), 10, 3);
 
-        ProgressionSuggestion suggestion = strategy.suggest(EXERCISE_ID, List.of(session));
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session), 3));
 
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("0");
         assertThat(suggestion.suggestedReps()).isEqualTo(10);
@@ -50,64 +53,96 @@ class LinearPeriodizationStrategyTest {
     }
 
     @Test
-    void suggest_oneSession_advancesToWeekTwoAndIncreasesWeight() {
+    void suggest_startOfCycle_weekOne_increasesWeight() {
         ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
         WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 10, 3);
 
-        ProgressionSuggestion suggestion = strategy.suggest(EXERCISE_ID, List.of(session));
+        // 0 completed sessions = 0 rotations = week 1. 100 * 0.025 = 2.5 -> 102.5, reps 10.
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session), 0));
 
-        // 1 session = week 2.
-        // 100 * 0.025 = 2.5, new weight = 102.5, reps = 8.
+        assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("102.5");
+        assertThat(suggestion.suggestedReps()).isEqualTo(10);
+    }
+
+    @Test
+    void suggest_oneRotationComplete_weekTwo() {
+        ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
+        WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 10, 3);
+
+        // 3 completed sessions / 3 days = 1 rotation = week 2. +2.5 -> 102.5, reps 8.
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session), 3));
+
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("102.5");
         assertThat(suggestion.suggestedReps()).isEqualTo(8);
     }
 
     @Test
-    void suggest_twoSessions_advancesToWeekThreeAtLowerReps() {
+    void suggest_twoRotationsComplete_weekThree() {
         ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
-        WorkoutSessionEntity recent = sessionWith(squat, new BigDecimal("100"), 10, 3);
-        WorkoutSessionEntity previous = sessionWith(squat, new BigDecimal("100"), 10, 3);
+        WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 10, 3);
 
-        ProgressionSuggestion suggestion =
-                strategy.suggest(EXERCISE_ID, List.of(recent, previous));
+        // 6 completed / 3 = 2 rotations = week 3. reps 6.
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session), 6));
 
-        // 2 sessions = week 3. Same +2.5 but reps = 6.
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("102.5");
         assertThat(suggestion.suggestedReps()).isEqualTo(6);
     }
 
     @Test
-    void suggest_threeSessions_triggersDeloadAtSixtyPercent() {
+    void suggest_threeRotationsComplete_triggersDeload() {
         ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
-        WorkoutSessionEntity s1 = sessionWith(squat, new BigDecimal("100"), 10, 3);
-        WorkoutSessionEntity s2 = sessionWith(squat, new BigDecimal("100"), 10, 3);
-        WorkoutSessionEntity s3 = sessionWith(squat, new BigDecimal("100"), 10, 3);
+        WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 10, 3);
 
-        ProgressionSuggestion suggestion =
-                strategy.suggest(EXERCISE_ID, List.of(s1, s2, s3));
+        // 9 completed / 3 = 3 rotations = week 4 = deload. 100 * 0.6 = 60, reps 12.
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session), 9));
 
-        // 3 sessions = week 4 = deload.
-        // 100 * 0.6 = 60, reps = 12.
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("60");
         assertThat(suggestion.suggestedReps()).isEqualTo(12);
         assertThat(suggestion.reasoning()).contains("Deload");
     }
 
     @Test
-    void suggest_fourSessions_cyclesBackToWeekOne() {
+    void suggest_fourRotationsComplete_cyclesBackToWeekOne() {
         ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
-        WorkoutSessionEntity s1 = sessionWith(squat, new BigDecimal("100"), 10, 3);
-        WorkoutSessionEntity s2 = sessionWith(squat, new BigDecimal("100"), 10, 3);
-        WorkoutSessionEntity s3 = sessionWith(squat, new BigDecimal("100"), 10, 3);
-        WorkoutSessionEntity s4 = sessionWith(squat, new BigDecimal("100"), 10, 3);
+        WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 10, 3);
 
-        ProgressionSuggestion suggestion =
-                strategy.suggest(EXERCISE_ID, List.of(s1, s2, s3, s4));
+        // 12 completed / 3 = 4 rotations, 4 % 4 = 0, back to week 1. reps 10.
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session), 12));
 
-        // 4 % 4 = 0, so week wraps back to 1. Reps = 10.
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("102.5");
         assertThat(suggestion.suggestedReps()).isEqualTo(10);
         assertThat(suggestion.suggestedSets()).isEqualTo(3);
+    }
+
+    @Test
+    void suggest_manyCompletedSessions_doesNotFreeze() {
+        ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
+        // Only one recent session for the weight, but the plan has many completed sessions.
+        WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 10, 3);
+
+        // 9 completed / 3 = 3 rotations = week 4 = deload. This is the regression guard.
+        // The old code derived the week from recentSessions.size(), which was capped at 5,
+        // so a single recent session read as week 2 and the cycle froze. Driving the week
+        // from the true completed count lands correctly on the deload.
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session), 9));
+
+        assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("60");
+        assertThat(suggestion.suggestedReps()).isEqualTo(12);
+        assertThat(suggestion.reasoning()).contains("Deload");
+    }
+
+    @Test
+    void suggest_zeroDaysInRotation_defaultsToWeekOneWithoutDividing() {
+        ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
+        WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 10, 3);
+
+        // Malformed plan with no days. The guard avoids divide-by-zero and reads as week 1.
+        ProgressionContext context =
+                new ProgressionContext(EXERCISE_ID, List.of(session), 5, 0);
+        ProgressionSuggestion suggestion = strategy.suggest(context);
+
+        assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("102.5");
+        assertThat(suggestion.suggestedReps()).isEqualTo(10);
     }
 
     @Test
@@ -115,11 +150,15 @@ class LinearPeriodizationStrategyTest {
         ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
         WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("102"), 10, 3);
 
-        ProgressionSuggestion suggestion = strategy.suggest(EXERCISE_ID, List.of(session));
+        // Week 1 increase. 102 * 0.025 = 2.550, exact tie, HALF_UP -> 2.6, total 104.6.
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session), 0));
 
-        // 102 * 0.025 = 2.550. Exact tie at the rounding point.
-        // HALF_UP rounds up to 2.6. 102 + 2.6 = 104.6.
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("104.6");
+    }
+
+    // Builds a context for the standard 3-day split with the given completed-session count.
+    private ProgressionContext ctx(List<WorkoutSessionEntity> sessions, long completedSessionCount) {
+        return new ProgressionContext(EXERCISE_ID, sessions, completedSessionCount, DAYS_IN_ROTATION);
     }
 
     // JPA assigns id on save. No setter, so reflection.
