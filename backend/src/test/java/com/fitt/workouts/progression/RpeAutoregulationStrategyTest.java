@@ -30,7 +30,7 @@ class RpeAutoregulationStrategyTest {
 
     @Test
     void suggest_noSessionHistory_returnsColdStartSuggestion() {
-        ProgressionSuggestion suggestion = strategy.suggest(EXERCISE_ID, List.of());
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of()));
 
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("0");
         assertThat(suggestion.suggestedReps()).isEqualTo(8);
@@ -42,7 +42,7 @@ class RpeAutoregulationStrategyTest {
         ExerciseEntity otherExercise = exerciseWithId(OTHER_EXERCISE_ID);
         WorkoutSessionEntity session = sessionWith(otherExercise, new BigDecimal("100"), 8, new BigDecimal("8.0"), 3);
 
-        ProgressionSuggestion suggestion = strategy.suggest(EXERCISE_ID, List.of(session));
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session)));
 
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("0");
         assertThat(suggestion.suggestedReps()).isEqualTo(8);
@@ -54,7 +54,7 @@ class RpeAutoregulationStrategyTest {
         ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
         WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 8, null, 3);
 
-        ProgressionSuggestion suggestion = strategy.suggest(EXERCISE_ID, List.of(session));
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session)));
 
         // Exercise matches but every RPE is null. RPE filter empties the stream.
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("0");
@@ -67,7 +67,7 @@ class RpeAutoregulationStrategyTest {
         ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
         WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 8, new BigDecimal("5.0"), 3);
 
-        ProgressionSuggestion suggestion = strategy.suggest(EXERCISE_ID, List.of(session));
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session)));
 
         // avgRpe 5.0 below 7.0 floor. +2.5, new weight 102.5.
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("102.5");
@@ -80,7 +80,7 @@ class RpeAutoregulationStrategyTest {
         ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
         WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 8, new BigDecimal("7.0"), 3);
 
-        ProgressionSuggestion suggestion = strategy.suggest(EXERCISE_ID, List.of(session));
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session)));
 
         // avgRpe 7.0. Check is < not <=, holds.
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("100");
@@ -93,7 +93,7 @@ class RpeAutoregulationStrategyTest {
         ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
         WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 8, new BigDecimal("8.5"), 3);
 
-        ProgressionSuggestion suggestion = strategy.suggest(EXERCISE_ID, List.of(session));
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session)));
 
         // avgRpe 8.5. Check is > not >=. Hold.
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("100");
@@ -106,7 +106,7 @@ class RpeAutoregulationStrategyTest {
         ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
         WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 8, new BigDecimal("10.0"), 3);
 
-        ProgressionSuggestion suggestion = strategy.suggest(EXERCISE_ID, List.of(session));
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session)));
 
         // avgRpe 10.0 above 8.5 ceiling. -2.5, new weight 97.5.
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("97.5");
@@ -119,6 +119,11 @@ class RpeAutoregulationStrategyTest {
         ExerciseEntity exercise = new ExerciseEntity(null, "Back Squat", "Legs", false);
         ReflectionTestUtils.setField(exercise, "id", id);
         return exercise;
+    }
+
+    // RPE autoregulation only reads exerciseId and recentSessions off the context.
+    private ProgressionContext ctx(List<WorkoutSessionEntity> sessions) {
+        return new ProgressionContext(EXERCISE_ID, sessions, 0, 0);
     }
 
     // One session, one exercise entry, N identical sets.

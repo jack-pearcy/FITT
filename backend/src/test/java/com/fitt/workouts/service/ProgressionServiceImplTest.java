@@ -3,10 +3,14 @@ package com.fitt.workouts.service;
 import com.fitt.workouts.domain.ProgressionModel;
 import com.fitt.workouts.dto.ProgressionSuggestionResponse;
 import com.fitt.workouts.persistence.entity.UserProgressionPreferenceEntity;
+import com.fitt.workouts.persistence.entity.WorkoutPlanDayEntity;
+import com.fitt.workouts.persistence.entity.WorkoutPlanEntity;
+import com.fitt.workouts.progression.ProgressionContext;
 import com.fitt.workouts.progression.ProgressionStrategy;
 import com.fitt.workouts.progression.ProgressionStrategyResolver;
 import com.fitt.workouts.progression.ProgressionSuggestion;
 import com.fitt.workouts.repository.UserProgressionPreferenceRepository;
+import com.fitt.workouts.repository.WorkoutPlanRepository;
 import com.fitt.workouts.repository.WorkoutSessionRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,15 +21,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 // Service layer test. Repositories and the resolver are mocked because they
 // reach JPA and Spring's bean wiring. Service logic stays under test.
@@ -40,6 +43,9 @@ class ProgressionServiceImplTest {
 
     @Mock
     private UserProgressionPreferenceRepository preferenceRepository;
+
+    @Mock
+    private WorkoutPlanRepository planRepository;
 
     @Mock
     private ProgressionStrategyResolver strategyResolver;
@@ -59,7 +65,8 @@ class ProgressionServiceImplTest {
         when(strategyResolver.resolve(ProgressionModel.LINEAR_PERIODIZATION)).thenReturn(strategy);
         when(sessionRepository.findCompletedSessionsByExercise(eq(USER_ID), eq(EXERCISE_ID), any(Pageable.class)))
                 .thenReturn(List.of());
-        when(strategy.suggest(EXERCISE_ID, List.of())).thenReturn(suggestion);
+        when(planRepository.findByOwnerUserIdAndIsActiveTrue(USER_ID)).thenReturn(Optional.empty());
+        when(strategy.suggest(any(ProgressionContext.class))).thenReturn(suggestion);
 
         ProgressionSuggestionResponse response = service.getSuggestion(USER_ID, EXERCISE_ID);
 
@@ -118,5 +125,37 @@ class ProgressionServiceImplTest {
         UserProgressionPreferenceEntity saved = captor.getValue();
         assertThat(saved.getOwnerUserId()).isEqualTo(USER_ID);
         assertThat(saved.getProgressionModel()).isEqualTo(ProgressionModel.LINEAR_PERIODIZATION);
+    }
+
+    @Test
+    void getSuggestion_activePlan_feedsCompletedCountAndRotationIntoContext() {
+        long planId = 7L;
+        UserProgressionPreferenceEntity preference =
+                new UserProgressionPreferenceEntity(USER_ID, ProgressionModel.LINEAR_PERIODIZATION);
+        ProgressionStrategy strategy = mock(ProgressionStrategy.class);
+        ProgressionSuggestion suggestion = new ProgressionSuggestion(
+                EXERCISE_ID, new BigDecimal("102.5"), 8, 3, "test reasoning");
+
+        // Active plan with a 3-day split. Mock the entity so no real day construction is needed.
+        WorkoutPlanEntity plan = mock(WorkoutPlanEntity.class);
+        when(plan.getId()).thenReturn(planId);
+        when(plan.getDays()).thenReturn(Collections.nCopies(3, mock(WorkoutPlanDayEntity.class)));
+
+        when(preferenceRepository.findByOwnerUserId(USER_ID)).thenReturn(Optional.of(preference));
+        when(strategyResolver.resolve(ProgressionModel.LINEAR_PERIODIZATION)).thenReturn(strategy);
+        when(sessionRepository.findCompletedSessionsByExercise(eq(USER_ID), eq(EXERCISE_ID), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(planRepository.findByOwnerUserIdAndIsActiveTrue(USER_ID)).thenReturn(Optional.of(plan));
+        when(sessionRepository.countByOwnerUserIdAndPlanIdAndFinishedAtIsNotNull(USER_ID, planId))
+                .thenReturn(9L);
+        when(strategy.suggest(any(ProgressionContext.class))).thenReturn(suggestion);
+
+        service.getSuggestion(USER_ID, EXERCISE_ID);
+
+        // Capture the context the service built and confirm the program-level data flowed in.
+        ArgumentCaptor<ProgressionContext> captor = ArgumentCaptor.forClass(ProgressionContext.class);
+        verify(strategy).suggest(captor.capture());
+        assertThat(captor.getValue().completedSessionCount()).isEqualTo(9L);
+        assertThat(captor.getValue().daysInRotation()).isEqualTo(3);
     }
 }

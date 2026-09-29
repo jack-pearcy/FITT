@@ -10,6 +10,8 @@ import java.util.List;
 
 // Linear periodization: increase weight week over week with a deload on week 4.
 // Based on the ACSM position stand (2009) classical periodization model.
+// A "week" here is one full rotation of the plan's split, not one session, so the
+// cycle advances on completed rotations and tracks accumulated training, not the calendar.
 @Component("LINEAR_PERIODIZATION")
 public class LinearPeriodizationStrategy implements ProgressionStrategy {
 
@@ -18,7 +20,12 @@ public class LinearPeriodizationStrategy implements ProgressionStrategy {
     private static final int CYCLE_LENGTH = 4;
 
     @Override
-    public ProgressionSuggestion suggest(Long exerciseId, List<WorkoutSessionEntity> recentSessions) {
+    public ProgressionSuggestion suggest(ProgressionContext context) {
+        Long exerciseId = context.exerciseId();
+        List<WorkoutSessionEntity> recentSessions = context.recentSessions();
+        long completedSessionCount = context.completedSessionCount();
+        int daysInRotation = context.daysInRotation();
+
         if (recentSessions.isEmpty()) {
             return new ProgressionSuggestion(
                     exerciseId, BigDecimal.ZERO, 10, 3,
@@ -37,8 +44,12 @@ public class LinearPeriodizationStrategy implements ProgressionStrategy {
         BigDecimal lastWeight = findLastWeight(sets);
         int setCount = sets.size();
 
-        int sessionCount = recentSessions.size();
-        int weekInCycle = (sessionCount % CYCLE_LENGTH) + 1;
+        // One full rotation of the split is one week of the cycle. Total completed
+        // sessions divided by the rotation length gives rotations done, wrapping that
+        // by the cycle length gives the current week. Guard against a zero rotation
+        // length so a malformed plan cannot divide by zero.
+        long rotationsCompleted = daysInRotation > 0 ? completedSessionCount / daysInRotation : 0;
+        int weekInCycle = (int) (rotationsCompleted % CYCLE_LENGTH) + 1;
 
         if (weekInCycle == CYCLE_LENGTH) {
             BigDecimal deloadWeight = lastWeight.multiply(DELOAD_RATIO)
@@ -53,7 +64,7 @@ public class LinearPeriodizationStrategy implements ProgressionStrategy {
                 .setScale(1, RoundingMode.HALF_UP);
         BigDecimal newWeight = lastWeight.add(increase);
 
-        // Reps decrease as intensity increases across the cycle
+        // Reps decrease as intensity increases across the loading weeks
         int targetReps = switch (weekInCycle) {
             case 1 -> 10;
             case 2 -> 8;

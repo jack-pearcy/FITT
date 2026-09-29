@@ -18,8 +18,12 @@ public class DoubleProgressionStrategy implements ProgressionStrategy {
     private static final BigDecimal WEIGHT_INCREMENT = new BigDecimal("2.5");
     private static final int SESSIONS_TO_CHECK = 2;
 
+
     @Override
-    public ProgressionSuggestion suggest(Long exerciseId, List<WorkoutSessionEntity> recentSessions) {
+    public ProgressionSuggestion suggest(ProgressionContext context) {
+        Long exerciseId = context.exerciseId();
+        List<WorkoutSessionEntity> recentSessions = context.recentSessions();
+
         if (recentSessions.isEmpty()) {
             return new ProgressionSuggestion(
                     exerciseId, BigDecimal.ZERO, REP_RANGE_BOTTOM, 3,
