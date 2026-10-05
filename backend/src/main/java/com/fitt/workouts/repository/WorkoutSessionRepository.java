@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.Instant;
 
 public interface WorkoutSessionRepository extends JpaRepository<WorkoutSessionEntity, Long> {
 
@@ -42,4 +43,9 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSessionEn
             @Param("ownerUserId") Long ownerUserId,
             @Param("exerciseId") Long exerciseId,
             Pageable pageable);
+
+    // True when the user finished a session in the given half-open window, used for
+    // the already-trained-today check. The range is start inclusive, end exclusive.
+    boolean existsByOwnerUserIdAndFinishedAtGreaterThanEqualAndFinishedAtLessThan(
+            Long ownerUserId, Instant start, Instant end);
 }
