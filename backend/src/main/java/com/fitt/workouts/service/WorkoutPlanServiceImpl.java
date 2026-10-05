@@ -14,6 +14,7 @@ import com.fitt.workouts.service.exception.WorkoutPlanNotFoundException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.Optional;
 
 import java.util.List;
 
@@ -44,6 +45,12 @@ public class WorkoutPlanServiceImpl implements WorkoutPlanService {
         addDaysFromRequest(plan, request.days());
 
         return toResponse(planRepository.save(plan));
+    }
+
+    @Override
+    public Optional<WorkoutPlanResponse> getActivePlan(Long ownerUserId) {
+        return planRepository.findByOwnerUserIdAndIsActiveTrue(ownerUserId)
+                .map(this::toResponse);
     }
 
     @Override
