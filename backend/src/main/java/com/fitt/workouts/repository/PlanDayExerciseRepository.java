@@ -9,4 +9,7 @@ public interface PlanDayExerciseRepository extends JpaRepository<PlanDayExercise
 
     // All exercises for a plan day in display order.
     List<PlanDayExerciseEntity> findByWorkoutPlanDay_IdOrderByOrderIndex(Long workoutPlanDayId);
+
+    // True when any plan day references this exercise. Blocks deleting one in use.
+    boolean existsByExercise_Id(Long exerciseId);
 }

@@ -83,7 +83,8 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     public WorkoutSessionResponse addExerciseEntry(Long ownerUserId, Long sessionId, AddExerciseEntryRequest request) {
         WorkoutSessionEntity session = loadAndVerify(ownerUserId, sessionId);
 
-        ExerciseEntity exercise = exerciseRepository.findById(request.exerciseId())
+        ExerciseEntity exercise = exerciseRepository
+                .findAccessibleById(request.exerciseId(), ownerUserId)
                 .orElseThrow(() -> new ExerciseNotFoundException(request.exerciseId()));
 
         // append to end of existing entries

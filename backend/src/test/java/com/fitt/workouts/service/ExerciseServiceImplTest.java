@@ -6,6 +6,9 @@ import com.fitt.workouts.dto.ExerciseResponse;
 import com.fitt.workouts.persistence.entity.ExerciseEntity;
 import com.fitt.workouts.repository.ExerciseRepository;
 import com.fitt.workouts.service.exception.ExerciseNotFoundException;
+import com.fitt.workouts.repository.ExerciseEntryRepository;
+import com.fitt.workouts.repository.PlanDayExerciseRepository;
+import com.fitt.workouts.service.exception.ExerciseInUseException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -37,6 +40,12 @@ class ExerciseServiceImplTest {
 
     @Mock
     private ExerciseRepository exerciseRepository;
+
+    @Mock
+    private PlanDayExerciseRepository planDayExerciseRepository;
+
+    @Mock
+    private ExerciseEntryRepository exerciseEntryRepository;
 
     @InjectMocks
     private ExerciseServiceImpl service;
@@ -137,6 +146,18 @@ class ExerciseServiceImplTest {
 
         assertThatThrownBy(() -> service.deleteCustomExercise(USER_ID, EXERCISE_ID))
                 .isInstanceOf(AccessDeniedException.class);
+
+        verify(exerciseRepository, never()).delete(any(ExerciseEntity.class));
+    }
+
+    @Test
+    void deleteCustomExercise_referencedByPlanOrSession_throwsExerciseInUseException() {
+        ExerciseEntity exercise = entity(USER_ID, "My Row", "BACK", true);
+        when(exerciseRepository.findById(EXERCISE_ID)).thenReturn(Optional.of(exercise));
+        when(planDayExerciseRepository.existsByExercise_Id(EXERCISE_ID)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.deleteCustomExercise(USER_ID, EXERCISE_ID))
+                .isInstanceOf(ExerciseInUseException.class);
 
         verify(exerciseRepository, never()).delete(any(ExerciseEntity.class));
     }

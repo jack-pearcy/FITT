@@ -164,7 +164,7 @@ class WorkoutSessionServiceImplTest {
 
         ExerciseEntity newExercise = exerciseWithId(EXERCISE_ID);
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
-        when(exerciseRepository.findById(EXERCISE_ID)).thenReturn(Optional.of(newExercise));
+        when(exerciseRepository.findAccessibleById(EXERCISE_ID, OWNER_USER_ID)).thenReturn(Optional.of(newExercise));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -182,7 +182,7 @@ class WorkoutSessionServiceImplTest {
     void addExerciseEntry_exerciseNotInLibrary_throwsExerciseNotFoundException() {
         WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
-        when(exerciseRepository.findById(EXERCISE_ID)).thenReturn(Optional.empty());
+        when(exerciseRepository.findAccessibleById(EXERCISE_ID, OWNER_USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() ->
                 service.addExerciseEntry(OWNER_USER_ID, SESSION_ID, new AddExerciseEntryRequest(EXERCISE_ID)))
