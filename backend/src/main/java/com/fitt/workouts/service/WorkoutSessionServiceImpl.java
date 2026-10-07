@@ -17,6 +17,9 @@ import com.fitt.workouts.repository.WorkoutSessionRepository;
 import com.fitt.workouts.service.exception.ExerciseNotFoundException;
 import com.fitt.workouts.service.exception.WorkoutSessionNotFoundException;
 import org.springframework.security.access.AccessDeniedException;
+import com.fitt.workouts.service.exception.ExerciseEntryNotFoundException;
+import com.fitt.workouts.service.exception.SetEntryNotFoundException;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -68,7 +71,13 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     @Transactional
     public WorkoutSessionResponse finishSession(Long ownerUserId, Long sessionId) {
         WorkoutSessionEntity session = loadAndVerify(ownerUserId, sessionId);
-        session.setFinishedAt(Instant.now());
+
+        // Idempotent, an already finished session keeps its original finish time
+        // rather than being stamped again on a repeat call.
+        if (session.getFinishedAt() == null) {
+            session.setFinishedAt(Instant.now());
+        }
+
         return toResponse(sessionRepository.save(session));
     }
 
@@ -107,7 +116,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         ExerciseEntryEntity target = session.getExerciseEntries().stream()
                 .filter(e -> e.getId().equals(entryId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Exercise entry not found in this session"));
+                .orElseThrow(() -> new ExerciseEntryNotFoundException(entryId));
 
         // orphanRemoval handles the DELETE
         session.removeExerciseEntry(target);
@@ -123,7 +132,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         ExerciseEntryEntity entry = session.getExerciseEntries().stream()
                 .filter(e -> e.getId().equals(entryId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Exercise entry not found in this session"));
+                .orElseThrow(() -> new ExerciseEntryNotFoundException(entryId));
 
         int nextSetNumber = entry.getSetEntries().size() + 1;
 
@@ -146,12 +155,12 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         ExerciseEntryEntity entry = session.getExerciseEntries().stream()
                 .filter(e -> e.getId().equals(entryId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Exercise entry not found in this session"));
+                .orElseThrow(() -> new ExerciseEntryNotFoundException(entryId));
 
         SetEntryEntity target = entry.getSetEntries().stream()
                 .filter(s -> s.getId().equals(setId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Set not found in this exercise entry"));
+                .orElseThrow(() -> new SetEntryNotFoundException(setId));
 
         entry.removeSetEntry(target);
 
