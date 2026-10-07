@@ -378,53 +378,70 @@ Completed this phase:
 - Today's Lift page built (web; a demo artifact only, no further investment per the iOS-first rule). Two DRY
   extractions in the workout service, shared by workouts-main and today's-lift so they cannot drift:
   getTodaysDay (day-selection rotation) and startSessionForDay (createSession + populate, emits the session).
+- Plan update endpoint shipped (PUT /workout-plans/{planId}): full structural replace of name, days-per-week,
+  split type, and the whole days-and-exercises graph. Idempotent full replace, safe to retry on a flaky mobile
+  connection. The surviving backend twin of the dropped edit-plan UI.
+- Create-custom-exercise endpoint confirmed in place (POST), backed by the per-user owner_user_id / is_custom
+  data model. The surviving twin of the dropped add-custom-exercise UI.
+- GitHub Actions runtime bumped off Node 20 to Node 24 (checkout, setup-java, and the docker build/push actions
+  moved to current majors) ahead of the runner cutoff.
+- Request validation sweep shipped: @Valid wired onto the four workout write endpoints whose constraints were
+  declared but never firing; register and login bodies validated (email format and a 12-to-72 character
+  password on register, non-blank only on login) and converted to records; validation failures now return a
+  per-field error map, and malformed JSON returns a clean 400 instead of a 500.
+- Full codebase audit done (all 236 files; findings and a coordinated fix plan recorded). Verdict: the
+  architecture, security model, cascade graph, and data integrity are sound. Every fix group from the audit is
+  now shipped:
+  - Progression cycle freeze fixed. Linear periodization derived the week from a session list the service
+    capped at five, so the cycle froze at week two and the deload stopped firing. A week is now one full
+    rotation of the split, computed from the true completed-session count, so the cycle advances on accumulated
+    training. Also fixed an off-by-one that started a fresh exercise on week two.
+  - Cross-user exercise references closed. The plan and session builders attached exercises with an unscoped
+    lookup, so a user could reference another user's private custom exercise by id. They now resolve through a
+    global-or-owned query, and a foreign custom exercise reads as not found.
+  - Deleting an in-use custom exercise returns a clean 409 instead of a 500 from a foreign-key violation.
+  - Correctness batch: a dedicated goal-not-found exception, JWT issuer validation on the decoder, an
+    idempotent finishSession, and 404s for missing exercise entries and sets instead of 400s.
+- Next-lift endpoint shipped (GET /users/{userId}/next-lift). The rotation cursor that decides which workout
+  is next lived in the throwaway Angular, so iOS and the Watch would each reimplement it and drift. It now
+  lives behind the API and returns one screen-shaped payload: the active plan, the day the rotation points at
+  with its exercises and targets, the periodization week and deload status, and whether a session was finished
+  today. This also closes the API-completeness items below (week and deload exposure, current-position,
+  already-trained-today) and satisfies the API contract audit.
 
-Backend endpoints to build (surviving twins of dropped web UIs; iOS needs them):
-- Plan update endpoint (PUT/PATCH) for edit-plan (full structural edit: sets, reps, exercises, plan type, days).
-- Create-custom-exercise endpoint (data model already supports per-user customs via owner_user_id / is_custom).
-- Weight edit / remove endpoints.
-
-Data / correctness (backend, client-agnostic):
+Remaining in this phase (backend and infra, client-agnostic):
 - TDEE vs calorie goal: on a bulk the TDEE and the daily calorie goal show the SAME number; the surplus/deficit
-  (bulk surplus / cut deficit / maintain) adjustment is likely not applied. Check the TDEE/goal calc.
+  (bulk surplus / cut deficit / maintain) adjustment is likely not applied. The Mifflin-St Jeor formula itself
+  is verified correct; confirm whether the goal adjustment is applied to the auto goal.
 - CORE/abs MuscleGroup enum value missing, so the V2 seed omits all core work. Add CORE plus the frontend group
   list (muscle_group is varchar, no DB migration needed).
 - Cross-group compound classifications in the seed (deadlift, RDL, shrug, face pull, step up) — grouping pass.
 - Forgot-password flow: needs a transactional email provider (Resend) to send reset emails. Backend + infra.
-
-Data seeding (feature):
 - Seed well-regarded pre-built splits (PPL, upper/lower, full-body) as GLOBAL read-only templates users clone
-  into their own plan (likely needs a copy-template flow). A split is a structured plan graph (plan -> days ->
-  day-exercises with sets/reps/orderIndex, FKs into the seeded library), so a multi-table seed. Source real
-  reputable programs; do not invent.
-
-API completeness (surface what the engine already computes; the gap is exposing it on the API for a client):
-- Week position + deload status (engine already computes them: linear periodization, deload on week 4 at 60%,
-  derived from completed-session count). Expose cleanly on the API.
-- Progression auto-increase (engine already computes it: WEIGHT_INCREMENT 2.5, returns a reasoning string).
-  Expose the suggestion + reasoning clearly; add a user preference (opt in/out, set increment), ideally at
-  onboarding. A selectable per-user progression model already exists.
-- Customizable current-position-in-plan: needs backend support for stored/derived position (open question:
-  does a day/week counter exist, derived or stored?).
-- Already-trained-today detection: a "session completed on the current local calendar day" check so a client
-  can prompt before launching a duplicate session.
-- API CONTRACT AUDIT (elevated): the API is the product — audit every action the app performs and confirm each
-  has a clean, complete endpoint iOS can consume.
-
-Infra / security / tooling (permanent, client-agnostic):
-- Show the git branch in the shell prompt (prevents committing on main; a slip happened this phase).
-- Automate conventional PR-title enforcement (semantic-PR-title action, or set the repo squash-merge message to
-  derive from the PR title).
+  into their own plan (likely needs a copy-template flow). Source real reputable programs; do not invent.
+- Progression preference surfacing: the engine exposes the suggestion, reasoning, and a per-user model
+  (endpoints exist); the opt in/out and increment preference, ideally placed at onboarding, waits for the iOS
+  screens.
+- Add a pull_request trigger to CI plus a branch-protection rule so a PR cannot merge on a red check (elevated;
+  right now CI runs only post-merge, so a red PR can still land, which is how main broke once).
+- Show the git branch in the shell prompt (prevents committing on main; slips happened this phase).
+- Automate conventional PR-title enforcement (semantic-PR-title action, or derive the squash message from the
+  PR title).
 - Add Hetzner cloud firewall as a second layer on top of ufw (defense in depth).
 - Separate the backend test suite in CI: fast H2 unit tests vs the Testcontainers integration test (tag-based).
-- Add pull_request trigger to CI so PRs are gated on green tests before merge.
 - Add image vulnerability scanning (Trivy or similar) to the pipeline.
 - caddy fmt --overwrite to clear the Caddyfile formatting warning.
-
-Audit / testing:
-- Full project + git/history audit (standing item from the Phase 18 trust-hit and the Phase 19 read-the-file
-  lessons). Comments verified human (no Latin abbreviations, no AI phrasing, single-author voice).
 - Backend integration tests against real MySQL (deferred pending Phase 21 CI).
+
+Deferred to the iOS phase (decide with the device in hand):
+- Autoregulated deload: trigger a deload when fatigue signals cluster (performance drop across sessions, slow
+  reps at familiar loads) instead of on a fixed rotation cycle. Needs per-set RPE and performance-trend
+  tracking the app does not have yet. The fixed rotation-cycle deload is the v1 model; this is the
+  evidence-preferred upgrade for intermediate-plus lifters once the data exists.
+- Weight entry date editing (move a logged entry to a different day). Resolved as not needed for now, since
+  delete plus re-log is the workaround and the dates are stable; reconsider on-device.
+- Auto weight-increase notification UX: how and when to surface the suggestion, and where the increment
+  preference lives.
 
 Dropped (web presentation; throwaway client): light/dark toggle, sign-up screen color, FITT-icon-routes-home,
 hover icon on progression models, the today's-lift web page (demo artifact only), the Angular auth-guard
@@ -434,8 +451,6 @@ performance regression tests. Each dropped item whose value is real survives as 
 
 Outcome: a complete, correct, well-documented backend/API foundation ready for the iOS client, plus a
 portfolio-ready project that can be defended technically and verbally.
-
----
 
 ## Monetization Phase (Conditional — only if FITT goes public/commercial)
 
