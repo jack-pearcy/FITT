@@ -6,6 +6,7 @@ import com.fitt.identity.dto.*;
 import com.fitt.identity.repository.UserBiometricsRepository;
 import com.fitt.identity.repository.UserGoalRepository;
 import com.fitt.identity.service.exception.BiometricsNotFoundException;
+import com.fitt.identity.service.exception.GoalNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -117,7 +118,7 @@ public class OnboardingServiceImpl implements OnboardingService {
     @Override
     public GoalsResponse getGoals(Long userId) {
         UserGoalEntity goal = goalRepository.findByOwnerUserId(userId)
-                .orElseThrow(() -> new BiometricsNotFoundException(
+                .orElseThrow(() -> new GoalNotFoundException(
                         "goals not found for user " + userId
                 ));
 

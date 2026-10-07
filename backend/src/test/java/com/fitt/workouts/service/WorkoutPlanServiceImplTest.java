@@ -58,16 +58,16 @@ class WorkoutPlanServiceImplTest {
         CreateWorkoutPlanRequest request = new CreateWorkoutPlanRequest(
                 "PPL 6-day", 6, SplitType.PPL, List.of(dayReq));
 
-        when(exerciseRepository.findById(EXERCISE_ID))
+        when(exerciseRepository.findAccessibleById(EXERCISE_ID, USER_ID))
                 .thenReturn(Optional.of(sampleExercise("Bench Press")));
         when(planRepository.save(any(WorkoutPlanEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         WorkoutPlanResponse response = service.createPlan(USER_ID, request);
 
-        // Each exercise referenced in the request is looked up by id before being
-        // attached to its plan day slot.
-        verify(exerciseRepository).findById(EXERCISE_ID);
+        // Each exercise referenced in the request is looked up, scoped to global
+        // or this user's own, before being attached to its plan day slot.
+        verify(exerciseRepository).findAccessibleById(EXERCISE_ID, USER_ID);
 
         // The plan saved to the repository carries the constructed hierarchy.
         ArgumentCaptor<WorkoutPlanEntity> captor =
@@ -93,7 +93,7 @@ class WorkoutPlanServiceImplTest {
         CreateWorkoutPlanRequest request = new CreateWorkoutPlanRequest(
                 "PPL 6-day", 6, SplitType.PPL, List.of(dayReq));
 
-        when(exerciseRepository.findById(EXERCISE_ID)).thenReturn(Optional.empty());
+        when(exerciseRepository.findAccessibleById(EXERCISE_ID, USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.createPlan(USER_ID, request))
                 .isInstanceOf(ExerciseNotFoundException.class);
@@ -114,7 +114,7 @@ class WorkoutPlanServiceImplTest {
         UpdateWorkoutPlanRequest request = new UpdateWorkoutPlanRequest(
                 "New name", 4, SplitType.UPPER_LOWER, List.of(dayReq));
 
-        when(exerciseRepository.findById(EXERCISE_ID))
+        when(exerciseRepository.findAccessibleById(EXERCISE_ID, USER_ID))
                 .thenReturn(Optional.of(sampleExercise("Row")));
 
         WorkoutPlanResponse response = service.updatePlan(USER_ID, PLAN_ID, request);
@@ -147,7 +147,7 @@ class WorkoutPlanServiceImplTest {
         UpdateWorkoutPlanRequest request = new UpdateWorkoutPlanRequest(
                 "New name", 4, SplitType.PPL, List.of(dayReq));
 
-        when(exerciseRepository.findById(EXERCISE_ID)).thenReturn(Optional.empty());
+        when(exerciseRepository.findAccessibleById(EXERCISE_ID, USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.updatePlan(USER_ID, PLAN_ID, request))
                 .isInstanceOf(ExerciseNotFoundException.class);

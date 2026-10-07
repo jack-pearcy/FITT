@@ -13,6 +13,9 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import tools.jackson.databind.json.JsonMapper;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
@@ -41,11 +44,16 @@ public class JwtBeansConfig {
     }
 
     // The decoder is used automatically by Spring Security's BearerTokenAuthenticationFilter.
-    // On every protected request it checks the signature, verifies expiration, and extracts
-    // the claims. Never called manually, the filter chain handles it.
+    // On every protected request it checks the signature, verifies expiration, and now also
+    // validates the issuer claim against the configured value, so a token signed by this key
+    // but minted for a different issuer is rejected.
     @Bean
-    public JwtDecoder jwtDecoder(SecretKey jwtSecretKey) {
-        return NimbusJwtDecoder.withSecretKey(jwtSecretKey).build();
+    public JwtDecoder jwtDecoder(SecretKey jwtSecretKey, JwtProperties props) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(jwtSecretKey).build();
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+                JwtValidators.createDefault(),
+                new JwtIssuerValidator(props.getIssuer())));
+        return decoder;
     }
 
     // The encoder gets called explicitly at login to create and sign a new token.

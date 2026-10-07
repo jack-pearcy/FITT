@@ -131,7 +131,8 @@ public class WorkoutPlanServiceImpl implements WorkoutPlanService {
             if (dayReq.exercises() != null) {
                 int order = 0;
                 for (AddPlanDayExerciseRequest exReq : dayReq.exercises()) {
-                    ExerciseEntity exercise = exerciseRepository.findById(exReq.exerciseId())
+                    ExerciseEntity exercise = exerciseRepository
+                            .findAccessibleById(exReq.exerciseId(), plan.getOwnerUserId())
                             .orElseThrow(() -> new ExerciseNotFoundException(exReq.exerciseId()));
 
                     // entity constructor, exercise, sets, reps, orderIndex

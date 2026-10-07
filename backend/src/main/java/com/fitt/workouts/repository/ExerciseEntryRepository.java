@@ -14,4 +14,7 @@ public interface ExerciseEntryRepository extends JpaRepository<ExerciseEntryEnti
     // Single entry by ID scoped to a session, prevents fetching entries
     // that don't belong to the session being worked with.
     Optional<ExerciseEntryEntity> findByIdAndWorkoutSession_Id(Long id, Long workoutSessionId);
+
+    // True when any logged session entry references this exercise. Blocks deleting one in use.
+    boolean existsByExercise_Id(Long exerciseId);
 }

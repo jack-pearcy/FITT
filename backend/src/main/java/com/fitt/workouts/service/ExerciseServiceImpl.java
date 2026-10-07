@@ -5,6 +5,9 @@ import com.fitt.workouts.dto.CreateExerciseRequest;
 import com.fitt.workouts.dto.ExerciseResponse;
 import com.fitt.workouts.persistence.entity.ExerciseEntity;
 import com.fitt.workouts.repository.ExerciseRepository;
+import com.fitt.workouts.repository.ExerciseEntryRepository;
+import com.fitt.workouts.repository.PlanDayExerciseRepository;
+import com.fitt.workouts.service.exception.ExerciseInUseException;
 import com.fitt.workouts.service.exception.ExerciseNotFoundException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -17,9 +20,15 @@ import java.util.List;
 public class ExerciseServiceImpl implements ExerciseService {
 
     private final ExerciseRepository exerciseRepository;
+    private final PlanDayExerciseRepository planDayExerciseRepository;
+    private final ExerciseEntryRepository exerciseEntryRepository;
 
-    public ExerciseServiceImpl(ExerciseRepository exerciseRepository) {
+    public ExerciseServiceImpl(ExerciseRepository exerciseRepository,
+                               PlanDayExerciseRepository planDayExerciseRepository,
+                               ExerciseEntryRepository exerciseEntryRepository) {
         this.exerciseRepository = exerciseRepository;
+        this.planDayExerciseRepository = planDayExerciseRepository;
+        this.exerciseEntryRepository = exerciseEntryRepository;
     }
 
     @Override
@@ -58,6 +67,15 @@ public class ExerciseServiceImpl implements ExerciseService {
 
         if (!ownerUserId.equals(exercise.getOwnerUserId())) {
             throw new AccessDeniedException("You do not own this exercise");
+        }
+
+        // A referenced exercise cannot be removed without breaking the plan or session
+        // rows that point at it, and the foreign keys would reject the delete anyway.
+        // Fail with a clear conflict instead of a database error.
+        if (planDayExerciseRepository.existsByExercise_Id(exerciseId)
+                || exerciseEntryRepository.existsByExercise_Id(exerciseId)) {
+            throw new ExerciseInUseException(
+                    "This exercise is used in a plan or a logged session and cannot be deleted");
         }
 
         exerciseRepository.delete(exercise);

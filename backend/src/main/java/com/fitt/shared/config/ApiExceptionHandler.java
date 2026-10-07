@@ -4,6 +4,7 @@ import com.fitt.identity.service.exception.EmailAlreadyExistsException;
 import com.fitt.workouts.service.exception.ExerciseNotFoundException;
 import com.fitt.workouts.service.exception.WorkoutPlanNotFoundException;
 import com.fitt.workouts.service.exception.WorkoutSessionNotFoundException;
+import com.fitt.workouts.service.exception.ExerciseInUseException;
 import com.fitt.measurements.service.exception.BodyWeightEntryNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +19,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import com.fitt.identity.service.exception.BiometricsNotFoundException;
+import com.fitt.identity.service.exception.GoalNotFoundException;
+import com.fitt.workouts.service.exception.ExerciseEntryNotFoundException;
+import com.fitt.workouts.service.exception.SetEntryNotFoundException;
 
 import java.util.HashMap;
 import java.util.List;
@@ -47,6 +51,36 @@ public class ApiExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
         problem.setTitle("Exercise Not Found");
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+    }
+
+    @ExceptionHandler(ExerciseEntryNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleExerciseEntryNotFound(ExerciseEntryNotFoundException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setTitle("Exercise Entry Not Found");
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+    }
+
+    @ExceptionHandler(SetEntryNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleSetEntryNotFound(SetEntryNotFoundException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setTitle("Set Entry Not Found");
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+    }
+
+    @ExceptionHandler(GoalNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleGoalNotFound(GoalNotFoundException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setTitle("Goal Not Found");
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+    }
+
+    // 409 because the exercise is valid and owned, but a plan or logged session
+    // references it, so deleting it would break those rows.
+    @ExceptionHandler(ExerciseInUseException.class)
+    public ResponseEntity<ProblemDetail> handleExerciseInUse(ExerciseInUseException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Exercise In Use");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
     }
 
     @ExceptionHandler(BodyWeightEntryNotFoundException.class)
