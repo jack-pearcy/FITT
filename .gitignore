@@ -14,3 +14,6 @@ project_dump.txt
 .DS_Store
 
 dump_project.py
+
+# Internal audit notes, local only, not for the public repo
+AUDIT.md
