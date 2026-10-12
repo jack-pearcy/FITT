@@ -45,12 +45,20 @@ jobs:
         working-directory: backend
         run: chmod +x mvnw
 
-      # Tests run against H2 in-memory for unit tests, and the one
-      # integration test starts its own MySQL via Testcontainers using
-      # the Docker daemon preinstalled on the runner.
-      - name: Run the backend tests
+      # The fast tests: plain unit tests and the H2-backed context tests.
+      # No Docker needed, so a failure here shows up quickly before anything
+      # heavier starts.
+      - name: Run the fast tests
         working-directory: backend
         run: ./mvnw --batch-mode test
+
+      # The integration tests, tagged "integration", run under Failsafe and
+      # start a real MySQL through Testcontainers on the runner's Docker.
+      # Only reached when the fast tests above pass. The fast step already
+      # compiled the test classes, so these goals reuse them.
+      - name: Run the integration tests
+        working-directory: backend
+        run: ./mvnw --batch-mode failsafe:integration-test failsafe:verify
 
   # Build and publish both images. Runs after the tests pass, and only on a
   # push to main or a manual run. Pull requests skip this so proposed code
