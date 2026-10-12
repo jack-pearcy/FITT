@@ -408,6 +408,13 @@ Completed this phase:
   with its exercises and targets, the periodization week and deload status, and whether a session was finished
   today. This also closes the API-completeness items below (week and deload exposure, current-position,
   already-trained-today) and satisfies the API contract audit.
+- CI PR gate and branch protection shipped (merged cd02e5c, PR #35). CI now runs the test suite on pull
+  requests into main, not only after merge, so a PR carries a real status check. The build-and-push job is
+  gated with if: github.event_name != 'pull_request', so a PR tests but never publishes an image; push and
+  manual runs still build and push. An active branch ruleset on main (name: main protection) requires a pull
+  request before merging and requires the test check to pass, so a red PR and a direct push to main are both
+  blocked. Verified: #35 ran test green and build-and-push skipped, and a direct push to main was rejected
+  (GH013, test required). This retires the elevated infra item below.
 
 Remaining in this phase (backend and infra, client-agnostic):
 - TDEE vs calorie goal: on a bulk the TDEE and the daily calorie goal show the SAME number; the surplus/deficit
@@ -422,8 +429,6 @@ Remaining in this phase (backend and infra, client-agnostic):
 - Progression preference surfacing: the engine exposes the suggestion, reasoning, and a per-user model
   (endpoints exist); the opt in/out and increment preference, ideally placed at onboarding, waits for the iOS
   screens.
-- Add a pull_request trigger to CI plus a branch-protection rule so a PR cannot merge on a red check (elevated;
-  right now CI runs only post-merge, so a red PR can still land, which is how main broke once).
 - Show the git branch in the shell prompt (prevents committing on main; slips happened this phase).
 - Automate conventional PR-title enforcement (semantic-PR-title action, or derive the squash message from the
   PR title).
