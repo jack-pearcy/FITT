@@ -7,6 +7,7 @@ import com.fitt.workouts.persistence.entity.WorkoutSessionEntity;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.testcontainers.containers.MySQLContainer;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest
 @ActiveProfiles("integration")
 @Testcontainers
+@Tag("integration")
 @Transactional
 class WorkoutSessionRepositoryIntegrationTest {
 
