@@ -1,12 +1,18 @@
 # Continuous integration for FITT.
-# On every push to main: run the backend test suite on a clean runner,
-# and if it passes, build both images and push them to GitHub Container
-# Registry tagged by commit SHA. Deploy to the server is a separate
-# workflow, gated behind a manual approval.
+# Runs the backend test suite on pull requests into main and on pushes to
+# main, so a PR cannot merge until the tests pass. On a push to main or a
+# manual run, the images are also built and pushed to GitHub Container
+# Registry tagged by commit SHA. Pull requests only run the tests, they do
+# not publish. Deploy to the server is a separate workflow behind a manual
+# approval.
 name: CI
 
 # Quoted so YAML does not read the bare word on as a boolean.
 "on":
+  # Runs the tests on every PR into main. This is the check the branch
+  # ruleset requires before a merge is allowed.
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
   # Lets us run the pipeline by hand from the Actions tab when needed.
@@ -46,8 +52,11 @@ jobs:
         working-directory: backend
         run: ./mvnw --batch-mode test
 
-  # Build and publish both images. Only runs after tests are green.
+  # Build and publish both images. Runs after the tests pass, and only on a
+  # push to main or a manual run. Pull requests skip this so proposed code
+  # never publishes an image.
   build-and-push:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs: test
     # The default token can read packages but not write them. We have to
