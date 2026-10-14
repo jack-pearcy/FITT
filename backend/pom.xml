@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.1</version>
+        <version>4.0.8</version>
         <relativePath/>
     </parent>
 
@@ -19,6 +19,14 @@
 
     <properties>
         <java.version>21</java.version>
+        <!-- Security overrides: force patched transitive versions ahead of the
+             Boot 4.0.8 BOM, for CVEs fixed after 4.0.8 shipped (Tomcat auth
+             bypasses and Jackson DoS). Each is a patch-level bump within the
+             same line Boot already uses. Remove once a Boot patch (4.0.9 or
+             later) bundles these. -->
+        <tomcat.version>11.0.25</tomcat.version>
+        <jackson-bom.version>3.1.7</jackson-bom.version>
+        <jackson-2-bom.version>2.21.7</jackson-2-bom.version>
     </properties>
 
     <dependencies>
