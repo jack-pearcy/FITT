@@ -1,0 +1,10 @@
+# Caddy binary (usr/bin/caddy) Go-toolchain DoS CVEs. HIGH, no CRITICAL.
+# These live in the Go stdlib and golang.org/x/net that the official
+# caddy:2-alpine image was compiled with, not in our code or config, and are
+# not fixable by a version override: the fix is Go 1.26.9 / x-net 0.60.0, which
+# only reaches us when the upstream Caddy image is rebuilt on patched Go.
+# Accepted as DoS-only risk on the reverse-proxy tier until that rebuild lands.
+# Revisit 2026-11-15: re-pull caddy:2-alpine, re-scan, delete any that clear.
+CVE-2026-78667
+CVE-2026-78669
+CVE-2026-97031

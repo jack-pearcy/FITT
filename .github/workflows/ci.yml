@@ -1,10 +1,10 @@
 # Continuous integration for FITT.
 # Runs the backend test suite on pull requests into main and on pushes to
 # main, so a PR cannot merge until the tests pass. On a push to main or a
-# manual run, the images are also built and pushed to GitHub Container
-# Registry tagged by commit SHA. Pull requests only run the tests, they do
-# not publish. Deploy to the server is a separate workflow behind a manual
-# approval.
+# manual run, the images are built, scanned, and pushed to GitHub Container
+# Registry tagged by commit SHA, and only published if the scan is clean.
+# Pull requests only run the tests, they do not publish. Deploy to the server
+# is a separate workflow behind a manual approval.
 name: CI
 
 # Quoted so YAML does not read the bare word on as a boolean.
@@ -60,15 +60,15 @@ jobs:
         working-directory: backend
         run: ./mvnw --batch-mode failsafe:integration-test failsafe:verify
 
-  # Build and publish both images. Runs after the tests pass, and only on a
-  # push to main or a manual run. Pull requests skip this so proposed code
-  # never publishes an image.
+  # Build both images, scan them, and publish only if the scan is clean.
+  # Runs after the tests pass, and only on a push to main or a manual run.
+  # Pull requests skip this so proposed code never publishes an image.
   build-and-push:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs: test
-    # The default token can read packages but not write them. We have to
-    # grant package write access for the push to ghcr.io to succeed.
+    # The default token can read packages but not write them. Grant package
+    # write access so the push to ghcr.io succeeds.
     permissions:
       contents: read
       packages: write
@@ -76,15 +76,17 @@ jobs:
       - name: Check out the code
         uses: actions/checkout@v7
 
-      # ghcr.io rejects any uppercase in the image path, but a GitHub
-      # username keeps its original case. Lowercase the owner once here
-      # and reuse it for both image tags.
-      - name: Lowercase the registry owner
-        id: owner
-        run: echo "value=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+      # ghcr.io rejects uppercase in the image path, but a GitHub username
+      # keeps its case. Lowercase the owner once and build the two full image
+      # refs here so every step below uses the same strings.
+      - name: Resolve the image names
+        id: img
+        run: |
+          owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          echo "backend=${{ env.REGISTRY }}/${owner}/fitt-backend:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "frontend=${{ env.REGISTRY }}/${owner}/fitt-frontend:${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
-      # Buildx is Docker's extended builder. The build-push action below
-      # expects it to be set up.
+      # Buildx is Docker's extended builder. The build-push action below needs it.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -96,19 +98,54 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build the backend image and push it, tagged with the commit SHA
-      # so every build is traceable to a commit.
-      - name: Build and push the backend image
+      # Build the backend image to a local tarball instead of pushing. Scanning
+      # the tarball needs no registry and no daemon access, so the image is
+      # never published until Trivy has cleared it.
+      - name: Build the backend image
         uses: docker/build-push-action@v7
         with:
           context: ./backend
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/fitt-backend:${{ github.sha }}
+          tags: ${{ steps.img.outputs.backend }}
+          outputs: type=docker,dest=/tmp/backend-image.tar
 
-      # Build the frontend-plus-Caddy image and push it the same way.
-      - name: Build and push the frontend image
+      # Fail on any fixable HIGH or CRITICAL vulnerability. ignore-unfixed
+      # drops vulnerabilities with no patch yet, since blocking on something
+      # that cannot be fixed only jams the pipeline. Pinned to a commit SHA,
+      # not a tag: the trivy-action tags were hijacked in a March 2026
+      # supply-chain attack (CVE-2026-33634), so a tag is not safe to trust.
+      - name: Scan the backend image
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8  # v0.36.0
+        with:
+          input: /tmp/backend-image.tar
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+          exit-code: '1'
+          trivyignores: .trivyignore
+
+      # Scan passed, so load the tarball into Docker and push it.
+      - name: Push the backend image
+        run: |
+          docker load --input /tmp/backend-image.tar
+          docker push ${{ steps.img.outputs.backend }}
+
+      # Same build, scan, push sequence for the frontend-plus-Caddy image.
+      - name: Build the frontend image
         uses: docker/build-push-action@v7
         with:
           context: ./frontend
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/fitt-frontend:${{ github.sha }}
+          tags: ${{ steps.img.outputs.frontend }}
+          outputs: type=docker,dest=/tmp/frontend-image.tar
+
+      - name: Scan the frontend image
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8  # v0.36.0
+        with:
+          input: /tmp/frontend-image.tar
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+          exit-code: '1'
+          trivyignores: .trivyignore
+
+      - name: Push the frontend image
+        run: |
+          docker load --input /tmp/frontend-image.tar
+          docker push ${{ steps.img.outputs.frontend }}
