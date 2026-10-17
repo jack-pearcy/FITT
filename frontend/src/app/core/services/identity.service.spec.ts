@@ -58,7 +58,7 @@ describe('IdentityService', () => {
     req.flush(null);
   });
 
-  it('saveGoals POSTs the request body to /api/users/{userId}/identity/onboarding/goals', () => {
+  it('saveGoals POSTs the request body to /api/users/{userId}/identity/goals', () => {
     const service = TestBed.inject(IdentityService);
     // Mixed nullable fields exercise that null values survive serialization.
     const goals: SaveGoalsRequest = {
@@ -71,7 +71,7 @@ describe('IdentityService', () => {
 
     service.saveGoals(USER_ID, goals).subscribe();
 
-    const req = controller.expectOne(`/api/users/${USER_ID}/identity/onboarding/goals`);
+    const req = controller.expectOne(`/api/users/${USER_ID}/identity/goals`);
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual(goals);
     req.flush(null);
@@ -122,7 +122,7 @@ describe('IdentityService', () => {
     let received: GoalsResponse | undefined;
     service.getGoals(USER_ID).subscribe(r => received = r);
 
-    const req = controller.expectOne(`/api/users/${USER_ID}/identity/onboarding/goals`);
+    const req = controller.expectOne(`/api/users/${USER_ID}/identity/goals`);
     expect(req.request.method).toBe('GET');
     req.flush(mockResponse);
 
