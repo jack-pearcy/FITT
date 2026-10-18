@@ -30,10 +30,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-// Service test for GoalService. Repositories and TdeeService are mocked because
-// they reach JPA and have their own logic. The goal write path and the AUTO and
-// MANUAL calorie resolution stay under test. These cases moved here from
-// OnboardingServiceImplTest when goals left onboarding.
+// Service test for GoalService. The repositories, TdeeService, and
+// CalorieGoalCalculator are mocked because they reach JPA or own their own
+// logic. The goal write path and the AUTO and MANUAL calorie resolution stay
+// under test. AUTO now runs maintenance through the calculator, so these tests
+// assert the adjusted number, not raw TDEE.
 @ExtendWith(MockitoExtension.class)
 class GoalServiceTest {
 
@@ -47,6 +48,9 @@ class GoalServiceTest {
 
     @Mock
     private TdeeService tdeeService;
+
+    @Mock
+    private CalorieGoalCalculator calorieGoalCalculator;
 
     @InjectMocks
     private GoalService service;
@@ -64,13 +68,15 @@ class GoalServiceTest {
 
         verifyNoInteractions(goalRepository);
         verifyNoInteractions(tdeeService);
+        verifyNoInteractions(calorieGoalCalculator);
     }
 
     @Test
-    void saveGoals_autoMode_noExistingGoals_savesNewWithTdeeAsCalorieGoal() {
+    void saveGoals_autoModeBulk_savesNewWithDirectionAdjustedGoal() {
         UserBiometricsEntity biometrics = sampleBiometrics();
         when(biometricsRepository.findByOwnerUserId(USER_ID)).thenReturn(Optional.of(biometrics));
         when(tdeeService.calculate(any(), any(), any(), any(), any())).thenReturn(2500);
+        when(calorieGoalCalculator.adjustForGoal(2500, GoalDirection.BULK)).thenReturn(2875);
         when(goalRepository.findByOwnerUserId(USER_ID)).thenReturn(Optional.empty());
 
         SaveGoalsRequest request = new SaveGoalsRequest(
@@ -85,8 +91,8 @@ class GoalServiceTest {
         assertThat(saved.getOwnerUserId()).isEqualTo(USER_ID);
         assertThat(saved.getGoalDirection()).isEqualTo(GoalDirection.BULK);
         assertThat(saved.getCalorieGoalMode()).isEqualTo(CalorieGoalMode.AUTO);
-        // AUTO mode pulls calorie goal from TdeeService output.
-        assertThat(saved.getCalorieGoal()).isEqualTo(2500);
+        // AUTO runs maintenance through the calculator, which applies the bulk surplus.
+        assertThat(saved.getCalorieGoal()).isEqualTo(2875);
     }
 
     @Test
@@ -97,6 +103,7 @@ class GoalServiceTest {
                 CalorieGoalMode.MANUAL, 2000);
         when(biometricsRepository.findByOwnerUserId(USER_ID)).thenReturn(Optional.of(biometrics));
         when(tdeeService.calculate(any(), any(), any(), any(), any())).thenReturn(2700);
+        when(calorieGoalCalculator.adjustForGoal(2700, GoalDirection.CUT)).thenReturn(2160);
         when(goalRepository.findByOwnerUserId(USER_ID)).thenReturn(Optional.of(existing));
 
         SaveGoalsRequest request = new SaveGoalsRequest(
@@ -107,7 +114,7 @@ class GoalServiceTest {
 
         assertThat(existing.getGoalDirection()).isEqualTo(GoalDirection.CUT);
         assertThat(existing.getCalorieGoalMode()).isEqualTo(CalorieGoalMode.AUTO);
-        assertThat(existing.getCalorieGoal()).isEqualTo(2700);
+        assertThat(existing.getCalorieGoal()).isEqualTo(2160);
         verify(goalRepository, never()).save(any(UserGoalEntity.class));
     }
 
@@ -125,9 +132,10 @@ class GoalServiceTest {
 
         ArgumentCaptor<UserGoalEntity> captor = ArgumentCaptor.forClass(UserGoalEntity.class);
         verify(goalRepository).save(captor.capture());
-        // MANUAL mode uses the request value directly. TdeeService should never be called.
+        // MANUAL uses the request value directly, so neither TdeeService nor the calculator runs.
         assertThat(captor.getValue().getCalorieGoal()).isEqualTo(2300);
         verifyNoInteractions(tdeeService);
+        verifyNoInteractions(calorieGoalCalculator);
     }
 
     @Test

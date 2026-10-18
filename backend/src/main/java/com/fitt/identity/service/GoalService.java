@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 // Owns goal data: reading it, writing it, and resolving the calorie goal.
 // Pulled out of onboarding because changing a goal is a normal thing a user
-// does any time, not a one time setup step. Biometrics and TDEE still remain in
+// does any time, not a one time setup step. Biometrics and TDEE still live in
 // the picture here because an AUTO calorie goal is derived from them.
 @Service
 @Transactional(readOnly = true)
@@ -22,15 +22,18 @@ public class GoalService {
     private final UserGoalRepository goalRepository;
     private final UserBiometricsRepository biometricsRepository;
     private final TdeeService tdeeService;
+    private final CalorieGoalCalculator calorieGoalCalculator;
 
     public GoalService(
             UserGoalRepository goalRepository,
             UserBiometricsRepository biometricsRepository,
-            TdeeService tdeeService
+            TdeeService tdeeService,
+            CalorieGoalCalculator calorieGoalCalculator
     ) {
         this.goalRepository = goalRepository;
         this.biometricsRepository = biometricsRepository;
         this.tdeeService = tdeeService;
+        this.calorieGoalCalculator = calorieGoalCalculator;
     }
 
     @Transactional
@@ -90,13 +93,18 @@ public class GoalService {
             UserBiometricsEntity biometrics
     ) {
         return switch (request.calorieGoalMode()) {
-            case AUTO -> tdeeService.calculate(
-                    biometrics.getHeightCm(),
-                    biometrics.getWeightKg(),
-                    biometrics.getDateOfBirth(),
-                    biometrics.getBiologicalSex(),
-                    biometrics.getActivityLevel()
-            );
+            case AUTO -> {
+                // Maintenance is only the starting point. The goal direction moves it
+                // above maintenance for a bulk, below for a cut, or leaves it at maintain.
+                int maintenance = tdeeService.calculate(
+                        biometrics.getHeightCm(),
+                        biometrics.getWeightKg(),
+                        biometrics.getDateOfBirth(),
+                        biometrics.getBiologicalSex(),
+                        biometrics.getActivityLevel()
+                );
+                yield calorieGoalCalculator.adjustForGoal(maintenance, request.goalDirection());
+            }
             case MANUAL -> {
                 if (request.calorieGoal() == null) {
                     throw new IllegalArgumentException(
