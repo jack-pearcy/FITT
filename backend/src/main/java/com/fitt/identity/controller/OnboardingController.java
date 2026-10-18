@@ -35,17 +35,6 @@ public class OnboardingController {
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/goals")
-    public ResponseEntity<Void> saveGoals(
-            @PathVariable Long userId,
-            @Valid @RequestBody SaveGoalsRequest request,
-            @AuthenticationPrincipal Jwt jwt
-    ) {
-        enforceOwnership(userId, currentUserId(jwt));
-        onboardingService.saveGoals(userId, request);
-        return ResponseEntity.noContent().build();
-    }
-
     @GetMapping("/status")
     public ResponseEntity<OnboardingStatusResponse> getStatus(
             @PathVariable Long userId,
@@ -62,15 +51,6 @@ public class OnboardingController {
     ) {
         enforceOwnership(userId, currentUserId(jwt));
         return ResponseEntity.ok(onboardingService.getTdee(userId));
-    }
-
-    @GetMapping("/goals")
-    public ResponseEntity<GoalsResponse> getGoals(
-            @PathVariable Long userId,
-            @AuthenticationPrincipal Jwt jwt
-    ) {
-        enforceOwnership(userId, currentUserId(jwt));
-        return ResponseEntity.ok(onboardingService.getGoals(userId));
     }
 
     private void enforceOwnership(Long pathUserId, Long currentUserId) {

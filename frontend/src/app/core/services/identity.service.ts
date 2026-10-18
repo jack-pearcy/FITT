@@ -58,7 +58,7 @@ export class IdentityService {
     request: SaveGoalsRequest
   ): Observable<void> {
     return this.http.post<void>(
-      `/api/users/${userId}/identity/onboarding/goals`,
+      `/api/users/${userId}/identity/goals`,
       request
     );
   }
@@ -77,7 +77,7 @@ export class IdentityService {
 
   getGoals(userId: number): Observable<GoalsResponse> {
     return this.http.get<GoalsResponse>(
-      `/api/users/${userId}/identity/onboarding/goals`
+      `/api/users/${userId}/identity/goals`
     );
   }
 }

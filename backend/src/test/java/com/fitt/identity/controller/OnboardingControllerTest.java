@@ -58,16 +58,6 @@ class OnboardingControllerTest {
             }
             """;
 
-    private static final String VALID_GOALS_BODY = """
-            {
-              "goalDirection": "BULK",
-              "targetWeightKg": 85,
-              "timelineWeeks": 12,
-              "calorieGoalMode": "AUTO",
-              "calorieGoal": null
-            }
-            """;
-
     @Autowired
     private MockMvc mockMvc;
 
@@ -107,17 +97,6 @@ class OnboardingControllerTest {
 
         // @Valid blocks the request before the controller body runs.
         verifyNoInteractions(onboardingService);
-    }
-
-    @Test
-    void saveGoals_validRequestAndOwnership_returns204() throws Exception {
-        mockMvc.perform(post("/api/users/{userId}/identity/onboarding/goals", USER_ID)
-                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(VALID_GOALS_BODY))
-                .andExpect(status().isNoContent());
-
-        verify(onboardingService).saveGoals(eq(USER_ID), any());
     }
 
     @Test
