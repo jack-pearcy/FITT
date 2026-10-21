@@ -22,6 +22,13 @@ RUN java -Djarmode=tools -jar target/backend-0.0.1-SNAPSHOT.jar extract --layers
 FROM eclipse-temurin:21-jre-alpine AS runtime
 WORKDIR /application
 
+# Patch the base image's OS packages so the image carries the security fixes
+# Alpine has already published for this release but the base layer has not
+# picked up yet. Runs as root, before the USER switch, since apk needs root.
+# This is what lets the Trivy scan stay strict instead of ignoring a finding
+# that actually has a fix.
+RUN apk --no-cache upgrade
+
 # Non-root so a compromised app does not run as root inside the container.
 RUN addgroup -S fitt && adduser -S fitt -G fitt
 USER fitt

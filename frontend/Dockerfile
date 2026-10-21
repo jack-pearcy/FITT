@@ -24,6 +24,14 @@ RUN npm run build -- --configuration production
 # Stage 2: the runtime image. Stock Caddy serves the files and proxies.
 FROM caddy:2-alpine
 
+# Patch the base image's OS packages, same as the backend, so a fixable
+# Alpine CVE here cannot block a publish later. This does not touch the
+# three Caddy Go DoS CVEs in .trivyignore, those live in the compiled caddy
+# binary and only clear when the upstream image is rebuilt on patched Go.
+RUN apk --no-cache upgrade
+
+# The Angular build output goes where Caddy serves static files from.
+
 # The Angular build output goes where Caddy serves static files from.
 # Only the browser subfolder is the real web root for the application
 # builder. Copying the parent dist/fitt-web would put an extra folder
