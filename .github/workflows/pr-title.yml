@@ -1,0 +1,35 @@
+# Validates that every pull request title is a valid Conventional Commit.
+# We squash-merge, and GitHub uses the PR title as the squash commit subject,
+# so the title ends up as permanent git history. This check rejects a title
+# that is not in type(scope): description form before it can merge, which keeps
+# the history on main clean without anyone having to remember to fix it.
+#
+# Kept out of ci.yml on purpose: this only concerns pull requests and has to
+# re-run when a title is edited, which the main CI triggers do not watch for.
+name: PR title
+
+# Quoted so YAML does not read the bare word on as a boolean.
+"on":
+  pull_request:
+    # opened and synchronize handle a new PR and new commits on it. edited is
+    # the one that matters here: it re-runs the check when a title is fixed
+    # after opening, so the corrected title clears the failed check.
+    types: [opened, edited, synchronize]
+
+# Reading the pull request is all the validation needs. No write access is
+# granted, so nothing here can change the PR or the repository.
+permissions:
+  pull-requests: read
+
+jobs:
+  validate-title:
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned to the v6.1.1 commit, not the @v6 tag, the same rule the Trivy
+      # step in ci.yml spells out: a tag can be moved or hijacked, a commit
+      # SHA cannot. The default type list already covers feat, fix, refactor
+      # and chore, and scope stays optional, so no extra configuration is needed.
+      - name: Check the PR title against Conventional Commits
+        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50  # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
