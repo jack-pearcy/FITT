@@ -327,7 +327,7 @@ Production environment:
 - Domain registered via Cloudflare (DNS-only / grey cloud A records for apex and www).
 - Host: Hetzner CPX21 (Hillsboro, Ubuntu 24.04). Initially deployed to DigitalOcean (Hetzner verification was
   delayed), then migrated to Hetzner to save cost; DigitalOcean droplet destroyed after cutover.
-- Server hardened per the runbook: non-root deploy user, ufw (SSH/80/443 only), Docker via the official script.
+- Server hardened per the runbook: non-root deploy user, ufw (SSH, 80, 443 tcp and udp), Docker via the official script.
 
 Key decisions and lessons:
 - handle vs handle_path: backend controllers are all under /api, so the prefix must reach the backend
@@ -416,27 +416,52 @@ Completed this phase:
   blocked. Verified: #35 ran test green and build-and-push skipped, and a direct push to main was rejected
   (GH013, test required). This retires the elevated infra item below.
 
+- Security and CI hardening batch shipped (2026-10-18, each its own PR through the gate):
+  GitHub Actions SHA-pinning (every action pinned to a commit SHA, not a tag); image
+  vulnerability scanning with Trivy in build-and-push (HIGH/CRITICAL, ignore-unfixed, blocks
+  publish on a finding); dependency CVE remediation (Boot 4.0.1 to 4.0.8 plus three version
+  overrides, 43 fixable HIGH/CRITICAL down to 0); CI test-suite split (fast H2 and unit tests
+  on mvn test, the Testcontainers MySQL test on mvn verify); caddy fmt; a README rewrite and
+  LICENSE for public release; and a Mac shell prompt that shows the git branch.
+- Calorie-goal adjustment shipped (2026-10-18): the AUTO calorie goal is now the
+  direction-adjusted number (bulk surplus / cut deficit / maintain), computed server-side,
+  not raw TDEE. Goal management was also extracted out of onboarding into its own
+  GoalController and GoalService.
+- CORE muscle group plus seed shipped (2026-10-19, PR #46): CORE added to the MuscleGroup
+  enum and a new Flyway V3__seed_core_exercises.sql seeding 9 core exercises, closing the
+  no-core-or-ab gap. The enum change was mandatory, not cosmetic, because the read mapper
+  does MuscleGroup.valueOf on the stored muscle_group string; the seed went in V3, never
+  editing V2 (Flyway immutability). Verified against H2 and real MySQL 8.4.
+- Conventional PR-title enforcement shipped (2026-10-21, PR #47): a pr-title workflow
+  validates every PR title against Conventional Commits (amannn/action-semantic-pull-request
+  pinned to the v6.1.1 commit SHA), made a required status check, so the squash subject that
+  becomes permanent history is correct before merge.
+- Alpine base-image CVE patch shipped (2026-10-21): apk --no-cache upgrade added to both
+  Dockerfiles to clear a fixable HIGH (libexpat) the Trivy gate caught in the backend base
+  image; build-and-push green again on main.
+- Hetzner cloud firewall and keys-only SSH applied (2026-10-21, server-side): a Hetzner
+  Cloud Firewall "fitt-edge" attached to fitt-prod as a second edge layer over ufw (inbound
+  TCP 22, TCP 80, TCP 443, UDP 443, ICMP; outbound open; filters at the edge before the
+  host, stateful). SSH password authentication, found enabled on port 22, was disabled, so
+  SSH is keys-only. Verified live (SSH through the edge, HTTPS 200 from Caddy with h3).
+
 Remaining in this phase (backend and infra, client-agnostic):
-- TDEE vs calorie goal: on a bulk the TDEE and the daily calorie goal show the SAME number; the surplus/deficit
-  (bulk surplus / cut deficit / maintain) adjustment is likely not applied. The Mifflin-St Jeor formula itself
-  is verified correct; confirm whether the goal adjustment is applied to the auto goal.
-- CORE/abs MuscleGroup enum value missing, so the V2 seed omits all core work. Add CORE plus the frontend group
-  list (muscle_group is varchar, no DB migration needed).
-- Cross-group compound classifications in the seed (deadlift, RDL, shrug, face pull, step up) — grouping pass.
-- Forgot-password flow: needs a transactional email provider (Resend) to send reset emails. Backend + infra.
-- Seed well-regarded pre-built splits (PPL, upper/lower, full-body) as GLOBAL read-only templates users clone
-  into their own plan (likely needs a copy-template flow). Source real reputable programs; do not invent.
-- Progression preference surfacing: the engine exposes the suggestion, reasoning, and a per-user model
-  (endpoints exist); the opt in/out and increment preference, ideally placed at onboarding, waits for the iOS
-  screens.
-- Show the git branch in the shell prompt (prevents committing on main; slips happened this phase).
-- Automate conventional PR-title enforcement (semantic-PR-title action, or derive the squash message from the
-  PR title).
-- Add Hetzner cloud firewall as a second layer on top of ufw (defense in depth).
-- Separate the backend test suite in CI: fast H2 unit tests vs the Testcontainers integration test (tag-based).
-- Add image vulnerability scanning (Trivy or similar) to the pipeline.
-- caddy fmt --overwrite to clear the Caddyfile formatting warning.
-- Backend integration tests against real MySQL (deferred pending Phase 21 CI).
+- Cross-group compound classifications in the seed (deadlift, RDL, shrug, face pull, step
+  up): keep a single primary-mover muscle group per exercise, or move to multi-group, which
+  is a schema change. The last pre-iOS front; decided and implemented when picked up.
+
+Shipped since this list was last written (now in Completed this phase above): CORE enum plus
+the V3 core-exercise seed, conventional PR-title enforcement, the Hetzner cloud firewall plus
+keys-only SSH, the Alpine base-image CVE patch, the TDEE calorie-goal adjustment, image
+vulnerability scanning (Trivy), the CI test-suite split, caddy fmt, GitHub Actions
+SHA-pinning, dependency CVE remediation, and the git-branch shell prompt. The progression
+suggestion and preference endpoints also shipped; the opt-in and increment-preference UI
+placement waits for the iOS screens.
+
+iOS-phase items (decide with the device in hand), beyond the subsection below: forgot-password
+flow (needs a transactional email provider), and pre-built split templates (PPL, upper/lower,
+full-body as clonable globals; source real programs, do not invent). Backend integration tests
+against a standalone MySQL beyond the Testcontainers test are deferred pending Phase 21 CI.
 
 Deferred to the iOS phase (decide with the device in hand):
 - Autoregulated deload: trigger a deload when fatigue signals cluster (performance drop across sessions, slow
