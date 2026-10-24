@@ -49,7 +49,7 @@ The API is designed so that logic a thick client might otherwise duplicate is pu
 
 ## Testing and CI/CD
 
-- 160 automated tests (157 fast unit/slice and 3 Testcontainers integration). The Maven Surefire/Failsafe split runs the fast unit and H2-backed tests first; a Testcontainers MySQL 8.4 container then runs the integration tests, so fast failures surface before anything heavier starts.
+- 165 automated tests (162 fast unit/slice and 3 Testcontainers integration). The Maven Surefire/Failsafe split runs the fast unit and H2-backed tests first; a Testcontainers MySQL 8.4 container then runs the integration tests, so fast failures surface before anything heavier starts.
 - Pipeline (GitHub Actions): CI runs on every pull request and push to main. On merge to main, multi-stage non-root Docker images are built, scanned with Trivy for fixable HIGH/CRITICAL CVEs, and published to GHCR only if the scan passes, so a vulnerable image never reaches the registry.
 - Deployment: a separate, manually-gated workflow deploys a chosen image SHA over SSH using a run-scoped registry token (no standing credentials on the server), behind Caddy with automatic Let's Encrypt HTTPS. This is human-approved Continuous Delivery by design.
 - Branch protection: main requires a passing CI status check and a pull request before merge, and direct pushes are blocked. Conventional Commits and squash merges keep a linear history.
