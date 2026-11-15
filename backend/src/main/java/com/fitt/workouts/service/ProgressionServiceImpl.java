@@ -82,7 +82,7 @@ public class ProgressionServiceImpl implements ProgressionService {
     @Transactional
     public void updatePreference(Long ownerUserId, ProgressionModel model) {
         UserProgressionPreferenceEntity pref = preferenceRepository.findByOwnerUserId(ownerUserId)
-                .orElse(new UserProgressionPreferenceEntity(ownerUserId, model));
+                .orElseGet(() -> new UserProgressionPreferenceEntity(ownerUserId, model));
         pref.setProgressionModel(model);
         preferenceRepository.save(pref);
     }
