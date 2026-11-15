@@ -240,6 +240,26 @@ class WorkoutSessionServiceImplTest {
     }
 
     @Test
+    void logSet_afterMiddleSetDeleted_usesHighestSetNumberPlusOne() {
+        WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
+        ExerciseEntryEntity entry = new ExerciseEntryEntity(exerciseWithId(EXERCISE_ID), 0);
+        ReflectionTestUtils.setField(entry, "id", ENTRY_ID);
+        // Sets 1 and 3 remain after set 2 was deleted. size() + 1 would give 3 again.
+        entry.addSetEntry(new SetEntryEntity(1, new BigDecimal("100"), 10, null));
+        entry.addSetEntry(new SetEntryEntity(3, new BigDecimal("100"), 8, null));
+        session.addExerciseEntry(entry);
+
+        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(WorkoutSessionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.logSet(OWNER_USER_ID, SESSION_ID, ENTRY_ID,
+                new LogSetRequest(6, new BigDecimal("100"), null));
+
+        assertThat(entry.getSetEntries().get(2).getSetNumber()).isEqualTo(4);
+    }
+
+    @Test
     void logSet_appendsSetAtNextSetNumberAndMarksCompletedTrue() {
         WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
         ExerciseEntity exercise = exerciseWithId(EXERCISE_ID);
