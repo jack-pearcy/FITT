@@ -9,8 +9,10 @@ import com.fitt.workouts.persistence.entity.ExerciseEntryEntity;
 import com.fitt.workouts.persistence.entity.SetEntryEntity;
 import com.fitt.workouts.persistence.entity.WorkoutSessionEntity;
 import com.fitt.workouts.repository.ExerciseRepository;
+import com.fitt.workouts.repository.WorkoutPlanRepository;
 import com.fitt.workouts.repository.WorkoutSessionRepository;
 import com.fitt.workouts.service.exception.ExerciseNotFoundException;
+import com.fitt.workouts.service.exception.WorkoutPlanNotFoundException;
 import com.fitt.workouts.service.exception.WorkoutSessionNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -58,6 +60,9 @@ class WorkoutSessionServiceImplTest {
     @Mock
     private ExerciseRepository exerciseRepository;
 
+    @Mock
+    private WorkoutPlanRepository planRepository;
+
     @InjectMocks
     private WorkoutSessionServiceImpl service;
 
@@ -70,6 +75,7 @@ class WorkoutSessionServiceImplTest {
         // correctly. ownerUserId and startedAt come from constructor args,
         // planId and notes are setter calls that the service makes after.
         ArgumentCaptor<WorkoutSessionEntity> captor = ArgumentCaptor.forClass(WorkoutSessionEntity.class);
+        when(planRepository.existsByIdAndOwnerUserId(PLAN_ID, OWNER_USER_ID)).thenReturn(true);
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -208,6 +214,29 @@ class WorkoutSessionServiceImplTest {
         service.removeExerciseEntry(OWNER_USER_ID, SESSION_ID, ENTRY_ID);
 
         assertThat(session.getExerciseEntries()).isEmpty();
+    }
+
+    @Test
+    void createSession_planNotOwnedByCaller_throwsPlanNotFoundAndSavesNothing() {
+        CreateWorkoutSessionRequest request =
+                new CreateWorkoutSessionRequest(Instant.parse("2026-05-26T18:00:00Z"), PLAN_ID, null);
+        when(planRepository.existsByIdAndOwnerUserId(PLAN_ID, OWNER_USER_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.createSession(OWNER_USER_ID, request))
+                .isInstanceOf(WorkoutPlanNotFoundException.class);
+        verify(sessionRepository, never()).save(any(WorkoutSessionEntity.class));
+    }
+
+    @Test
+    void createSession_noPlanId_skipsPlanOwnershipCheck() {
+        CreateWorkoutSessionRequest request =
+                new CreateWorkoutSessionRequest(Instant.parse("2026-05-26T18:00:00Z"), null, null);
+        when(sessionRepository.save(any(WorkoutSessionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.createSession(OWNER_USER_ID, request);
+
+        verify(planRepository, never()).existsByIdAndOwnerUserId(any(), any());
     }
 
     @Test
