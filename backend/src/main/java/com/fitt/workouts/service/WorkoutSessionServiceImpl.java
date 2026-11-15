@@ -13,8 +13,10 @@ import com.fitt.workouts.persistence.entity.ExerciseEntity;
 import com.fitt.workouts.persistence.entity.SetEntryEntity;
 import com.fitt.workouts.persistence.entity.WorkoutSessionEntity;
 import com.fitt.workouts.repository.ExerciseRepository;
+import com.fitt.workouts.repository.WorkoutPlanRepository;
 import com.fitt.workouts.repository.WorkoutSessionRepository;
 import com.fitt.workouts.service.exception.ExerciseNotFoundException;
+import com.fitt.workouts.service.exception.WorkoutPlanNotFoundException;
 import com.fitt.workouts.service.exception.WorkoutSessionNotFoundException;
 import org.springframework.security.access.AccessDeniedException;
 import com.fitt.workouts.service.exception.ExerciseEntryNotFoundException;
@@ -32,16 +34,26 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
 
     private final WorkoutSessionRepository sessionRepository;
     private final ExerciseRepository exerciseRepository;
+    private final WorkoutPlanRepository planRepository;
 
     public WorkoutSessionServiceImpl(WorkoutSessionRepository sessionRepository,
-                                     ExerciseRepository exerciseRepository) {
+                                     ExerciseRepository exerciseRepository,
+                                     WorkoutPlanRepository planRepository) {
         this.sessionRepository = sessionRepository;
         this.exerciseRepository = exerciseRepository;
+        this.planRepository = planRepository;
     }
 
     @Override
     @Transactional
     public WorkoutSessionResponse createSession(Long ownerUserId, CreateWorkoutSessionRequest request) {
+        // A session may only point at one of the caller's own plans. Reading as not
+        // found, not forbidden, so another user's plan ids are not confirmable.
+        if (request.planId() != null
+                && !planRepository.existsByIdAndOwnerUserId(request.planId(), ownerUserId)) {
+            throw new WorkoutPlanNotFoundException(request.planId());
+        }
+
         // entity constructor requires ownerUserId and startedAt
         WorkoutSessionEntity session = new WorkoutSessionEntity(ownerUserId, request.startedAt());
         session.setNotes(request.notes());
