@@ -240,7 +240,7 @@ class WorkoutPlanServiceImplTest {
         WorkoutPlanEntity target = samplePlan("New plan", false);
         ReflectionTestUtils.setField(target, "id", PLAN_ID);
 
-        when(planRepository.findByOwnerUserId(USER_ID))
+        when(planRepository.findByOwnerUserIdForUpdate(USER_ID))
                 .thenReturn(List.of(wasActive, target));
         when(planRepository.save(any(WorkoutPlanEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -257,7 +257,7 @@ class WorkoutPlanServiceImplTest {
     void activatePlan_targetIdNotInUserPlans_throwsWorkoutPlanNotFoundException() {
         WorkoutPlanEntity p1 = samplePlan("Only plan", true);
         ReflectionTestUtils.setField(p1, "id", OTHER_PLAN_ID);
-        when(planRepository.findByOwnerUserId(USER_ID)).thenReturn(List.of(p1));
+        when(planRepository.findByOwnerUserIdForUpdate(USER_ID)).thenReturn(List.of(p1));
 
         assertThatThrownBy(() -> service.activatePlan(USER_ID, PLAN_ID))
                 .isInstanceOf(WorkoutPlanNotFoundException.class);
