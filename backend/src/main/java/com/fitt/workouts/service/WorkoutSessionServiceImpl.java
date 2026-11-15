@@ -146,7 +146,12 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
                 .findFirst()
                 .orElseThrow(() -> new ExerciseEntryNotFoundException(entryId));
 
-        int nextSetNumber = entry.getSetEntries().size() + 1;
+        // One past the highest existing number, not size() + 1, so deleting a middle
+        // set and logging again cannot produce two sets with the same number.
+        int nextSetNumber = entry.getSetEntries().stream()
+                .mapToInt(SetEntryEntity::getSetNumber)
+                .max()
+                .orElse(0) + 1;
 
         // entity constructor: setNumber, weight, reps, rpe
         SetEntryEntity set = new SetEntryEntity(nextSetNumber, request.weight(), request.reps(), request.rpe());
