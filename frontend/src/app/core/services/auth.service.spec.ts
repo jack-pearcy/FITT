@@ -114,6 +114,17 @@ describe('AuthService', () => {
     expect(service.getUserId()).toBe(42);
   });
 
+  it('getUserId decodes a base64url payload with URL-safe characters and no padding', () => {
+    // "???" encodes to "Pz8/" in standard base64, so this payload only decodes
+    // correctly if the service maps the URL-safe alphabet back to standard base64.
+    const json = JSON.stringify({ uid: 42, note: '???>>>~~~' });
+    const payload = btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    expect(payload).toMatch(/[-_]/);
+    localStorage.setItem(TOKEN_KEY, `header.${payload}.signature`);
+    const service = TestBed.inject(AuthService);
+    expect(service.getUserId()).toBe(42);
+  });
+
   it('getUserId returns null when the token cannot be decoded', () => {
     // Single segment with no dots, so split('.')[1] is undefined and atob
     // throws an InvalidCharacterError that the service swallows.
