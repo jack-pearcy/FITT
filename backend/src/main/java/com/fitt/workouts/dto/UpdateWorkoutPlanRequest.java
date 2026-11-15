@@ -25,6 +25,7 @@ public record UpdateWorkoutPlanRequest(
         SplitType splitType,
 
         @NotEmpty(message = "At least one training day is required")
+        @Size(max = 14, message = "A plan can have at most 14 training days")
         @Valid
         List<CreateWorkoutPlanDayRequest> days
 ) {}
