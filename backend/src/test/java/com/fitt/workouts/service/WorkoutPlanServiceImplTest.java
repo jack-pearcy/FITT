@@ -222,6 +222,18 @@ class WorkoutPlanServiceImplTest {
     }
 
     @Test
+    void createPlan_duplicateDayOrderIndex_throwsIllegalArgumentAndSavesNothing() {
+        CreateWorkoutPlanRequest request = new CreateWorkoutPlanRequest("Dup", 2, SplitType.PPL, List.of(
+                new CreateWorkoutPlanDayRequest(0, "Push", List.of()),
+                new CreateWorkoutPlanDayRequest(0, "Pull", List.of())));
+
+        assertThatThrownBy(() -> service.createPlan(USER_ID, request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unique");
+        verify(planRepository, never()).save(any(WorkoutPlanEntity.class));
+    }
+
+    @Test
     void activatePlan_deactivatesAllOwnedPlansThenActivatesTarget() {
         WorkoutPlanEntity wasActive = samplePlan("Old plan", true);
         ReflectionTestUtils.setField(wasActive, "id", OTHER_PLAN_ID);
