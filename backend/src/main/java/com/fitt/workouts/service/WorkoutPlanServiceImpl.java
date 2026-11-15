@@ -124,6 +124,16 @@ public class WorkoutPlanServiceImpl implements WorkoutPlanService {
     // shared by createPlan and updatePlan so both build the day graph the same way.
     // works on the passed in plan and syncs both sides through addDay/addExercise.
     private void addDaysFromRequest(WorkoutPlanEntity plan, List<CreateWorkoutPlanDayRequest> dayReqs) {
+        // The rotation cursor orders days by orderIndex, so two days sharing an index
+        // would make "which day is next" ambiguous.
+        long distinctIndexes = dayReqs.stream()
+                .map(CreateWorkoutPlanDayRequest::orderIndex)
+                .distinct()
+                .count();
+        if (distinctIndexes != dayReqs.size()) {
+            throw new IllegalArgumentException("Training day order indexes must be unique");
+        }
+
         for (CreateWorkoutPlanDayRequest dayReq : dayReqs) {
             // entity constructor: dayLabel, orderIndex
             WorkoutPlanDayEntity day = new WorkoutPlanDayEntity(dayReq.dayLabel(), dayReq.orderIndex());
