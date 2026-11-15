@@ -11,6 +11,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 // Stores the incoming X-Request-ID in the MDC so every log line produced
 // during this request automatically includes the correlation ID.
@@ -21,6 +22,11 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
     private static final String REQUEST_ID_HEADER = "X-Request-ID";
     private static final String MDC_KEY = "requestId";
 
+    // The ID is echoed in a response header and written to every log line, so only
+    // accept a short, plain token. Anything else is replaced with a generated UUID
+    // rather than trusted, which blocks oversized values and log-forging attempts.
+    private static final Pattern SAFE_REQUEST_ID = Pattern.compile("^[A-Za-z0-9._-]{1,64}$");
+
     @Override
     protected void doFilterInternal(
             @NonNull HttpServletRequest request,
@@ -30,7 +36,7 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
 
         String requestId = request.getHeader(REQUEST_ID_HEADER);
 
-        if (requestId == null || requestId.isBlank()) {
+        if (requestId == null || !SAFE_REQUEST_ID.matcher(requestId).matches()) {
             requestId = UUID.randomUUID().toString();
         }
 
