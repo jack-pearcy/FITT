@@ -27,6 +27,18 @@ jobs:
       contents: read
       packages: read
     steps:
+      # The tag comes from a free-text input and ends up inside a sed command on the
+      # server, so refuse anything that is not a full commit SHA before touching the
+      # server. CI tags every image with github.sha, which is exactly 40 hex chars.
+      - name: Validate the image tag
+        env:
+          IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+        run: |
+          if ! [[ "${IMAGE_TAG}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "image_tag must be a full 40-character lowercase commit SHA" >&2
+            exit 1
+          fi
+
       # SSH to the server and roll the new images. The server already holds
       # docker-compose.prod.yml and the production .env; this only updates the
       # image tag, logs in to GHCR, pulls, and restarts.
@@ -35,7 +47,9 @@ jobs:
       # as an env var. The server stores no standing registry credential; the
       # login lasts only as long as the deploy.
       - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1
+        # Pinned to the v1.2.5 commit, not the @v1 tag, same rule as the other actions.
+        # This step holds the production SSH key, so it matters most.
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2  # v1.2.5
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_ACTOR: ${{ github.actor }}
