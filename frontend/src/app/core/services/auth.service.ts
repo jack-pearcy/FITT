@@ -77,9 +77,12 @@ export class AuthService {
     const token = this.getToken();
     if (!token) return null;
     try {
-      // JWT payload is the middle segment, base64 encoded.
+      // JWT payload is the middle segment, base64url encoded. atob only reads
+      // standard base64, so swap the URL-safe characters back and restore padding.
       const payload = token.split('.')[1];
-      const decoded = atob(payload);
+      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+      const decoded = atob(padded);
       return JSON.parse(decoded).uid ?? null;
     } catch {
       return null;
