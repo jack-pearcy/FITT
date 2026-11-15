@@ -21,16 +21,23 @@ COPY . .
 # to dist/frontend/browser, not dist/frontend.
 RUN npm run build -- --configuration production
 
-# Stage 2: the runtime image. Stock Caddy serves the files and proxies.
+# Stage 2: build Caddy with a patched golang.org/x/net.
+# The stock caddy:2-alpine binary can lag behind fixes in its Go dependencies, and
+# CI fails on any fixable HIGH finding. xcaddy rebuilds the same Caddy 2.x with the
+# dependency replaced, which clears CVE-2026-78661 (x/net, fixed in 0.62.0).
+# Remove the --replace once caddy:2-alpine ships x/net 0.62.0 or newer.
+FROM caddy:2-builder AS caddy-build
+RUN xcaddy build --replace golang.org/x/net=golang.org/x/net@v0.62.0
+
+# Stage 3: the runtime image. Stock Caddy image for its layout and entrypoint, with
+# the patched binary dropped over the stock one.
 FROM caddy:2-alpine
 
 # Patch the base image's OS packages, same as the backend, so a fixable
-# Alpine CVE here cannot block a publish later. This does not touch the
-# three Caddy Go DoS CVEs in .trivyignore, those live in the compiled caddy
-# binary and only clear when the upstream image is rebuilt on patched Go.
+# Alpine CVE here cannot block a publish later.
 RUN apk --no-cache upgrade
 
-# The Angular build output goes where Caddy serves static files from.
+COPY --from=caddy-build /usr/bin/caddy /usr/bin/caddy
 
 # The Angular build output goes where Caddy serves static files from.
 # Only the browser subfolder is the real web root for the application
