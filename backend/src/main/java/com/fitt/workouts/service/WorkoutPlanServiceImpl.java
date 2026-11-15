@@ -88,7 +88,8 @@ public class WorkoutPlanServiceImpl implements WorkoutPlanService {
     @Override
     @Transactional
     public WorkoutPlanResponse activatePlan(Long ownerUserId, Long planId) {
-        List<WorkoutPlanEntity> allPlans = planRepository.findByOwnerUserId(ownerUserId);
+        // Locking read: a concurrent activation waits here until this one commits.
+        List<WorkoutPlanEntity> allPlans = planRepository.findByOwnerUserIdForUpdate(ownerUserId);
 
         // deactivate all first then activate the target
         allPlans.forEach(p -> p.setActive(false));
