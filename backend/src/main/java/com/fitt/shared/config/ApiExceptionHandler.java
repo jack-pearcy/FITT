@@ -8,7 +8,9 @@ import com.fitt.workouts.service.exception.ExerciseInUseException;
 import com.fitt.measurements.service.exception.BodyWeightEntryNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -17,18 +19,24 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import com.fitt.identity.service.exception.BiometricsNotFoundException;
 import com.fitt.identity.service.exception.GoalNotFoundException;
 import com.fitt.workouts.service.exception.ExerciseEntryNotFoundException;
 import com.fitt.workouts.service.exception.SetEntryNotFoundException;
 
-import java.util.HashMap;
-import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
+// Extends ResponseEntityExceptionHandler so framework exceptions (404 for an unknown
+// path, 405, 415, a missing request parameter, a path variable of the wrong type,
+// and so on) keep their proper 4xx status and RFC 7807 body. Without it the
+// catch-all Exception handler below would swallow them and answer 500.
 @RestControllerAdvice
-public class ApiExceptionHandler {
+public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
@@ -108,31 +116,29 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
     }
 
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ProblemDetail> handleHttpNotReadable(HttpMessageNotReadableException ex) {
+    @Override
+    protected ResponseEntity<Object> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException ex, HttpHeaders headers,
+            HttpStatusCode status, WebRequest request) {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
         problem.setTitle("Bad Request");
         problem.setDetail("Malformed request body");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ProblemDetail> handleValidation(MethodArgumentNotValidException ex) {
+    @Override
+    protected ResponseEntity<Object> handleMethodArgumentNotValid(
+            MethodArgumentNotValidException ex, HttpHeaders headers,
+            HttpStatusCode status, WebRequest request) {
         ProblemDetail problem = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
         problem.setTitle("Bad Request");
         problem.setDetail("Validation failed");
 
-        // Gets field errors in list form into variable.
-        List<FieldError> fieldErrors = ex.getBindingResult().getFieldErrors();
-
-        Map<String, String> errors = new HashMap<>();
-
-
-        // Pull strings from the list and assign to variables.
-        for (FieldError error : fieldErrors) {
-            String field   = error.getField();
-            String message = error.getDefaultMessage();
-            errors.put(field, message);
+        // One message per field. A field with several violations keeps the first one
+        // seen rather than the last, so the response is stable between runs.
+        Map<String, String> errors = new LinkedHashMap<>();
+        for (FieldError error : ex.getBindingResult().getFieldErrors()) {
+            errors.putIfAbsent(error.getField(), error.getDefaultMessage());
         }
 
         problem.setProperty("errors", errors);
@@ -143,6 +149,19 @@ public class ApiExceptionHandler {
     @ExceptionHandler(EmailAlreadyExistsException.class)
     public ResponseEntity<ProblemDetail> handleEmailAlreadyExists(EmailAlreadyExistsException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Conflict");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+    }
+
+    // Safety net for races the service-level checks cannot close, such as two
+    // simultaneous first-time writes that both pass an exists check and then hit a
+    // unique constraint. A clean retryable 409 beats a 500. The detail is generic on
+    // purpose, the driver message names tables and constraints.
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ProblemDetail> handleDataIntegrity(DataIntegrityViolationException ex) {
+        log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT, "The request conflicts with existing data, please retry");
         problem.setTitle("Conflict");
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
     }
