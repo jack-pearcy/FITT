@@ -1,0 +1,118 @@
+package com.fitt.shared.filter;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.jspecify.annotations.NonNull;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+// Slows down password guessing and account spam on the two public auth endpoints.
+// A sliding window per client address: more than maxAttempts POSTs inside the
+// window gets a 429 with Retry-After until the oldest attempt ages out.
+//
+// In memory and per instance, which is the right size for the current single
+// backend container. A second instance would need a shared store such as Redis.
+// Off by default so tests and local dev are not throttled; the prod profile turns
+// it on. Behind Caddy the real client address arrives through X-Forwarded-For,
+// which server.forward-headers-strategy=native resolves into getRemoteAddr().
+@Component
+@ConditionalOnProperty(name = "fitt.rate-limit.auth.enabled", havingValue = "true")
+public class AuthRateLimitFilter extends OncePerRequestFilter {
+
+    private static final Set<String> LIMITED_PATHS =
+            Set.of("/api/identity/auth/login", "/api/identity/auth/register");
+
+    // Above this many tracked clients, drop the idle ones so the map cannot grow
+    // without bound under a flood of distinct addresses.
+    private static final int SWEEP_THRESHOLD = 10_000;
+
+    private final int maxAttempts;
+    private final long windowMillis;
+    private final Clock clock;
+    private final Map<String, Deque<Long>> attemptsByClient = new ConcurrentHashMap<>();
+
+    @Autowired
+    public AuthRateLimitFilter(
+            @Value("${fitt.rate-limit.auth.max-attempts:10}") int maxAttempts,
+            @Value("${fitt.rate-limit.auth.window-seconds:60}") long windowSeconds) {
+        this(maxAttempts, windowSeconds, Clock.systemUTC());
+    }
+
+    // Package-private so a test can drive time without sleeping.
+    AuthRateLimitFilter(int maxAttempts, long windowSeconds, Clock clock) {
+        this.maxAttempts = maxAttempts;
+        this.windowMillis = windowSeconds * 1000;
+        this.clock = clock;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
+        return !"POST".equals(request.getMethod()) || !LIMITED_PATHS.contains(request.getRequestURI());
+    }
+
+    @Override
+    protected void doFilterInternal(
+            @NonNull HttpServletRequest request,
+            @NonNull HttpServletResponse response,
+            @NonNull FilterChain filterChain
+    ) throws ServletException, IOException {
+
+        long now = clock.millis();
+        long retryAfterSeconds = tryAcquire(request.getRemoteAddr(), now);
+
+        if (retryAfterSeconds > 0) {
+            response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+            response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
+            response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+            response.getWriter().write("{\"type\":\"about:blank\",\"title\":\"Too Many Requests\","
+                    + "\"status\":429,\"detail\":\"Too many attempts, try again later\"}");
+            return;
+        }
+
+        filterChain.doFilter(request, response);
+    }
+
+    // Returns 0 when the attempt is allowed (and records it), otherwise the number
+    // of seconds until the client may try again.
+    long tryAcquire(String client, long now) {
+        if (attemptsByClient.size() > SWEEP_THRESHOLD) {
+            attemptsByClient.values().removeIf(d -> isIdle(d, now));
+        }
+
+        Deque<Long> attempts = attemptsByClient.computeIfAbsent(client, k -> new ArrayDeque<>());
+        synchronized (attempts) {
+            while (!attempts.isEmpty() && now - attempts.peekFirst() >= windowMillis) {
+                attempts.pollFirst();
+            }
+            if (attempts.size() >= maxAttempts) {
+                long waitMillis = windowMillis - (now - attempts.peekFirst());
+                return Math.max(1, (waitMillis + 999) / 1000);
+            }
+            attempts.addLast(now);
+            return 0;
+        }
+    }
+
+    private boolean isIdle(Deque<Long> attempts, long now) {
+        synchronized (attempts) {
+            return attempts.isEmpty() || now - attempts.peekLast() >= windowMillis;
+        }
+    }
+}

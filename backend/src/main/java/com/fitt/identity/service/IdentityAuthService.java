@@ -15,10 +15,14 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Locale;
 
 @Service
 public class IdentityAuthService {
+
+    private static final int MAX_PASSWORD_BYTES = 72;
 
     private final AuthenticationManager authenticationManager;
     private final JwtEncoder jwtEncoder;
@@ -43,7 +47,14 @@ public class IdentityAuthService {
     // Duplicate check runs first so we return a clean 409 instead of letting
     // a DB constraint violation bubble up as a 500.
     // Password is hashed before the entity is built so plain text never hits the DB.
-    public String register(String email, String password) {
+    public String register(String rawEmail, String password) {
+        // BCrypt only reads the first 72 bytes. The DTO limits characters, but a
+        // multibyte password can still exceed 72 bytes, so check bytes here.
+        if (password.getBytes(StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES) {
+            throw new IllegalArgumentException("Password must be 72 bytes or fewer");
+        }
+
+        String email = normalizeEmail(rawEmail);
         if (userRepository.existsByEmail(email)) {
             throw new EmailAlreadyExistsException("email already registered");
         }
@@ -61,7 +72,7 @@ public class IdentityAuthService {
     // but failing fast here is cleaner than letting a ClassCastException surface later.
     public String login(String email, String password) {
         Authentication auth = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(email, password)
+                new UsernamePasswordAuthenticationToken(normalizeEmail(email), password)
         );
 
         Object principal = auth.getPrincipal();
@@ -70,6 +81,12 @@ public class IdentityAuthService {
         }
 
         return buildToken(user);
+    }
+
+    // Same normalization on both sides so "Jack@Example.com " and "jack@example.com"
+    // are one account, whatever the database collation does.
+    private static String normalizeEmail(String email) {
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 
     // Shared by register and login so token structure has one place to change.

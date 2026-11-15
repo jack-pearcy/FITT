@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap } from 'rxjs';
+import { Observable, map, tap } from 'rxjs';
 import { Router } from '@angular/router';
 
 interface RegisterRequest {
@@ -39,8 +39,10 @@ export class AuthService {
         this.isLoggedIn.set(true);
         // New users always go through onboarding first.
         this.onboardingComplete.set(false);
-      })
-    ) as unknown as Observable<void>;
+      }),
+      // Callers only care that the call succeeded, not about the token body.
+      map((): void => undefined)
+    );
   }
 
   login(email: string, password: string): Observable<void> {
@@ -53,8 +55,10 @@ export class AuthService {
         this.isLoggedIn.set(true);
         // onboardingComplete gets set after the login component
         // checks status via IdentityService, not here.
-      })
-    ) as unknown as Observable<void>;
+      }),
+      // Callers only care that the call succeeded, not about the token body.
+      map((): void => undefined)
+    );
   }
 
   logout(): void {
@@ -77,9 +81,12 @@ export class AuthService {
     const token = this.getToken();
     if (!token) return null;
     try {
-      // JWT payload is the middle segment, base64 encoded.
+      // JWT payload is the middle segment, base64url encoded. atob only reads
+      // standard base64, so swap the URL-safe characters back and restore padding.
       const payload = token.split('.')[1];
-      const decoded = atob(payload);
+      const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+      const decoded = atob(padded);
       return JSON.parse(decoded).uid ?? null;
     } catch {
       return null;

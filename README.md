@@ -42,14 +42,15 @@ The API is designed so that logic a thick client might otherwise duplicate is pu
 - Stateless JWT authentication via Spring Security OAuth2 Resource Server, with issuer validation and configurable secret and token TTL
 - Defense-in-depth authorization: per-method ownership checks in controllers, backed by service-layer verification, so a user cannot reach another user's data by guessing an ID
 - Request validation with Bean Validation across write endpoints, returning RFC 7807 Problem Details responses
-- Security response headers (content-type-options, frame-options, cache controls)
+- Security response headers on both tiers: Spring's defaults on the API, and HSTS, a strict Content-Security-Policy, frame, nosniff and referrer headers from Caddy on the web app
+- Per-client rate limiting on login and register, and BCrypt password hashing with a 12 character minimum
 - Supply-chain hardening: all third-party GitHub Actions are pinned to immutable commit SHAs, including the Trivy action, which was itself the target of a 2026 tag-hijacking attack
 
 ---
 
 ## Testing and CI/CD
 
-- 165 automated tests (162 fast unit/slice and 3 Testcontainers integration). The Maven Surefire/Failsafe split runs the fast unit and H2-backed tests first; a Testcontainers MySQL 8.4 container then runs the integration tests, so fast failures surface before anything heavier starts.
+- 193 automated backend tests (190 fast unit/slice and 3 Testcontainers integration), plus 91 frontend tests. The Maven Surefire/Failsafe split runs the fast unit and H2-backed tests first; a Testcontainers MySQL 8.4 container then runs the integration tests, so fast failures surface before anything heavier starts.
 - Pipeline (GitHub Actions): CI runs on every pull request and push to main. On merge to main, multi-stage non-root Docker images are built, scanned with Trivy for fixable HIGH/CRITICAL CVEs, and published to GHCR only if the scan passes, so a vulnerable image never reaches the registry.
 - Deployment: a separate, manually-gated workflow deploys a chosen image SHA over SSH using a run-scoped registry token (no standing credentials on the server), behind Caddy with automatic Let's Encrypt HTTPS. This is human-approved Continuous Delivery by design.
 - Branch protection: main requires a passing CI status check and a pull request before merge, and direct pushes are blocked. Conventional Commits and squash merges keep a linear history.
@@ -77,7 +78,7 @@ The frontend starts on port 4200.
 
 The backend, security model, CI/CD pipeline, and live deployment are complete and running. A native iOS client (SwiftUI) is planned as the primary consumer, alongside a nutrition domain and workout program templates.
 
-Project direction, development phases, and architectural decisions are documented in `roadmap.md`.
+Project direction, development phases, and architectural decisions are documented in `ROADMAP.md`.
 
 ---
 
