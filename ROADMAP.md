@@ -563,6 +563,13 @@ Completed this phase (as of 2026-11-16):
   the shared library. A new plan becomes active when no other plan is.
 - Workout logging shipped (PR #73): start the next session from Today, log sets with weight, reps, and RPE,
   resume after the app is closed, finish or discard. Finishing advances the plan to its next day.
+- Swift tests run in CI (PR #75): a mobile-test job runs "swift test" on a macOS runner for every pull
+  request. Until then the test check covered the backend only. On its first run the runner's compiler was
+  older than the one the code was written with, and every test passed. The job is not yet a required check
+  in the branch ruleset.
+- Weight log shipped (PR #76): a fourth tab with the 7 day average and the last 90 days, a form to log a
+  day's weight, and swipe to delete. The server keeps one entry per day, so logging a day again replaces
+  it, and the form says which value will be replaced.
 
 The loop a lifter needs now works end to end on the phone: account, onboarding, plan, workout, next day.
 Each piece was run on the simulator against a local backend before it merged, and three defects were found
@@ -573,20 +580,19 @@ Not yet deployed: production still runs the build from before PR #69. Until it i
 has no refresh tokens and the app falls back to a one hour session.
 
 Remaining in this phase:
-- Weight log (list, add, edit, remove).
 - Goals after onboarding (view and change).
 - Settings: units preference, delete account. Both need API work first (see the gaps below).
 - Editing and deleting a plan; creating a custom exercise.
 - Session history, and progression suggestions with the model preference.
 - During a workout: add or remove an exercise, notes.
-- A macOS CI job that runs the Swift tests. The current test check covers the backend only, so the Swift
-  suite (176 tests at PR #73) has run only on a developer machine.
+- Make the mobile-test job a required check in the branch ruleset (a repository setting), and add a CI
+  build of the app target. The job runs the package tests only (197 at PR #76).
 - Exercise how-to videos: a how-to icon beside an exercise that plays a short generated 3D clip of the
   movement, with the clips served from the existing Hetzner server. Noted 2026-11-15; not started.
 
 API gaps found while building the client:
-- No route to read biometrics back, so the units preference cannot be shown after a relaunch and a set's
-  weight is displayed without a unit.
+- No route to read biometrics back, so the units preference cannot be shown after a relaunch, and a set's
+  weight and a body weight are displayed without a unit.
 - No route for the unfinished workout session. The client reads the whole session list to resume, which
   will slow down as history grows.
 - No update route for a custom exercise, no delete account, no streak, and no profile or notification
