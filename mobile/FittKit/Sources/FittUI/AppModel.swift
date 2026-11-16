@@ -39,11 +39,13 @@ public final class AppModel {
 
     /// Restores the session from the Keychain on launch.
     public func start() async {
-        guard let token = try? tokenStore.read(),
-              let claims = try? TokenClaims(token: token),
-              !claims.isExpired(at: now())
+        // An expired access token is fine while a refresh token is stored:
+        // the backend client renews it on the first request.
+        guard let tokens = try? tokenStore.read(),
+              let claims = try? TokenClaims(token: tokens.accessToken),
+              tokens.refreshToken != nil || !claims.isExpired(at: now())
         else {
-            signOut()
+            endSession()
             return
         }
         phase = .signedIn(userId: claims.userId)
@@ -63,7 +65,19 @@ public final class AppModel {
         await authenticate { try await self.backend.register(Credentials(email: email, password: password)) }
     }
 
-    public func signOut() {
+    /// The user chose to sign out. The device forgets the session first, so the
+    /// screen changes at once, then the server is told to end the login. That
+    /// call is best effort: offline, the refresh token simply expires unused.
+    public func signOut() async {
+        let refreshToken = (try? tokenStore.read())?.refreshToken
+        endSession()
+        if let refreshToken {
+            try? await backend.logout(refreshToken: refreshToken)
+        }
+    }
+
+    /// Forgets the session on this device and shows the sign-in screen.
+    private func endSession() {
         try? tokenStore.clear()
         onboarding = nil
         maintenanceCalories = nil
@@ -131,14 +145,14 @@ public final class AppModel {
         fieldErrors = [:]
     }
 
-    private func authenticate(_ request: () async throws -> String) async {
+    private func authenticate(_ request: () async throws -> SessionTokens) async {
         clearErrors()
         isWorking = true
         defer { isWorking = false }
         do {
-            let token = try await request()
-            let claims = try TokenClaims(token: token)
-            try tokenStore.save(token)
+            let tokens = try await request()
+            let claims = try TokenClaims(token: tokens.accessToken)
+            try tokenStore.save(tokens)
             phase = .signedIn(userId: claims.userId)
             await loadOnboardingStatus(userId: claims.userId)
         } catch let error as BackendError {
@@ -185,8 +199,9 @@ public final class AppModel {
             if duringSignIn {
                 errorMessage = "Email or password is incorrect."
             } else {
-                // The token was rejected. The session is over; send the user to sign in.
-                signOut()
+                // The token was rejected and could not be renewed. The session is
+                // over; send the user to sign in.
+                endSession()
                 errorMessage = "Your session ended. Sign in again."
             }
         case .rateLimited(let retryAfter):

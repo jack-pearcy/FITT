@@ -19,26 +19,39 @@ public enum BackendError: Error, Equatable, Sendable {
 
 /// Every call the app makes to the FITT API goes through this type.
 public struct Backend: Sendable {
-    private let config: BackendConfig
+    private let transport: Transport
     private let tokenStore: any TokenStore
-    private let session: URLSession
+    private let refresher: TokenRefresher
+    private let now: @Sendable () -> Date
 
-    public init(config: BackendConfig, tokenStore: any TokenStore, session: URLSession = .shared) {
-        self.config = config
+    public init(
+        config: BackendConfig,
+        tokenStore: any TokenStore,
+        session: URLSession = .shared,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
+        let transport = Transport(config: config, session: session)
+        self.transport = transport
         self.tokenStore = tokenStore
-        self.session = session
+        self.refresher = TokenRefresher(transport: transport, tokenStore: tokenStore)
+        self.now = now
     }
 
     // MARK: Auth
 
-    public func login(_ credentials: Credentials) async throws -> String {
+    public func login(_ credentials: Credentials) async throws -> SessionTokens {
         let response: TokenResponse = try await send("POST", "/api/identity/auth/login", body: credentials, authenticated: false)
-        return response.token
+        return SessionTokens(response)
     }
 
-    public func register(_ credentials: Credentials) async throws -> String {
+    public func register(_ credentials: Credentials) async throws -> SessionTokens {
         let response: TokenResponse = try await send("POST", "/api/identity/auth/register", body: credentials, authenticated: false)
-        return response.token
+        return SessionTokens(response)
+    }
+
+    /// Tells the server to end the login this refresh token belongs to.
+    public func logout(refreshToken: String) async throws {
+        _ = try await perform("POST", "/api/identity/auth/logout", body: RefreshRequest(refreshToken: refreshToken), authenticated: false)
     }
 
     // MARK: Onboarding
@@ -91,54 +104,42 @@ public struct Backend: Sendable {
     }
 
     /// Sends one request and returns the body of a 2xx response. Anything else throws a `BackendError`.
+    ///
+    /// For an authenticated route this also keeps the session alive: an access
+    /// token that has expired is renewed first, and one the server rejects is
+    /// renewed and the request sent once more. A 401 means the server did nothing
+    /// with the request, so sending it again is safe even for a write.
     private func perform(
         _ method: String,
         _ path: String,
         body: (some Encodable)?,
         authenticated: Bool
     ) async throws -> Data {
-        var request = URLRequest(url: config.baseURL.appending(path: path))
-        request.httpMethod = method
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        // The server logs this id with every line it writes for the request.
-        request.setValue(UUID().uuidString, forHTTPHeaderField: "X-Request-ID")
-
-        if let body {
-            request.httpBody = try JSONEncoder().encode(body)
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        }
+        let bodyData = try body.map { try JSONEncoder().encode($0) }
         // The auth routes never get the token: a stale one would be rejected
         // before the credentials are even looked at.
-        if authenticated, let token = try? tokenStore.read() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        guard authenticated else {
+            return try await transport.send(method, path, body: bodyData, accessToken: nil)
         }
 
-        let data: Data
-        let response: URLResponse
+        var tokens = try? tokenStore.read()
+        if let current = tokens, current.refreshToken != nil, isExpired(current.accessToken) {
+            tokens = try await refresher.refresh(replacing: current.accessToken)
+        }
         do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            throw BackendError.transport
+            return try await transport.send(method, path, body: bodyData, accessToken: tokens?.accessToken)
+        } catch BackendError.unauthorized {
+            guard let rejected = tokens, rejected.refreshToken != nil else {
+                throw BackendError.unauthorized
+            }
+            let renewed = try await refresher.refresh(replacing: rejected.accessToken)
+            return try await transport.send(method, path, body: bodyData, accessToken: renewed.accessToken)
         }
-        guard let http = response as? HTTPURLResponse else { throw BackendError.transport }
-
-        guard (200..<300).contains(http.statusCode) else {
-            throw Self.error(status: http.statusCode, headers: http, body: data)
-        }
-        return data
     }
 
-    private static func error(status: Int, headers: HTTPURLResponse, body: Data) -> BackendError {
-        switch status {
-        case 401:
-            return .unauthorized
-        case 429:
-            return .rateLimited(retryAfter: headers.value(forHTTPHeaderField: "Retry-After").flatMap(Int.init))
-        default:
-            if let problem = try? JSONDecoder().decode(APIProblem.self, from: body) {
-                return .problem(status: status, problem)
-            }
-            return .unexpectedStatus(status)
-        }
+    /// False for a token that cannot be read, so the server gets to judge it.
+    private func isExpired(_ accessToken: String) -> Bool {
+        guard let claims = try? TokenClaims(token: accessToken) else { return false }
+        return claims.isExpired(at: now())
     }
 }
