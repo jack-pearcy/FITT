@@ -76,6 +76,23 @@ public struct Backend: Sendable {
         try await post("/api/users/\(userId)/identity/goals", body: goals)
     }
 
+    // MARK: Workouts
+
+    /// What to train next, from the active plan and the sessions finished so far.
+    public func nextLift(userId: Int64) async throws -> NextLift {
+        try await get("/api/users/\(userId)/next-lift")
+    }
+
+    public func workoutPlans(userId: Int64) async throws -> [WorkoutPlan] {
+        try await get("/api/users/\(userId)/workout-plans")
+    }
+
+    /// Makes this the active plan. The server deactivates the previous one and
+    /// returns the plan as it now stands.
+    public func activatePlan(_ planId: Int64, userId: Int64) async throws -> WorkoutPlan {
+        try await send("POST", "/api/users/\(userId)/workout-plans/\(planId)/activate", body: nil as NoBody?, authenticated: true)
+    }
+
     // MARK: Transport
 
     private struct NoBody: Encodable {}
