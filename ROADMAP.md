@@ -352,7 +352,7 @@ Outcome: a complete, production-grade CI/CD setup with a live HTTPS deployment.
 
 ---
 
-## Phase 20 — Polish and Portfolio Readiness (In Progress)
+## Phase 20 — Polish and Portfolio Readiness (Complete)
 
 STRATEGIC DECISION (resolved 2026-06-07, governs this whole phase): the sequencing question is answered —
 iOS informs Phase 20. The Angular web app is a COMPLETE THROWAWAY, kept only as a working test harness to
@@ -445,10 +445,16 @@ Completed this phase:
   host, stateful). SSH password authentication, found enabled on port 22, was disabled, so
   SSH is keys-only. Verified live (SSH through the edge, HTTPS 200 from Caddy with h3).
 
-Remaining in this phase (backend and infra, client-agnostic):
-- Cross-group compound classifications in the seed (deadlift, RDL, shrug, face pull, step
-  up): keep a single primary-mover muscle group per exercise, or move to multi-group, which
-  is a schema change. The last pre-iOS front; decided and implemented when picked up.
+- Second full audit and remediation shipped (2026-11-15, PR #51): framework errors keep their
+  4xx status instead of falling into the catch-all 500, every request field is bounded to its
+  column size, emails are normalized, an auth rate limiter and security headers were added,
+  owner-scoped indexes went in as Flyway V4, and Dependabot was enabled. Backend at 193 tests,
+  frontend at 91.
+
+Deferred out of this phase (decided 2026-10-22, revisit after the iOS app is in real use):
+- Cross-group compound classifications in the seed (deadlift, step up): keep a single
+  primary-mover muscle group per exercise, or move to multi-group, which is a schema change.
+  Decided from how browsing by muscle group feels on the device, not ahead of it.
 
 Shipped since this list was last written (now in Completed this phase above): CORE enum plus
 the V3 core-exercise seed, conventional PR-title enforcement, the Hetzner cloud firewall plus
@@ -526,9 +532,13 @@ backend topics, since frontend is the weaker side.
 
 ---
 
-## Phase 21 — Mobile (iOS)
+## Phase 21 — Mobile (iOS) (In Progress)
 
 Native iOS client consuming the same backend API.
+
+Started 2026-11-15. The client lives under /mobile: a Swift package split into a plain-Swift
+core (rules and API models, unit tested) and a UI module (one backend client, one app model,
+the screens), a thin app target, and an XcodeGen project spec. iOS 17 or later.
 
 SwiftUI native design for mobile form factor. Workout logging, weight log, goals, and onboarding.
 Secure API integration with JWT. Designed specifically for iOS interaction patterns.
