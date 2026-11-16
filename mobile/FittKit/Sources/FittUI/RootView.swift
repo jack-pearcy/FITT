@@ -20,8 +20,8 @@ public struct RootView: View {
                 ProgressView()
             case .signedOut:
                 SignInView()
-            case .signedIn(let userId):
-                SignedInView(userId: userId)
+            case .signedIn:
+                SignedInView()
             }
         }
         .environment(model)
@@ -32,29 +32,31 @@ public struct RootView: View {
 /// Chooses the screen for a signed-in user from what the server says is done.
 private struct SignedInView: View {
     @Environment(AppModel.self) private var model
-    let userId: Int64
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if let onboarding = model.onboarding {
-                    if !onboarding.biometricsComplete {
-                        BiometricsStepView()
-                    } else if !onboarding.goalsComplete {
-                        GoalsStepView()
+        if model.onboarding?.onboardingComplete == true {
+            HomeView()
+        } else {
+            // Onboarding has no tabs, so it carries its own way out.
+            NavigationStack {
+                Group {
+                    if let onboarding = model.onboarding {
+                        if onboarding.biometricsComplete {
+                            GoalsStepView()
+                        } else {
+                            BiometricsStepView()
+                        }
                     } else {
-                        HomePlaceholderView(userId: userId)
+                        OnboardingUnknownView()
                     }
-                } else {
-                    OnboardingUnknownView()
                 }
-            }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Sign Out") {
-                        Task { await model.signOut() }
-                    }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Sign Out") {
+                            Task { await model.signOut() }
+                        }
                         .accessibilityIdentifier("signOut")
+                    }
                 }
             }
         }
@@ -81,18 +83,5 @@ private struct OnboardingUnknownView: View {
         } else {
             ProgressView()
         }
-    }
-}
-
-/// Stands in for the main tabs until those screens exist.
-private struct HomePlaceholderView: View {
-    let userId: Int64
-
-    var body: some View {
-        List {
-            LabeledContent("User id", value: String(userId))
-            LabeledContent("Onboarding", value: "Complete")
-        }
-        .navigationTitle("FITT")
     }
 }
