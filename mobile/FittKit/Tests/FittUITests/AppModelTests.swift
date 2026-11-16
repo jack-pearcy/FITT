@@ -193,4 +193,185 @@ struct AppModelTests {
         #expect(model.phase == .signedOut)
         #expect(store.read() == nil)
     }
+
+    // MARK: Onboarding
+
+    private func status(biometrics: Bool, goals: Bool) -> String {
+        #"{"biometricsComplete":\#(biometrics),"goalsComplete":\#(goals),"onboardingComplete":\#(biometrics && goals)}"#
+    }
+
+    /// A signed-in model whose server reports the given steps as done until told otherwise.
+    private func signedInModel(_ server: StubServer, biometrics: Bool, goals: Bool) async -> AppModel {
+        let initial = status(biometrics: biometrics, goals: goals)
+        server.respond { _ in .json(200, initial) }
+        let store = InMemoryTokenStore(token: makeToken(userId: 7, expiresAt: now.addingTimeInterval(600)))
+        let model = model(server, store: store)
+        await model.start()
+        return model
+    }
+
+    private func validBiometrics() -> BiometricsDraft {
+        var draft = BiometricsDraft()
+        draft.units = .imperial
+        draft.feet = "5"
+        draft.inches = "10"
+        draft.weight = "180"
+        draft.sex = .male
+        draft.activity = .active
+        return draft
+    }
+
+    @Test("saving biometrics posts them, then reads the status back")
+    func saveBiometricsAdvances() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: false, goals: false)
+        let after = status(biometrics: true, goals: false)
+        server.respond { request in
+            request.method == "POST" ? StubResponse(status: 204) : .json(200, after)
+        }
+
+        await model.saveBiometrics(validBiometrics())
+
+        #expect(model.onboarding == OnboardingStatus(biometricsComplete: true, goalsComplete: false, onboardingComplete: false))
+        #expect(model.units == .imperial)
+        #expect(model.fieldErrors.isEmpty)
+        #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
+        #expect(server.requests.dropFirst().map(\.path) == [
+            "/api/users/7/identity/onboarding/biometrics",
+            "/api/users/7/identity/onboarding/status",
+        ])
+    }
+
+    @Test("an invalid biometrics draft shows field errors without calling the server")
+    func saveBiometricsValidatesFirst() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: false, goals: false)
+
+        await model.saveBiometrics(BiometricsDraft())
+
+        #expect(model.fieldErrors["heightCm"] != nil)
+        #expect(model.fieldErrors["biologicalSex"] != nil)
+        #expect(server.requests.count == 1)
+    }
+
+    @Test("a date of birth of today is rejected using the model's clock")
+    func saveBiometricsUsesClock() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: false, goals: false)
+        var draft = validBiometrics()
+        draft.dateOfBirth = CalendarDate(now)
+
+        await model.saveBiometrics(draft)
+
+        #expect(model.fieldErrors == ["dateOfBirth": "Date of birth must be in the past"])
+    }
+
+    @Test("a server validation failure on biometrics lands on the field and keeps the step")
+    func saveBiometricsServerRejects() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: false, goals: false)
+        server.respond { _ in
+            .json(400, #"{"status":400,"detail":"Validation failed","properties":{"errors":{"weightKg":"Weight must be 700 kg or less"}}}"#)
+        }
+
+        await model.saveBiometrics(validBiometrics())
+
+        #expect(model.fieldErrors == ["weightKg": "Weight must be 700 kg or less"])
+        #expect(model.onboarding?.biometricsComplete == false)
+        #expect(model.units == .metric)
+    }
+
+    @Test("saving goals completes onboarding")
+    func saveGoalsCompletes() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: false)
+        let after = status(biometrics: true, goals: true)
+        server.respond { request in
+            request.method == "POST" ? StubResponse(status: 204) : .json(200, after)
+        }
+        var draft = GoalsDraft()
+        draft.direction = .cut
+
+        await model.saveGoals(draft)
+
+        #expect(model.onboardingComplete == true)
+        #expect(server.requests.dropFirst().map(\.path) == ["/api/users/7/identity/goals", "/api/users/7/identity/onboarding/status"])
+    }
+
+    @Test("a goals draft with no direction is stopped on the device")
+    func saveGoalsValidatesFirst() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: false)
+
+        await model.saveGoals(GoalsDraft())
+
+        #expect(model.fieldErrors == ["goalDirection": "Choose one"])
+        #expect(server.requests.count == 1)
+    }
+
+    @Test("a save that cannot reach the server reports the connection and keeps the step")
+    func saveOffline() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: false, goals: false)
+        server.respond(nil)
+
+        await model.saveBiometrics(validBiometrics())
+
+        #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+        #expect(model.phase == .signedIn(userId: 7))
+        #expect(model.onboarding?.biometricsComplete == false)
+    }
+
+    @Test("a save with a rejected token ends the session")
+    func saveUnauthorized() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: false)
+        server.respond { _ in .json(401, #"{"status":401}"#) }
+        var draft = GoalsDraft()
+        draft.direction = .bulk
+
+        await model.saveGoals(draft)
+
+        #expect(model.phase == .signedOut)
+        #expect(model.errorMessage == "Your session ended. Sign in again.")
+    }
+
+    @Test("maintenance calories load for the goals step")
+    func loadsMaintenanceCalories() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: false)
+        server.respond { _ in .json(200, #"{"tdee":2630}"#) }
+
+        await model.loadMaintenanceCalories()
+
+        #expect(model.maintenanceCalories == 2630)
+    }
+
+    @Test("retrying after an offline launch loads the status")
+    func refreshAfterOffline() async {
+        let server = StubServer()
+        server.respond(nil)
+        let store = InMemoryTokenStore(token: makeToken(userId: 7, expiresAt: now.addingTimeInterval(600)))
+        let model = model(server, store: store)
+        await model.start()
+        let onboardingDone = onboardingDone
+        server.respond { _ in .json(200, onboardingDone) }
+
+        await model.refreshOnboarding()
+
+        #expect(model.onboardingComplete == true)
+        #expect(model.errorMessage == nil)
+    }
+
+    @Test("sign out forgets onboarding state")
+    func signOutResetsOnboarding() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+
+        model.signOut()
+
+        #expect(model.onboarding == nil)
+        #expect(model.maintenanceCalories == nil)
+    }
 }
