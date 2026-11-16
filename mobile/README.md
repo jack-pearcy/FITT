@@ -22,6 +22,9 @@ cd FittKit && swift test        # unit tests for FittCore and FittUI
 xcodegen && open FITT.xcodeproj # generate and open the Xcode project
 ```
 
+CI runs `swift test` on a macOS runner for every pull request (the `mobile-test` job in
+`.github/workflows/ci.yml`).
+
 ## Running against a local backend
 
 The app talks to https://fittapp.dev by default. A debug build reads `FITT_API_BASE_URL`,
