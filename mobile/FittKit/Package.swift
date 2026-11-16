@@ -15,5 +15,7 @@ let package = Package(
         // The backend client, the app model, and the SwiftUI screens.
         .target(name: "FittUI", dependencies: ["FittCore"]),
         .testTarget(name: "FittCoreTests", dependencies: ["FittCore"]),
+        // Backend and AppModel against a stubbed URLSession. No network, no Keychain.
+        .testTarget(name: "FittUITests", dependencies: ["FittUI", "FittCore"]),
     ]
 )
