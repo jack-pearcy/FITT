@@ -532,9 +532,13 @@ backend topics, since frontend is the weaker side.
 
 ---
 
-## Phase 21 — Mobile (iOS)
+## Phase 21 — Mobile (iOS) (In Progress)
 
 Native iOS client consuming the same backend API.
+
+Started 2026-11-15. The client lives under /mobile: a Swift package split into a plain-Swift
+core (rules and API models, unit tested) and a UI module (one backend client, one app model,
+the screens), a thin app target, and an XcodeGen project spec. iOS 17 or later.
 
 SwiftUI native design for mobile form factor. Workout logging, weight log, goals, and onboarding.
 Secure API integration with JWT. Designed specifically for iOS interaction patterns.
