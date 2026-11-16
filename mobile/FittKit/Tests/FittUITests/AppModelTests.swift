@@ -576,4 +576,134 @@ struct AppModelTests {
         #expect(model.plans == nil)
         #expect(model.nextLift == nil)
     }
+
+    // MARK: Creating a plan
+
+    private func namedDraft(_ name: String = "Full Body") -> PlanDraft {
+        var draft = PlanDraft(splitType: .fullBody)
+        draft.name = name
+        return draft
+    }
+
+    @Test("exercises load for the picker")
+    func loadsExercises() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in .json(200, #"[{"id":38,"name":"Back Squat","muscleGroup":"LEGS","custom":false}]"#) }
+
+        await model.loadExercises()
+
+        #expect(model.exercises?.map(\.name) == ["Back Squat"])
+    }
+
+    @Test("a first plan is created, made active, and shown")
+    func createFirstPlanActivatesIt() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let created = planJSON(id: 9, name: "Full Body", active: false)
+        let activated = planJSON(id: 9, name: "Full Body", active: true)
+        let next = nextLiftJSON(planId: 9, planName: "Full Body")
+        let isActive = Locked(false)
+        server.respond { request in
+            if request.path.hasSuffix("/activate") {
+                isActive.withLock { $0 = true }
+                return .json(200, activated)
+            }
+            if request.method == "POST" { return .json(201, created) }
+            if request.path.hasSuffix("/next-lift") { return .json(200, next) }
+            return .json(200, "[\(isActive.withLock { $0 } ? activated : created)]")
+        }
+
+        let saved = await model.createPlan(namedDraft())
+
+        #expect(saved)
+        #expect(model.plans?.map(\.active) == [true])
+        #expect(model.nextLift?.planId == 9)
+        #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
+        #expect(server.requests.dropFirst().map { "\($0.method) \($0.path)" } == [
+            "POST /api/users/7/workout-plans",
+            "GET /api/users/7/workout-plans",
+            "POST /api/users/7/workout-plans/9/activate",
+            "GET /api/users/7/workout-plans",
+            "GET /api/users/7/next-lift",
+        ])
+    }
+
+    @Test("a plan created next to an active one is left inactive")
+    func createSecondPlanDoesNotActivate() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let created = planJSON(id: 9, name: "Full Body", active: false)
+        let plans = "[\(planJSON(id: 3, name: "Upper Lower", active: true)),\(created)]"
+        let next = nextLiftJSON(planId: 3, planName: "Upper Lower")
+        server.respond { request in
+            if request.method == "POST" { return .json(201, created) }
+            return request.path.hasSuffix("/next-lift") ? .json(200, next) : .json(200, plans)
+        }
+
+        let saved = await model.createPlan(namedDraft())
+
+        #expect(saved)
+        #expect(model.plans?.first(where: \.active)?.id == 3)
+        #expect(!server.requests.contains { $0.path.hasSuffix("/activate") })
+    }
+
+    @Test("a draft with no name is stopped on the device")
+    func createPlanValidatesFirst() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+
+        let saved = await model.createPlan(PlanDraft(splitType: .fullBody))
+
+        #expect(!saved)
+        #expect(model.fieldErrors == ["name": "Plan name is required"])
+        #expect(server.requests.count == 1)
+    }
+
+    @Test("a server validation failure keeps the form open with the field message")
+    func createPlanServerRejects() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in
+            .json(400, #"{"status":400,"detail":"Validation failed","properties":{"errors":{"days[0].dayLabel":"Day label is required"}}}"#)
+        }
+
+        let saved = await model.createPlan(namedDraft())
+
+        #expect(!saved)
+        #expect(model.fieldErrors == ["days[0].dayLabel": "Day label is required"])
+        #expect(model.plans == nil)
+    }
+
+    @Test("a create that cannot reach the server keeps the form open")
+    func createPlanOffline() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond(nil)
+
+        let saved = await model.createPlan(namedDraft())
+
+        #expect(!saved)
+        #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+    }
+
+    @Test("a plan that saves but cannot be activated still closes the form and says why")
+    func createPlanActivationFails() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let created = planJSON(id: 9, name: "Full Body", active: false)
+        let next = #"{"hasActivePlan":false,"planId":null,"planName":null,"daysInRotation":0,"dayNumber":0,"weekInCycle":1,"deload":false,"alreadyTrainedToday":false,"day":null}"#
+        server.respond { request in
+            if request.path.hasSuffix("/activate") { return .json(500, #"{"status":500,"detail":"Unexpected error"}"#) }
+            if request.method == "POST" { return .json(201, created) }
+            return request.path.hasSuffix("/next-lift") ? .json(200, next) : .json(200, "[\(created)]")
+        }
+
+        let saved = await model.createPlan(namedDraft())
+
+        #expect(saved)
+        #expect(model.plans?.map(\.id) == [9])
+        #expect(model.errorMessage == "Unexpected error")
+    }
 }
