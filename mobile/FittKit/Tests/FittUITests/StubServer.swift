@@ -42,8 +42,11 @@ final class StubServer: Sendable {
         StubProtocol.state.withLock { $0.requests[host] ?? [] }
     }
 
-    func backend(tokenStore: any TokenStore = InMemoryTokenStore()) -> Backend {
-        Backend(config: config, tokenStore: tokenStore, session: session)
+    func backend(
+        tokenStore: any TokenStore = InMemoryTokenStore(),
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) -> Backend {
+        Backend(config: config, tokenStore: tokenStore, session: session, now: now)
     }
 }
 

@@ -29,7 +29,7 @@ struct AppModelTests {
 
         #expect(model.phase == .signedIn(userId: 10))
         #expect(model.onboardingComplete == true)
-        #expect(store.read() == token)
+        #expect(store.read()?.accessToken == token)
         #expect(model.errorMessage == nil)
         #expect(!model.isWorking)
         #expect(server.requests.map(\.path) == ["/api/identity/auth/login", "/api/users/10/identity/onboarding/status"])
@@ -53,8 +53,8 @@ struct AppModelTests {
     @Test("a token that cannot be stored is reported as a device problem")
     func signInCannotStoreToken() async {
         struct FailingStore: TokenStore {
-            func read() throws -> String? { nil }
-            func save(_ token: String) throws { throw KeychainError(status: -34018) }
+            func read() throws -> SessionTokens? { nil }
+            func save(_ tokens: SessionTokens) throws { throw KeychainError(status: -34018) }
             func clear() throws {}
         }
         let server = StubServer()
@@ -188,7 +188,7 @@ struct AppModelTests {
         let store = InMemoryTokenStore(token: "anything")
         let model = model(StubServer(), store: store)
 
-        model.signOut()
+        await model.signOut()
 
         #expect(model.phase == .signedOut)
         #expect(store.read() == nil)
@@ -369,9 +369,102 @@ struct AppModelTests {
         let server = StubServer()
         let model = await signedInModel(server, biometrics: true, goals: true)
 
-        model.signOut()
+        await model.signOut()
 
         #expect(model.onboarding == nil)
         #expect(model.maintenanceCalories == nil)
+    }
+
+    // MARK: Refresh
+
+    @Test("sign in keeps the refresh token with the access token")
+    func signInStoresRefreshToken() async {
+        let server = StubServer()
+        let token = makeToken(userId: 10, expiresAt: now.addingTimeInterval(3600))
+        let onboardingDone = onboardingDone
+        server.respond { request in
+            request.path.hasSuffix("/login") ? .json(200, #"{"token":"\#(token)","refreshToken":"refresh-1"}"#) : .json(200, onboardingDone)
+        }
+        let store = InMemoryTokenStore()
+        let model = model(server, store: store)
+
+        await model.signIn(email: "lifter@example.com", password: "a-long-test-password")
+
+        #expect(store.read() == SessionTokens(accessToken: token, refreshToken: "refresh-1"))
+    }
+
+    @Test("launch with an expired access token and a refresh token restores the session")
+    func startRefreshesExpiredSession() async {
+        let server = StubServer()
+        let now = now
+        let fresh = makeToken(userId: 7, expiresAt: now.addingTimeInterval(3600))
+        let onboardingDone = onboardingDone
+        server.respond { request in
+            request.path.hasSuffix("/refresh") ? .json(200, #"{"token":"\#(fresh)","refreshToken":"refresh-2"}"#) : .json(200, onboardingDone)
+        }
+        let store = InMemoryTokenStore(token: makeToken(userId: 7, expiresAt: now.addingTimeInterval(-3600)), refreshToken: "refresh-1")
+        let model = AppModel(backend: server.backend(tokenStore: store, now: { now }), tokenStore: store, now: { now })
+
+        await model.start()
+
+        #expect(model.phase == .signedIn(userId: 7))
+        #expect(model.onboardingComplete == true)
+        #expect(model.errorMessage == nil)
+        #expect(store.read() == SessionTokens(accessToken: fresh, refreshToken: "refresh-2"))
+    }
+
+    @Test("launch with a refresh token the server no longer accepts signs out")
+    func startWithDeadRefreshToken() async {
+        let server = StubServer()
+        let now = now
+        server.respond { _ in .json(401, #"{"status":401}"#) }
+        let store = InMemoryTokenStore(token: makeToken(userId: 7, expiresAt: now.addingTimeInterval(-3600)), refreshToken: "refresh-1")
+        let model = AppModel(backend: server.backend(tokenStore: store, now: { now }), tokenStore: store, now: { now })
+
+        await model.start()
+
+        #expect(model.phase == .signedOut)
+        #expect(model.errorMessage == "Your session ended. Sign in again.")
+        #expect(store.read() == nil)
+        #expect(server.requests.map(\.path) == ["/api/identity/auth/refresh"])
+    }
+
+    @Test("sign out tells the server to end the login")
+    func signOutRevokesRefreshToken() async throws {
+        let server = StubServer()
+        server.respond { _ in StubResponse(status: 204) }
+        let store = InMemoryTokenStore(token: "access-1", refreshToken: "refresh-1")
+        let model = model(server, store: store)
+
+        await model.signOut()
+
+        let request = try #require(server.requests.first)
+        #expect(request.path == "/api/identity/auth/logout")
+        #expect(try JSONSerialization.jsonObject(with: request.body) as? [String: String] == ["refreshToken": "refresh-1"])
+        #expect(store.read() == nil)
+    }
+
+    @Test("sign out while offline still signs out on the device")
+    func signOutOffline() async {
+        let server = StubServer()
+        server.respond(nil)
+        let store = InMemoryTokenStore(token: "access-1", refreshToken: "refresh-1")
+        let model = model(server, store: store)
+
+        await model.signOut()
+
+        #expect(model.phase == .signedOut)
+        #expect(model.errorMessage == nil)
+        #expect(store.read() == nil)
+    }
+
+    @Test("sign out with no refresh token makes no request")
+    func signOutWithoutRefreshToken() async {
+        let server = StubServer()
+        let model = model(server, store: InMemoryTokenStore(token: "access-1"))
+
+        await model.signOut()
+
+        #expect(server.requests.isEmpty)
     }
 }

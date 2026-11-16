@@ -34,4 +34,28 @@ struct AuthModelsTests {
         #expect(PasswordRule.problem(with: String(repeating: "a", count: 72)) == nil)
         #expect(PasswordRule.problem(with: String(repeating: "\u{20AC}", count: 25)) != nil)
     }
+
+    @Test("a token response without a refresh token still decodes")
+    func decodesResponseWithoutRefreshToken() throws {
+        let response = try JSONDecoder().decode(TokenResponse.self, from: Data(#"{"token":"a.b.c"}"#.utf8))
+
+        #expect(response == TokenResponse(token: "a.b.c", refreshToken: nil))
+    }
+
+    @Test("stored tokens round trip")
+    func storedTokensRoundTrip() throws {
+        let tokens = SessionTokens(accessToken: "a.b.c", refreshToken: "refresh-1")
+
+        #expect(SessionTokens(storedData: try tokens.storedData()) == tokens)
+    }
+
+    @Test("a bare access token stored by an older build reads as a session with no refresh token")
+    func readsLegacyStoredToken() {
+        #expect(SessionTokens(storedData: Data("a.b.c".utf8)) == SessionTokens(accessToken: "a.b.c"))
+    }
+
+    @Test("empty stored data is no session")
+    func emptyStoredData() {
+        #expect(SessionTokens(storedData: Data()) == nil)
+    }
 }

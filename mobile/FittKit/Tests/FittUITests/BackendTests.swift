@@ -12,9 +12,9 @@ struct BackendTests {
         let server = StubServer()
         server.respond { _ in .json(200, #"{"token":"abc.def.ghi"}"#) }
 
-        let token = try await server.backend().login(credentials)
+        let tokens = try await server.backend().login(credentials)
 
-        #expect(token == "abc.def.ghi")
+        #expect(tokens == SessionTokens(accessToken: "abc.def.ghi"))
         let request = try #require(server.requests.first)
         #expect(request.method == "POST")
         #expect(request.path == "/api/identity/auth/login")
@@ -28,7 +28,7 @@ struct BackendTests {
         let server = StubServer()
         server.respond { _ in .json(201, #"{"token":"abc.def.ghi"}"#) }
 
-        #expect(try await server.backend().register(credentials) == "abc.def.ghi")
+        #expect(try await server.backend().register(credentials).accessToken == "abc.def.ghi")
         #expect(server.requests.first?.path == "/api/identity/auth/register")
     }
 
@@ -190,5 +190,185 @@ struct BackendTests {
 
         #expect(try await server.backend().maintenanceCalories(userId: 10) == 2630)
         #expect(server.requests.first?.path == "/api/users/10/identity/onboarding/tdee")
+    }
+
+    // MARK: Refresh
+
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+    private let statusBody = #"{"biometricsComplete":true,"goalsComplete":true,"onboardingComplete":true}"#
+
+    private func pair(_ access: String, _ refresh: String) -> String {
+        #"{"token":"\#(access)","refreshToken":"\#(refresh)"}"#
+    }
+
+    @Test("login returns the refresh token with the access token")
+    func loginReturnsRefreshToken() async throws {
+        let server = StubServer()
+        let body = pair("access-1", "refresh-1")
+        server.respond { _ in .json(200, body) }
+
+        #expect(try await server.backend().login(credentials) == SessionTokens(accessToken: "access-1", refreshToken: "refresh-1"))
+    }
+
+    @Test("an expired access token is renewed before the request is sent")
+    func refreshesExpiredTokenFirst() async throws {
+        let server = StubServer()
+        let now = now
+        let expired = makeToken(userId: 10, expiresAt: now.addingTimeInterval(-60))
+        let fresh = makeToken(userId: 10, expiresAt: now.addingTimeInterval(3600))
+        let renewed = pair(fresh, "refresh-2")
+        let statusBody = statusBody
+        server.respond { request in
+            request.path.hasSuffix("/refresh") ? .json(200, renewed) : .json(200, statusBody)
+        }
+        let store = InMemoryTokenStore(token: expired, refreshToken: "refresh-1")
+
+        _ = try await server.backend(tokenStore: store, now: { now }).onboardingStatus(userId: 10)
+
+        #expect(server.requests.map(\.path) == ["/api/identity/auth/refresh", "/api/users/10/identity/onboarding/status"])
+        let refresh = try #require(server.requests.first)
+        #expect(refresh.headers["Authorization"] == nil)
+        #expect(try JSONSerialization.jsonObject(with: refresh.body) as? [String: String] == ["refreshToken": "refresh-1"])
+        #expect(server.requests.last?.headers["Authorization"] == "Bearer \(fresh)")
+        #expect(store.read() == SessionTokens(accessToken: fresh, refreshToken: "refresh-2"))
+    }
+
+    @Test("a 401 on a user route renews the token and sends the request once more")
+    func retriesAfterUnauthorized() async throws {
+        let server = StubServer()
+        let renewed = pair("access-2", "refresh-2")
+        let statusBody = statusBody
+        server.respond { request in
+            if request.path.hasSuffix("/refresh") { return .json(200, renewed) }
+            return request.headers["Authorization"] == "Bearer access-2" ? .json(200, statusBody) : .json(401, #"{"status":401}"#)
+        }
+        let store = InMemoryTokenStore(token: "access-1", refreshToken: "refresh-1")
+
+        let status = try await server.backend(tokenStore: store).onboardingStatus(userId: 10)
+
+        #expect(status.onboardingComplete)
+        #expect(server.requests.map(\.path) == [
+            "/api/users/10/identity/onboarding/status",
+            "/api/identity/auth/refresh",
+            "/api/users/10/identity/onboarding/status",
+        ])
+        #expect(store.read() == SessionTokens(accessToken: "access-2", refreshToken: "refresh-2"))
+    }
+
+    @Test("a write that gets a 401 is sent again with the same body")
+    func retriesWriteWithBody() async throws {
+        let server = StubServer()
+        let renewed = pair("access-2", "refresh-2")
+        server.respond { request in
+            if request.path.hasSuffix("/refresh") { return .json(200, renewed) }
+            return request.headers["Authorization"] == "Bearer access-2" ? StubResponse(status: 204) : .json(401, #"{"status":401}"#)
+        }
+        let store = InMemoryTokenStore(token: "access-1", refreshToken: "refresh-1")
+
+        try await server.backend(tokenStore: store).saveGoals(Goals(goalDirection: .cut, calorieGoalMode: .auto), userId: 10)
+
+        let writes = server.requests.filter { $0.path.hasSuffix("/goals") }
+        #expect(writes.count == 2)
+        #expect(writes[0].body == writes[1].body)
+        #expect(!writes[1].body.isEmpty)
+    }
+
+    @Test("a 401 with no refresh token is final")
+    func noRefreshTokenMeansUnauthorized() async {
+        let server = StubServer()
+        server.respond { _ in .json(401, #"{"status":401}"#) }
+        let store = InMemoryTokenStore(token: "access-1")
+
+        await #expect(throws: BackendError.unauthorized) {
+            try await server.backend(tokenStore: store).onboardingStatus(userId: 10)
+        }
+        #expect(server.requests.count == 1)
+    }
+
+    @Test("a request still rejected after a refresh is not sent a third time")
+    func retriesOnlyOnce() async {
+        let server = StubServer()
+        let renewed = pair("access-2", "refresh-2")
+        server.respond { request in
+            request.path.hasSuffix("/refresh") ? .json(200, renewed) : .json(401, #"{"status":401}"#)
+        }
+        let store = InMemoryTokenStore(token: "access-1", refreshToken: "refresh-1")
+
+        await #expect(throws: BackendError.unauthorized) {
+            try await server.backend(tokenStore: store).onboardingStatus(userId: 10)
+        }
+        #expect(server.requests.count == 3)
+    }
+
+    @Test("a rejected refresh token ends the session and is forgotten")
+    func rejectedRefreshClearsTokens() async {
+        let server = StubServer()
+        server.respond { _ in .json(401, #"{"status":401,"title":"Invalid Refresh Token"}"#) }
+        let store = InMemoryTokenStore(token: "access-1", refreshToken: "refresh-1")
+
+        await #expect(throws: BackendError.unauthorized) {
+            try await server.backend(tokenStore: store).onboardingStatus(userId: 10)
+        }
+        #expect(store.read() == nil)
+        #expect(server.requests.map(\.path) == ["/api/users/10/identity/onboarding/status", "/api/identity/auth/refresh"])
+    }
+
+    @Test("a refresh that cannot reach the server keeps the tokens for a later try")
+    func offlineRefreshKeepsTokens() async {
+        let server = StubServer()
+        server.respond(nil)
+        let now = now
+        let expired = makeToken(userId: 10, expiresAt: now.addingTimeInterval(-60))
+        let store = InMemoryTokenStore(token: expired, refreshToken: "refresh-1")
+
+        await #expect(throws: BackendError.transport) {
+            try await server.backend(tokenStore: store, now: { now }).onboardingStatus(userId: 10)
+        }
+        #expect(store.read() == SessionTokens(accessToken: expired, refreshToken: "refresh-1"))
+    }
+
+    @Test("requests that find the token expired together share one refresh")
+    func concurrentRequestsRefreshOnce() async throws {
+        let server = StubServer()
+        let now = now
+        let expired = makeToken(userId: 10, expiresAt: now.addingTimeInterval(-60))
+        let fresh = makeToken(userId: 10, expiresAt: now.addingTimeInterval(3600))
+        let renewed = pair(fresh, "refresh-2")
+        let statusBody = statusBody
+        // A second use of refresh-1 fails, as it does on the real server.
+        let used = Locked(false)
+        server.respond { request in
+            guard request.path.hasSuffix("/refresh") else { return .json(200, statusBody) }
+            let alreadyUsed = used.withLock { value in
+                defer { value = true }
+                return value
+            }
+            return alreadyUsed ? .json(401, #"{"status":401}"#) : .json(200, renewed)
+        }
+        let backend = server.backend(tokenStore: InMemoryTokenStore(token: expired, refreshToken: "refresh-1"), now: { now })
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for _ in 0..<8 {
+                group.addTask { _ = try await backend.onboardingStatus(userId: 10) }
+            }
+            try await group.waitForAll()
+        }
+
+        #expect(server.requests.filter { $0.path.hasSuffix("/refresh") }.count == 1)
+        #expect(server.requests.filter { $0.path.hasSuffix("/status") }.count == 8)
+    }
+
+    @Test("logout posts the refresh token and no access token")
+    func logoutPostsRefreshToken() async throws {
+        let server = StubServer()
+        server.respond { _ in StubResponse(status: 204) }
+
+        try await server.backend(tokenStore: InMemoryTokenStore(token: "access-1", refreshToken: "refresh-1")).logout(refreshToken: "refresh-1")
+
+        let request = try #require(server.requests.first)
+        #expect(request.method == "POST")
+        #expect(request.path == "/api/identity/auth/logout")
+        #expect(request.headers["Authorization"] == nil)
+        #expect(try JSONSerialization.jsonObject(with: request.body) as? [String: String] == ["refreshToken": "refresh-1"])
     }
 }

@@ -13,12 +13,58 @@ public struct Credentials: Encodable, Equatable, Sendable {
     }
 }
 
-/// The response of login and register: the access token and nothing else.
+/// The response of login, register, and refresh.
 public struct TokenResponse: Decodable, Equatable, Sendable {
     public let token: String
+    /// Absent from a server that predates refresh tokens.
+    public let refreshToken: String?
 
-    public init(token: String) {
+    public init(token: String, refreshToken: String? = nil) {
         self.token = token
+        self.refreshToken = refreshToken
+    }
+}
+
+/// The body of `POST /api/identity/auth/refresh` and `/logout`.
+public struct RefreshRequest: Encodable, Equatable, Sendable {
+    public let refreshToken: String
+
+    public init(refreshToken: String) {
+        self.refreshToken = refreshToken
+    }
+}
+
+/// What the app keeps for a signed-in user: the access token sent with every
+/// request, and the refresh token that buys the next pair when it expires.
+public struct SessionTokens: Codable, Equatable, Sendable {
+    public let accessToken: String
+    /// Nil when the server issued none. The session then ends when the access token does.
+    public let refreshToken: String?
+
+    public init(accessToken: String, refreshToken: String? = nil) {
+        self.accessToken = accessToken
+        self.refreshToken = refreshToken
+    }
+
+    public init(_ response: TokenResponse) {
+        self.init(accessToken: response.token, refreshToken: response.refreshToken)
+    }
+
+    /// The bytes written to the Keychain.
+    public func storedData() throws -> Data {
+        try JSONEncoder().encode(self)
+    }
+
+    /// Reads what `storedData()` wrote. A build from before refresh tokens stored
+    /// the bare access token, so anything that is not this JSON is read as that.
+    public init?(storedData: Data) {
+        if let tokens = try? JSONDecoder().decode(SessionTokens.self, from: storedData) {
+            self = tokens
+        } else if let legacy = String(data: storedData, encoding: .utf8), !legacy.isEmpty {
+            self.init(accessToken: legacy)
+        } else {
+            return nil
+        }
     }
 }
 

@@ -1,10 +1,11 @@
+import FittCore
 import Foundation
 import Security
 
-/// Where the access token is kept between launches.
+/// Where the session's tokens are kept between launches.
 public protocol TokenStore: Sendable {
-    func read() throws -> String?
-    func save(_ token: String) throws
+    func read() throws -> SessionTokens?
+    func save(_ tokens: SessionTokens) throws
     func clear() throws
 }
 
@@ -12,7 +13,8 @@ public struct KeychainError: Error, Equatable, Sendable {
     public let status: OSStatus
 }
 
-/// Stores the token as a generic password item in the Keychain.
+/// Stores both tokens together as one generic password item in the Keychain,
+/// so they are always written and removed as a pair.
 ///
 /// The item is readable only while the device is unlocked and never leaves this
 /// device, so it is not restored onto another phone from a backup.
@@ -33,7 +35,7 @@ public struct KeychainTokenStore: TokenStore {
         ]
     }
 
-    public func read() throws -> String? {
+    public func read() throws -> SessionTokens? {
         var query = itemQuery
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -43,15 +45,16 @@ public struct KeychainTokenStore: TokenStore {
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess else { throw KeychainError(status: status) }
         guard let data = result as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
+        return SessionTokens(storedData: data)
     }
 
-    public func save(_ token: String) throws {
+    public func save(_ tokens: SessionTokens) throws {
+        let data = try tokens.storedData()
         // Delete then add, so the accessibility class is always the one set here,
         // including for an item written by an older build.
         try clear()
         var attributes = itemQuery
-        attributes[kSecValueData as String] = Data(token.utf8)
+        attributes[kSecValueData as String] = data
         attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
 
         let status = SecItemAdd(attributes as CFDictionary, nil)
@@ -66,24 +69,24 @@ public struct KeychainTokenStore: TokenStore {
     }
 }
 
-/// Keeps the token in memory only. For previews and tests.
+/// Keeps the tokens in memory only. For previews and tests.
 public final class InMemoryTokenStore: TokenStore, @unchecked Sendable {
     private let lock = NSLock()
-    private var token: String?
+    private var tokens: SessionTokens?
 
-    public init(token: String? = nil) {
-        self.token = token
+    public init(token: String? = nil, refreshToken: String? = nil) {
+        self.tokens = token.map { SessionTokens(accessToken: $0, refreshToken: refreshToken) }
     }
 
-    public func read() -> String? {
-        lock.withLock { token }
+    public func read() -> SessionTokens? {
+        lock.withLock { tokens }
     }
 
-    public func save(_ token: String) {
-        lock.withLock { self.token = token }
+    public func save(_ tokens: SessionTokens) {
+        lock.withLock { self.tokens = tokens }
     }
 
     public func clear() {
-        lock.withLock { token = nil }
+        lock.withLock { tokens = nil }
     }
 }

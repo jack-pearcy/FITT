@@ -51,7 +51,9 @@ private struct SignedInView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Sign Out") { model.signOut() }
+                    Button("Sign Out") {
+                        Task { await model.signOut() }
+                    }
                         .accessibilityIdentifier("signOut")
                 }
             }
