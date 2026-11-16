@@ -1,12 +1,20 @@
 import FittCore
 import SwiftUI
 
-/// The form for a new plan, shown as a sheet over the Plans tab.
-struct NewPlanView: View {
+/// The form for a plan, shown as a sheet: empty for a new plan, or filled in
+/// with a saved plan that is being changed.
+struct PlanFormView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
-    @State private var draft = PlanDraft()
+    /// The id of the plan being changed. Nil for a new plan.
+    private let editingPlanId: Int64?
+    @State private var draft: PlanDraft
+
+    init(editing plan: WorkoutPlan? = nil) {
+        editingPlanId = plan?.id
+        _draft = State(initialValue: plan.map(PlanDraft.init(plan:)) ?? PlanDraft())
+    }
     /// The day an exercise is being picked for, while the picker is open.
     @State private var pickingForDay: UUID?
     @FocusState private var focus: Field?
@@ -84,7 +92,7 @@ struct NewPlanView: View {
                 ErrorSection()
             }
             .scrollDismissesKeyboard(.interactively)
-            .navigationTitle("New Plan")
+            .navigationTitle(editingPlanId == nil ? "New Plan" : "Edit Plan")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -114,7 +122,12 @@ struct NewPlanView: View {
     private func save() {
         focus = nil
         Task {
-            if await model.createPlan(draft) {
+            let saved = if let editingPlanId {
+                await model.updatePlan(editingPlanId, with: draft)
+            } else {
+                await model.createPlan(draft)
+            }
+            if saved {
                 dismiss()
             }
         }
