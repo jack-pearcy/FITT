@@ -8,8 +8,19 @@ struct Transport: Sendable {
     let session: URLSession
 
     /// Returns the body of a 2xx response. Anything else throws a `BackendError`.
-    func send(_ method: String, _ path: String, body: Data?, accessToken: String?) async throws -> Data {
-        var request = URLRequest(url: config.baseURL.appending(path: path))
+    func send(
+        _ method: String,
+        _ path: String,
+        query: [URLQueryItem] = [],
+        body: Data?,
+        accessToken: String?
+    ) async throws -> Data {
+        // Query items are added separately: a "?" inside the path would be percent-encoded.
+        var url = config.baseURL.appending(path: path)
+        if !query.isEmpty {
+            url.append(queryItems: query)
+        }
+        var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         // The server logs this id with every line it writes for the request.

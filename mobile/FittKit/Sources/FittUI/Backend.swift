@@ -137,12 +137,34 @@ public struct Backend: Sendable {
         _ = try await perform("DELETE", "/api/users/\(userId)/workout-sessions/\(sessionId)", body: nil as NoBody?, authenticated: true)
     }
 
+    // MARK: Body weight
+
+    /// Entries from the last `days` days (1 to 365), newest first.
+    public func bodyWeights(userId: Int64, days: Int) async throws -> [BodyWeightEntry] {
+        try await get("/api/users/\(userId)/measurements/weight", query: [URLQueryItem(name: "days", value: String(days))])
+    }
+
+    /// Zero when nothing was logged in the last seven days.
+    public func bodyWeightAverage(userId: Int64) async throws -> Decimal {
+        let response: BodyWeightAverage = try await get("/api/users/\(userId)/measurements/weight/average")
+        return response.average
+    }
+
+    /// Logs a weight for a day, replacing that day's entry if there is one.
+    public func logBodyWeight(_ entry: NewBodyWeight, userId: Int64) async throws -> BodyWeightEntry {
+        try await send("POST", "/api/users/\(userId)/measurements/weight", body: entry, authenticated: true)
+    }
+
+    public func deleteBodyWeight(_ entryId: Int64, userId: Int64) async throws {
+        _ = try await perform("DELETE", "/api/users/\(userId)/measurements/weight/\(entryId)", body: nil as NoBody?, authenticated: true)
+    }
+
     // MARK: Transport
 
     private struct NoBody: Encodable {}
 
-    private func get<Response: Decodable>(_ path: String) async throws -> Response {
-        try await send("GET", path, body: nil as NoBody?, authenticated: true)
+    private func get<Response: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> Response {
+        try await send("GET", path, query: query, body: nil as NoBody?, authenticated: true)
     }
 
     /// For the write routes that answer 204 with no body.
@@ -153,10 +175,11 @@ public struct Backend: Sendable {
     private func send<Response: Decodable>(
         _ method: String,
         _ path: String,
+        query: [URLQueryItem] = [],
         body: (some Encodable)?,
         authenticated: Bool
     ) async throws -> Response {
-        let data = try await perform(method, path, body: body, authenticated: authenticated)
+        let data = try await perform(method, path, query: query, body: body, authenticated: authenticated)
         do {
             return try JSONDecoder().decode(Response.self, from: data)
         } catch {
@@ -173,6 +196,7 @@ public struct Backend: Sendable {
     private func perform(
         _ method: String,
         _ path: String,
+        query: [URLQueryItem] = [],
         body: (some Encodable)?,
         authenticated: Bool
     ) async throws -> Data {
@@ -180,7 +204,7 @@ public struct Backend: Sendable {
         // The auth routes never get the token: a stale one would be rejected
         // before the credentials are even looked at.
         guard authenticated else {
-            return try await transport.send(method, path, body: bodyData, accessToken: nil)
+            return try await transport.send(method, path, query: query, body: bodyData, accessToken: nil)
         }
 
         var tokens = try? tokenStore.read()
@@ -188,13 +212,13 @@ public struct Backend: Sendable {
             tokens = try await refresher.refresh(replacing: current.accessToken)
         }
         do {
-            return try await transport.send(method, path, body: bodyData, accessToken: tokens?.accessToken)
+            return try await transport.send(method, path, query: query, body: bodyData, accessToken: tokens?.accessToken)
         } catch BackendError.unauthorized {
             guard let rejected = tokens, rejected.refreshToken != nil else {
                 throw BackendError.unauthorized
             }
             let renewed = try await refresher.refresh(replacing: rejected.accessToken)
-            return try await transport.send(method, path, body: bodyData, accessToken: renewed.accessToken)
+            return try await transport.send(method, path, query: query, body: bodyData, accessToken: renewed.accessToken)
         }
     }
 
