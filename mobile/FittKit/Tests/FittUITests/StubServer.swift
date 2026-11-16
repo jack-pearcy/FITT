@@ -16,6 +16,8 @@ struct StubResponse: Sendable {
 struct RecordedRequest: Sendable {
     let method: String
     let path: String
+    /// The query string without the "?", or nil when the request had none.
+    let query: String?
     let headers: [String: String]
     let body: Data
 }
@@ -70,6 +72,7 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         let recorded = RecordedRequest(
             method: request.httpMethod ?? "GET",
             path: url.path(),
+            query: url.query(),
             headers: request.allHTTPHeaderFields ?? [:],
             body: Self.body(of: request)
         )

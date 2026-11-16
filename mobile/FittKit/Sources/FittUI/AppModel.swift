@@ -30,6 +30,10 @@ public final class AppModel {
     /// The user's plans. Nil until loaded, empty when there are none.
     public private(set) var plans: [WorkoutPlan]?
 
+    /// Body weight entries, newest first. Nil until loaded.
+    public private(set) var weightEntries: [BodyWeightEntry]?
+    /// Average of the last seven days. Nil until loaded, or when nothing was logged in them.
+    public private(set) var weightAverage: Decimal?
     /// The workout in progress, if there is one.
     public private(set) var activeSession: WorkoutSession?
     /// The exercise library. Nil until loaded.
@@ -95,6 +99,8 @@ public final class AppModel {
         plans = nil
         exercises = nil
         activeSession = nil
+        weightEntries = nil
+        weightAverage = nil
         units = .metric
         phase = .signedOut
     }
@@ -213,6 +219,54 @@ public final class AppModel {
         await loadNextLift()
         errorMessage = errorMessage ?? activationProblem
         return true
+    }
+
+    // MARK: Body weight
+
+    /// How far back the weight log reads.
+    public static let weightLogDays = 90
+
+    public func loadWeightLog() async {
+        await load { userId in
+            let entries = try await self.backend.bodyWeights(userId: userId, days: Self.weightLogDays)
+            let average = try await self.backend.bodyWeightAverage(userId: userId)
+            self.weightEntries = entries
+            // The server answers zero, not null, when the last seven days are empty.
+            self.weightAverage = average == 0 ? nil : average
+        }
+    }
+
+    /// Logs the weight in `draft`. Returns true when it was saved, so the form knows to close.
+    public func logWeight(_ draft: BodyWeightDraft) async -> Bool {
+        guard case .signedIn = phase else { return false }
+        clearErrors()
+        let entry: NewBodyWeight
+        do {
+            entry = try draft.entry(today: CalendarDate(now()))
+        } catch {
+            fieldErrors = error.fields
+            return false
+        }
+        isWorking = true
+        defer { isWorking = false }
+        var saved = false
+        await load { userId in
+            _ = try await self.backend.logBodyWeight(entry, userId: userId)
+            saved = true
+        }
+        guard saved else { return false }
+        await loadWeightLog()
+        return true
+    }
+
+    public func deleteWeight(_ entryId: Int64) async {
+        var deleted = false
+        await load { userId in
+            try await self.backend.deleteBodyWeight(entryId, userId: userId)
+            deleted = true
+        }
+        guard deleted else { return }
+        await loadWeightLog()
     }
 
     // MARK: Workout in progress

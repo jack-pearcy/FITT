@@ -539,4 +539,60 @@ struct BackendTests {
         try await backend.deleteSession(12, userId: 10)
         #expect(try sent(server).line == "DELETE /api/users/10/workout-sessions/12")
     }
+
+    // MARK: Body weight
+
+    @Test("weight entries are read with the days sent as a query, not as part of the path")
+    func readsBodyWeights() async throws {
+        let server = StubServer()
+        server.respond { _ in .json(200, #"[{"id":9,"loggedAt":"2026-11-16","weight":82.5,"createdAt":"2026-11-16T05:20:32Z"}]"#) }
+
+        let entries = try await server.backend(tokenStore: InMemoryTokenStore(token: "stored")).bodyWeights(userId: 10, days: 90)
+
+        #expect(entries == [BodyWeightEntry(id: 9, loggedAt: CalendarDate(year: 2026, month: 11, day: 16), weight: Decimal(string: "82.5")!)])
+        let request = try #require(server.requests.first)
+        #expect(request.method == "GET")
+        #expect(request.path == "/api/users/10/measurements/weight")
+        #expect(request.query == "days=90")
+        #expect(request.headers["Authorization"] == "Bearer stored")
+    }
+
+    @Test("a request with no query items has no query string")
+    func noQueryByDefault() async throws {
+        let server = StubServer()
+        server.respond { _ in .json(200, #"{"average":81.7}"#) }
+
+        #expect(try await server.backend().bodyWeightAverage(userId: 10) == Decimal(string: "81.7"))
+        let request = try #require(server.requests.first)
+        #expect(request.path == "/api/users/10/measurements/weight/average")
+        #expect(request.query == nil)
+    }
+
+    @Test("logging a weight posts the day and weight, and accepts both 201 and 200", arguments: [201, 200])
+    func logsBodyWeight(status: Int) async throws {
+        let server = StubServer()
+        server.respond { _ in .json(status, #"{"id":9,"loggedAt":"2026-11-16","weight":82.5,"createdAt":"2026-11-16T05:20:32Z"}"#) }
+        let entry = NewBodyWeight(loggedAt: CalendarDate(year: 2026, month: 11, day: 16), weight: Decimal(string: "82.5")!)
+
+        #expect(try await server.backend().logBodyWeight(entry, userId: 10).id == 9)
+
+        let request = try #require(server.requests.first)
+        #expect(request.method == "POST")
+        #expect(request.path == "/api/users/10/measurements/weight")
+        let body = try #require(try JSONSerialization.jsonObject(with: request.body) as? [String: Any])
+        #expect(body["loggedAt"] as? String == "2026-11-16")
+        #expect(body["weight"] as? Double == 82.5)
+    }
+
+    @Test("deleting a weight entry uses its route and accepts a 204")
+    func deletesBodyWeight() async throws {
+        let server = StubServer()
+        server.respond { _ in StubResponse(status: 204) }
+
+        try await server.backend().deleteBodyWeight(9, userId: 10)
+
+        let request = try #require(server.requests.first)
+        #expect(request.method == "DELETE")
+        #expect(request.path == "/api/users/10/measurements/weight/9")
+    }
 }

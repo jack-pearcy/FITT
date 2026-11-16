@@ -948,4 +948,158 @@ struct AppModelTests {
 
         #expect(model.activeSession == nil)
     }
+
+    // MARK: Body weight
+
+    private func weightJSON(id: Int, date: String, weight: String) -> String {
+        #"{"id":\#(id),"loggedAt":"\#(date)","weight":\#(weight),"createdAt":"2026-11-16T05:20:32Z"}"#
+    }
+
+    /// Answers the list and average routes, and 201 for a log.
+    private func serveWeights(_ server: StubServer, entries: [String], average: String) {
+        let list = "[\(entries.joined(separator: ","))]"
+        let logged = entries.first ?? weightJSON(id: 1, date: "2027-01-15", weight: "80.0")
+        server.respond { request in
+            if request.method == "POST" { return .json(201, logged) }
+            if request.method == "DELETE" { return StubResponse(status: 204) }
+            return request.path.hasSuffix("/average") ? .json(200, #"{"average":\#(average)}"#) : .json(200, list)
+        }
+    }
+
+    @Test("the weight log loads entries and the average")
+    func loadsWeightLog() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let before = server.requests.count
+        serveWeights(server, entries: [weightJSON(id: 2, date: "2027-01-15", weight: "82.5"), weightJSON(id: 1, date: "2027-01-14", weight: "83.0")], average: "82.8")
+
+        await model.loadWeightLog()
+
+        #expect(model.weightEntries?.map(\.id) == [2, 1])
+        #expect(model.weightAverage == Decimal(string: "82.8"))
+        let requests = server.requests.dropFirst(before)
+        #expect(requests.map(\.path) == ["/api/users/7/measurements/weight", "/api/users/7/measurements/weight/average"])
+        #expect(requests.first?.query == "days=90")
+    }
+
+    @Test("an average of zero means there is no average to show")
+    func zeroAverageIsNil() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        serveWeights(server, entries: [], average: "0")
+
+        await model.loadWeightLog()
+
+        #expect(model.weightEntries == [])
+        #expect(model.weightAverage == nil)
+    }
+
+    @Test("logging a weight saves it, then reloads the log")
+    func logsWeight() async throws {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let before = server.requests.count
+        serveWeights(server, entries: [weightJSON(id: 3, date: "2027-01-15", weight: "82.5")], average: "82.5")
+
+        let saved = await model.logWeight(BodyWeightDraft(date: CalendarDate(now), weight: "82.46"))
+
+        #expect(saved)
+        #expect(model.weightEntries?.map(\.weight) == [Decimal(string: "82.5")!])
+        #expect(!model.isWorking)
+        let requests = Array(server.requests.dropFirst(before))
+        #expect(requests.map { "\($0.method) \($0.path)" } == [
+            "POST /api/users/7/measurements/weight",
+            "GET /api/users/7/measurements/weight",
+            "GET /api/users/7/measurements/weight/average",
+        ])
+        let body = try #require(try JSONSerialization.jsonObject(with: requests[0].body) as? [String: Any])
+        #expect(body["weight"] as? Double == 82.5)
+        #expect(body["loggedAt"] as? String == CalendarDate(now).iso)
+    }
+
+    @Test("a weight that is not a number is stopped on the device")
+    func logWeightValidatesFirst() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let before = server.requests.count
+
+        let saved = await model.logWeight(BodyWeightDraft(date: CalendarDate(now), weight: "heavy"))
+
+        #expect(!saved)
+        #expect(model.fieldErrors == ["weight": "Enter a weight from 0.1 to 700"])
+        #expect(server.requests.count == before)
+    }
+
+    @Test("a date after the model's today is refused")
+    func logWeightUsesClock() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let tomorrow = CalendarDate(now.addingTimeInterval(86_400))
+
+        let saved = await model.logWeight(BodyWeightDraft(date: tomorrow, weight: "80"))
+
+        #expect(!saved)
+        #expect(model.fieldErrors == ["loggedAt": "The date cannot be in the future"])
+    }
+
+    @Test("a server rejection keeps the form open with the field message")
+    func logWeightServerRejects() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in
+            .json(400, #"{"status":400,"detail":"Validation failed","properties":{"errors":{"weight":"Weight must be 700 or less"}}}"#)
+        }
+
+        let saved = await model.logWeight(BodyWeightDraft(date: CalendarDate(now), weight: "80"))
+
+        #expect(!saved)
+        #expect(model.fieldErrors == ["weight": "Weight must be 700 or less"])
+        #expect(model.weightEntries == nil)
+    }
+
+    @Test("deleting an entry removes it, then reloads the log")
+    func deletesWeight() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let before = server.requests.count
+        serveWeights(server, entries: [], average: "0")
+
+        await model.deleteWeight(9)
+
+        #expect(model.weightEntries == [])
+        #expect(server.requests.dropFirst(before).map { "\($0.method) \($0.path)" } == [
+            "DELETE /api/users/7/measurements/weight/9",
+            "GET /api/users/7/measurements/weight",
+            "GET /api/users/7/measurements/weight/average",
+        ])
+    }
+
+    @Test("a delete that fails leaves the log as it was")
+    func deleteWeightFails() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        serveWeights(server, entries: [weightJSON(id: 9, date: "2027-01-15", weight: "82.5")], average: "82.5")
+        await model.loadWeightLog()
+        let before = server.requests.count
+        server.respond(nil)
+
+        await model.deleteWeight(9)
+
+        #expect(model.weightEntries?.map(\.id) == [9])
+        #expect(server.requests.count == before + 1)
+        #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+    }
+
+    @Test("sign out forgets the weight log")
+    func signOutResetsWeightLog() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        serveWeights(server, entries: [weightJSON(id: 9, date: "2027-01-15", weight: "82.5")], average: "82.5")
+        await model.loadWeightLog()
+
+        await model.signOut()
+
+        #expect(model.weightEntries == nil)
+        #expect(model.weightAverage == nil)
+    }
 }
