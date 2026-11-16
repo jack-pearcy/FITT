@@ -543,4 +543,53 @@ the screens), a thin app target, and an XcodeGen project spec. iOS 17 or later.
 SwiftUI native design for mobile form factor. Workout logging, weight log, goals, and onboarding.
 Secure API integration with JWT. Designed specifically for iOS interaction patterns.
 
+Completed this phase (as of 2026-11-16):
+- Client scaffold shipped (PR #66): the Swift package, the app target, the XcodeGen spec, and the first two
+  core types (token claims and set entries). Weights and RPE are decoded as exact decimals, never as Double.
+- Sign in and account creation shipped (PR #67): one backend client that every request goes through, the
+  session token kept in the Keychain, an app model that restores the session on launch, and one screen for
+  both sign in and create account. Server field errors show under the field they belong to.
+- Onboarding shipped (PR #68): biometrics and goals as two steps, with imperial input converted to metric
+  on the device. The server decides which step comes next; the app reads the status back after each save.
+- Refresh tokens shipped on the backend (PR #69, Flyway V5): POST /api/identity/auth/refresh and /logout,
+  with rotation and reuse detection per RFC 9700 section 4.14. Register and login also return a refresh
+  token. Only a hash of each token is stored. This closes the "no token refresh" API gap.
+- Session kept alive on the client (PR #70): an expired access token is renewed before a request, a 401 is
+  answered with one refresh and one retry, and only one refresh runs at a time. Sign out ends the login on
+  the server.
+- Home screens shipped (PR #71): Today (what to train next, from the server), Plans (list, detail, make
+  active), and Account (sign out).
+- Plan creation shipped (PR #72): a form with a split template, training days, and an exercise picker over
+  the shared library. A new plan becomes active when no other plan is.
+- Workout logging shipped (PR #73): start the next session from Today, log sets with weight, reps, and RPE,
+  resume after the app is closed, finish or discard. Finishing advances the plan to its next day.
+
+The loop a lifter needs now works end to end on the phone: account, onboarding, plan, workout, next day.
+Each piece was run on the simulator against a local backend before it merged, and three defects were found
+that way that the unit tests could not see (an unsigned build cannot write to the Keychain, the number pad
+covered the Continue button, and a keyboard toolbar item did not appear inside the tab view).
+
+Not yet deployed: production still runs the build from before PR #69. Until it is deployed the live API
+has no refresh tokens and the app falls back to a one hour session.
+
+Remaining in this phase:
+- Weight log (list, add, edit, remove).
+- Goals after onboarding (view and change).
+- Settings: units preference, delete account. Both need API work first (see the gaps below).
+- Editing and deleting a plan; creating a custom exercise.
+- Session history, and progression suggestions with the model preference.
+- During a workout: add or remove an exercise, notes.
+- A macOS CI job that runs the Swift tests. The current test check covers the backend only, so the Swift
+  suite (176 tests at PR #73) has run only on a developer machine.
+- Exercise how-to videos: a how-to icon beside an exercise that plays a short generated 3D clip of the
+  movement, with the clips served from the existing Hetzner server. Noted 2026-11-15; not started.
+
+API gaps found while building the client:
+- No route to read biometrics back, so the units preference cannot be shown after a relaunch and a set's
+  weight is displayed without a unit.
+- No route for the unfinished workout session. The client reads the whole session list to resume, which
+  will slow down as history grows.
+- No update route for a custom exercise, no delete account, no streak, and no profile or notification
+  endpoints. These were known before the phase began and are still open.
+
 Outcome: a native mobile client that demonstrates full-stack and mobile engineering capability.
