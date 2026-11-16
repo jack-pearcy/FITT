@@ -28,4 +28,18 @@ struct MeasurementTests {
         #expect(UnitConversion.kilograms(pounds: 180) == Decimal(string: "81.65"))
         #expect(UnitConversion.kilograms(pounds: 100) == Decimal(string: "45.36"))
     }
+
+    @Test("converts kilograms to pounds, rounded to one place")
+    func convertsToPounds() {
+        #expect(UnitConversion.pounds(kilograms: Decimal(string: "81.65")!) == 180)
+        #expect(UnitConversion.pounds(kilograms: 100) == Decimal(string: "220.5"))
+    }
+
+    @Test("every whole number of pounds survives the trip to kilograms and back")
+    func poundsRoundTrip() {
+        for pounds in 45...1540 {
+            let kilograms = UnitConversion.kilograms(pounds: Decimal(pounds))
+            #expect(UnitConversion.pounds(kilograms: kilograms) == Decimal(pounds), "\(pounds) lb")
+        }
+    }
 }

@@ -595,4 +595,18 @@ struct BackendTests {
         #expect(request.method == "DELETE")
         #expect(request.path == "/api/users/10/measurements/weight/9")
     }
+
+    @Test("saved goals are read from the goals route")
+    func readsGoals() async throws {
+        let server = StubServer()
+        server.respond { _ in .json(200, #"{"goalDirection":"CUT","targetWeightKg":81.65,"timelineWeeks":null,"calorieGoalMode":"AUTO","calorieGoal":2235}"#) }
+
+        let goals = try await server.backend(tokenStore: InMemoryTokenStore(token: "stored")).goals(userId: 10)
+
+        #expect(goals == Goals(goalDirection: .cut, targetWeightKg: Decimal(string: "81.65")!, calorieGoalMode: .auto, calorieGoal: 2235))
+        let request = try #require(server.requests.first)
+        #expect(request.method == "GET")
+        #expect(request.path == "/api/users/10/identity/goals")
+        #expect(request.headers["Authorization"] == "Bearer stored")
+    }
 }

@@ -86,4 +86,44 @@ struct GoalsTests {
             calorieGoal: 2104
         ))
     }
+
+    // MARK: Editing saved goals
+
+    @Test("a draft is filled in from saved goals in metric")
+    func draftFromGoalsMetric() {
+        let saved = Goals(goalDirection: .cut, targetWeightKg: Decimal(string: "78.5")!, timelineWeeks: 12, calorieGoalMode: .manual, calorieGoal: 2200)
+
+        let draft = GoalsDraft(goals: saved, units: .metric)
+
+        #expect(draft.direction == .cut)
+        #expect(draft.targetWeight == "78.5")
+        #expect(draft.timelineWeeks == "12")
+        #expect(draft.mode == .manual)
+        #expect(draft.calories == "2200")
+    }
+
+    @Test("an imperial user sees the target weight in pounds")
+    func draftFromGoalsImperial() {
+        let saved = Goals(goalDirection: .cut, targetWeightKg: Decimal(string: "81.65")!, calorieGoalMode: .auto, calorieGoal: 2235)
+
+        #expect(GoalsDraft(goals: saved, units: .imperial).targetWeight == "180")
+    }
+
+    @Test("in automatic mode the server's calorie number is not put in the manual field")
+    func draftFromAutoGoals() {
+        let saved = Goals(goalDirection: .bulk, calorieGoalMode: .auto, calorieGoal: 3213)
+
+        let draft = GoalsDraft(goals: saved, units: .metric)
+
+        #expect(draft.calories.isEmpty)
+        #expect(draft.targetWeight.isEmpty)
+        #expect(draft.timelineWeeks.isEmpty)
+    }
+
+    @Test("saved goals opened and saved again unchanged send the same goals", arguments: [UnitsPreference.metric, .imperial])
+    func editRoundTrip(units: UnitsPreference) throws {
+        let saved = Goals(goalDirection: .cut, targetWeightKg: Decimal(string: "81.65")!, timelineWeeks: 12, calorieGoalMode: .manual, calorieGoal: 2200)
+
+        #expect(try GoalsDraft(goals: saved, units: units).goals(units: units) == saved)
+    }
 }
