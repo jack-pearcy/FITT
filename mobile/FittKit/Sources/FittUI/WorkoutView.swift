@@ -90,21 +90,7 @@ struct WorkoutView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
-            // The number pads have no return key. A keyboard toolbar item does not
-            // appear on this screen inside the tab view, so the Done button is a bar
-            // pinned above the keyboard instead.
-            .safeAreaInset(edge: .bottom) {
-                if focus != nil {
-                    HStack {
-                        Spacer()
-                        Button("Done") { focus = nil }
-                            .accessibilityIdentifier("keyboardDone")
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 10)
-                    .background(.bar)
-                }
-            }
+            .keyboardDoneBar(isShown: focus != nil) { focus = nil }
             // A message about the last attempt is stale once the user edits a set.
             .onChange(of: drafts) { model.clearErrors() }
             .confirmationDialog(

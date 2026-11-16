@@ -269,12 +269,87 @@ private struct AccountView: View {
     var body: some View {
         NavigationStack {
             List {
-                Button("Sign Out", role: .destructive) {
-                    Task { await model.signOut() }
+                Section {
+                    if let goals = model.goals {
+                        LabeledContent("Goal", value: goals.goalDirection.label)
+                        if let target = goals.targetWeightKg {
+                            LabeledContent("Target weight", value: targetText(target))
+                        }
+                        if let weeks = goals.timelineWeeks {
+                            LabeledContent("Timeline", value: "\(weeks) weeks")
+                        }
+                        if let calories = goals.calorieGoal {
+                            LabeledContent("Daily calories") {
+                                Text("\(calories)")
+                                    .monospacedDigit()
+                                    .accessibilityIdentifier("calorieGoal")
+                            }
+                            LabeledContent("Calorie goal", value: goals.calorieGoalMode == .auto ? "Automatic" : "Manual")
+                        }
+                        NavigationLink("Change Goals") {
+                            EditGoalsView(goals: goals)
+                        }
+                        .accessibilityIdentifier("changeGoals")
+                    } else if let message = model.errorMessage {
+                        Text(message)
+                            .foregroundStyle(.red)
+                        Button("Try Again") {
+                            Task { await model.loadGoals() }
+                        }
+                    } else {
+                        ProgressView()
+                    }
+                } header: {
+                    Text("Goals")
                 }
-                .accessibilityIdentifier("signOut")
+
+                Section {
+                    Button("Sign Out", role: .destructive) {
+                        Task { await model.signOut() }
+                    }
+                    .accessibilityIdentifier("signOut")
+                }
             }
             .navigationTitle("Account")
+        }
+        .task { await model.loadGoals() }
+    }
+
+    /// The target in the units the user works in, with the unit named.
+    private func targetText(_ kilograms: Decimal) -> String {
+        switch model.units {
+        case .metric: "\(kilograms.formatted()) kg"
+        case .imperial: "\(UnitConversion.pounds(kilograms: kilograms).formatted()) lb"
+        }
+    }
+}
+
+/// Changing goals after onboarding. The form is the one onboarding uses, filled in from the saved goals.
+private struct EditGoalsView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft: GoalsDraft
+
+    init(goals: Goals) {
+        // The units are not known here yet; the draft is rebuilt with them when the view appears.
+        _draft = State(initialValue: GoalsDraft(goals: goals, units: .metric))
+        self.goals = goals
+    }
+
+    private let goals: Goals
+
+    var body: some View {
+        GoalsForm(draft: $draft, submitTitle: "Save") {
+            Task {
+                if await model.updateGoals(draft) {
+                    dismiss()
+                }
+            }
+        }
+        .navigationTitle("Change Goals")
+        .onAppear {
+            draft = GoalsDraft(goals: goals, units: model.units)
+            model.clearErrors()
         }
     }
 }

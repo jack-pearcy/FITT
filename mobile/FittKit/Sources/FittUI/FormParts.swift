@@ -82,3 +82,55 @@ struct KeyboardDoneButton: ToolbarContent {
         }
     }
 }
+
+extension GoalDirection {
+    var label: String {
+        switch self {
+        case .bulk: "Bulk"
+        case .cut: "Cut"
+        case .maintain: "Maintain"
+        }
+    }
+}
+
+struct SubmitSection: View {
+    @Environment(AppModel.self) private var model
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Section {
+            Button(action: action) {
+                HStack {
+                    Text(title)
+                    if model.isWorking {
+                        Spacer()
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(model.isWorking)
+            .accessibilityIdentifier("submit")
+        }
+    }
+}
+
+extension View {
+    /// A Done button pinned above the keyboard while `isShown` is true. The number
+    /// pads have no return key, and a keyboard toolbar item does not appear on
+    /// screens inside the tab view, so those screens use this bar instead.
+    func keyboardDoneBar(isShown: Bool, action: @escaping () -> Void) -> some View {
+        safeAreaInset(edge: .bottom) {
+            if isShown {
+                HStack {
+                    Spacer()
+                    Button("Done", action: action)
+                        .accessibilityIdentifier("keyboardDone")
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 10)
+                .background(.bar)
+            }
+        }
+    }
+}
