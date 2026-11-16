@@ -419,4 +419,38 @@ struct BackendTests {
         #expect(request.body.isEmpty)
         #expect(request.headers["Content-Type"] == nil)
     }
+
+    @Test("exercises are read as a list")
+    func readsExercises() async throws {
+        let server = StubServer()
+        server.respond { _ in .json(200, #"[{"id":38,"name":"Back Squat","muscleGroup":"LEGS","custom":false}]"#) }
+
+        let exercises = try await server.backend().exercises(userId: 10)
+
+        #expect(exercises == [Exercise(id: 38, name: "Back Squat", muscleGroup: .legs, custom: false)])
+        #expect(server.requests.first?.path == "/api/users/10/exercises")
+    }
+
+    @Test("creating a plan posts the plan and accepts a 201 with the created plan")
+    func createsPlan() async throws {
+        let server = StubServer()
+        server.respond { _ in
+            .json(201, #"{"id":9,"ownerUserId":10,"name":"Full Body","daysPerWeek":3,"splitType":"FULL_BODY","active":false,"days":[]}"#)
+        }
+        var draft = PlanDraft(splitType: .fullBody)
+        draft.name = "Full Body"
+
+        let plan = try await server.backend(tokenStore: InMemoryTokenStore(token: "stored")).createPlan(draft.plan(), userId: 10)
+
+        #expect(plan.id == 9)
+        #expect(!plan.active)
+        let request = try #require(server.requests.first)
+        #expect(request.method == "POST")
+        #expect(request.path == "/api/users/10/workout-plans")
+        #expect(request.headers["Authorization"] == "Bearer stored")
+        let body = try #require(try JSONSerialization.jsonObject(with: request.body) as? [String: Any])
+        #expect(body["name"] as? String == "Full Body")
+        #expect(body["splitType"] as? String == "FULL_BODY")
+        #expect((body["days"] as? [[String: Any]])?.first?["dayLabel"] as? String == "Full Body")
+    }
 }

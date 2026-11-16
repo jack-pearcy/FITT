@@ -59,36 +59,6 @@ private extension GoalDirection {
     }
 }
 
-/// A red footnote under a field, shown when the model holds a message for it.
-private struct FieldError: View {
-    @Environment(AppModel.self) private var model
-    let field: String
-
-    var body: some View {
-        if let message = model.fieldErrors[field] {
-            Text(message)
-                .font(.footnote)
-                .foregroundStyle(.red)
-                .accessibilityIdentifier("error.\(field)")
-        }
-    }
-}
-
-/// The message about the last attempt, when it is not tied to one field.
-private struct ErrorSection: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        if let message = model.errorMessage {
-            Section {
-                Text(message)
-                    .foregroundStyle(.red)
-                    .accessibilityIdentifier("error")
-            }
-        }
-    }
-}
-
 private struct SubmitSection: View {
     @Environment(AppModel.self) private var model
     let title: String

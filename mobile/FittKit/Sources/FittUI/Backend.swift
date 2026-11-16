@@ -93,6 +93,16 @@ public struct Backend: Sendable {
         try await send("POST", "/api/users/\(userId)/workout-plans/\(planId)/activate", body: nil as NoBody?, authenticated: true)
     }
 
+    /// The shared exercise library plus this user's custom exercises.
+    public func exercises(userId: Int64) async throws -> [Exercise] {
+        try await get("/api/users/\(userId)/exercises")
+    }
+
+    /// Creates a plan. The server stores it as not active.
+    public func createPlan(_ plan: NewWorkoutPlan, userId: Int64) async throws -> WorkoutPlan {
+        try await send("POST", "/api/users/\(userId)/workout-plans", body: plan, authenticated: true)
+    }
+
     // MARK: Transport
 
     private struct NoBody: Encodable {}

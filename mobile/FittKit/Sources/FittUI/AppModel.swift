@@ -30,6 +30,9 @@ public final class AppModel {
     /// The user's plans. Nil until loaded, empty when there are none.
     public private(set) var plans: [WorkoutPlan]?
 
+    /// The exercise library. Nil until loaded.
+    public private(set) var exercises: [Exercise]?
+
     public var onboardingComplete: Bool? { onboarding?.onboardingComplete }
 
     private let backend: Backend
@@ -88,6 +91,7 @@ public final class AppModel {
         maintenanceCalories = nil
         nextLift = nil
         plans = nil
+        exercises = nil
         units = .metric
         phase = .signedOut
     }
@@ -167,6 +171,45 @@ public final class AppModel {
         guard errorMessage == nil else { return }
         await loadPlans()
         await loadNextLift()
+    }
+
+    public func loadExercises() async {
+        await load { userId in self.exercises = try await self.backend.exercises(userId: userId) }
+    }
+
+    /// Creates the plan in `draft`. Returns true when it was saved, so the form
+    /// knows to close. A plan becomes the active one when no other plan is:
+    /// a first plan should show up under Today without a second step.
+    public func createPlan(_ draft: PlanDraft) async -> Bool {
+        guard case .signedIn = phase else { return false }
+        clearErrors()
+        let request: NewWorkoutPlan
+        do {
+            request = try draft.plan()
+        } catch {
+            fieldErrors = error.fields
+            return false
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+        var created: WorkoutPlan?
+        await load { userId in
+            let plan = try await self.backend.createPlan(request, userId: userId)
+            created = plan
+            let others = try await self.backend.workoutPlans(userId: userId)
+            if !others.contains(where: \.active) {
+                _ = try await self.backend.activatePlan(plan.id, userId: userId)
+            }
+        }
+        guard created != nil else { return false }
+        // The plan exists even if activating it failed, so the lists are
+        // reloaded either way and the form closes.
+        let activationProblem = errorMessage
+        await loadPlans()
+        await loadNextLift()
+        errorMessage = errorMessage ?? activationProblem
+        return true
     }
 
     /// Runs one read or write for the signed-in user and shows what went wrong, if anything.

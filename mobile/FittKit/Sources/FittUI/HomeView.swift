@@ -1,31 +1,6 @@
 import FittCore
 import SwiftUI
 
-private extension MuscleGroup {
-    var label: String {
-        switch self {
-        case .chest: "Chest"
-        case .back: "Back"
-        case .shoulders: "Shoulders"
-        case .arms: "Arms"
-        case .legs: "Legs"
-        case .glutes: "Glutes"
-        case .core: "Core"
-        }
-    }
-}
-
-private extension SplitType {
-    var label: String {
-        switch self {
-        case .pushPullLegs: "Push, pull, legs"
-        case .upperLower: "Upper and lower"
-        case .fullBody: "Full body"
-        case .custom: "Custom"
-        }
-    }
-}
-
 /// The screens for a user who has finished onboarding.
 struct HomeView: View {
     var body: some View {
@@ -141,17 +116,21 @@ struct TodayView: View {
 /// The user's plans. The active one is marked; any plan opens to its days.
 struct PlansView: View {
     @Environment(AppModel.self) private var model
+    @State private var isCreating = false
 
     var body: some View {
         NavigationStack {
             Group {
                 if let plans = model.plans {
                     if plans.isEmpty {
-                        ContentUnavailableView(
-                            "No plans yet",
-                            systemImage: "list.bullet.clipboard",
-                            description: Text("Plans you create will appear here.")
-                        )
+                        ContentUnavailableView {
+                            Label("No plans yet", systemImage: "list.bullet.clipboard")
+                        } description: {
+                            Text("A plan is the list of training days you rotate through.")
+                        } actions: {
+                            Button("Create a Plan") { isCreating = true }
+                                .accessibilityIdentifier("createFirstPlan")
+                        }
                     } else {
                         List(plans) { plan in
                             NavigationLink(value: plan.id) {
@@ -176,6 +155,15 @@ struct PlansView: View {
                 }
             }
             .navigationTitle("Plans")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("New Plan", systemImage: "plus") { isCreating = true }
+                        .accessibilityIdentifier("newPlan")
+                }
+            }
+            .sheet(isPresented: $isCreating) {
+                NewPlanView()
+            }
             // The detail screen looks the plan up by id each time it draws, so it
             // shows the reloaded plan after an activation instead of a stale copy.
             .navigationDestination(for: Int64.self) { planId in
