@@ -51,6 +51,24 @@ public struct GoalsDraft: Equatable, Sendable {
 
     public init() {}
 
+    /// A draft filled in from saved goals, for editing them. The target weight
+    /// is shown in the units the user works in.
+    public init(goals: Goals, units: UnitsPreference) {
+        direction = goals.goalDirection
+        if let kilograms = goals.targetWeightKg {
+            let shown = units == .metric ? kilograms : UnitConversion.pounds(kilograms: kilograms)
+            targetWeight = "\(shown)"
+        }
+        if let weeks = goals.timelineWeeks {
+            timelineWeeks = String(weeks)
+        }
+        mode = goals.calorieGoalMode
+        // In automatic mode the number is the server's, not something the user typed.
+        if goals.calorieGoalMode == .manual, let calorieGoal = goals.calorieGoal {
+            calories = String(calorieGoal)
+        }
+    }
+
     public func goals(units: UnitsPreference) throws(ValidationFailure) -> Goals {
         var problems: [String: String] = [:]
 
