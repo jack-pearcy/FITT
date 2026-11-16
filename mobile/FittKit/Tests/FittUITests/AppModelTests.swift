@@ -706,4 +706,246 @@ struct AppModelTests {
         #expect(model.plans?.map(\.id) == [9])
         #expect(model.errorMessage == "Unexpected error")
     }
+
+    // MARK: Workout in progress
+
+    private let squat = #"{"id":38,"name":"Back Squat","muscleGroup":"LEGS","custom":false}"#
+    private let bench = #"{"id":1,"name":"Barbell Bench Press","muscleGroup":"CHEST","custom":false}"#
+
+    /// Next lift for plan 5 whose day has bench (first) then squat, sent out of order.
+    private var nextLiftWithDay: String {
+        #"{"hasActivePlan":true,"planId":5,"planName":"Full Body","daysInRotation":1,"dayNumber":1,"weekInCycle":1,"deload":false,"alreadyTrainedToday":false,"day":{"id":20,"orderIndex":0,"dayLabel":"Day A","exercises":[{"id":202,"orderIndex":1,"sets":3,"reps":5,"exercise":\#(squat)},{"id":201,"orderIndex":0,"sets":3,"reps":5,"exercise":\#(bench)}]}}"#
+    }
+
+    private func sessionJSON(finished: Bool = false, entries: String = "") -> String {
+        let finishedAt = finished ? #""2026-11-16T06:00:00Z""# : "null"
+        return #"{"id":12,"ownerUserId":7,"planId":5,"startedAt":"2026-11-16T05:20:32Z","finishedAt":\#(finishedAt),"notes":null,"exerciseEntries":[\#(entries)]}"#
+    }
+
+    private func entryJSON(id: Int, order: Int, exercise: String, sets: String = "") -> String {
+        #"{"id":\#(id),"orderIndex":\#(order),"exercise":\#(exercise),"sets":[\#(sets)]}"#
+    }
+
+    /// A signed-in model with next lift loaded and, optionally, a session in progress.
+    private func workoutModel(_ server: StubServer, inProgress: Bool) async -> AppModel {
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let next = nextLiftWithDay
+        let session = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+        server.respond { request in
+            request.path.hasSuffix("/next-lift") ? .json(200, next) : .json(200, inProgress ? "[\(session)]" : "[]")
+        }
+        await model.loadNextLift()
+        await model.loadActiveSession()
+        return model
+    }
+
+    private func calls(_ server: StubServer, after count: Int) -> [String] {
+        server.requests.dropFirst(count).map { "\($0.method) \($0.path)" }
+    }
+
+    @Test("an unfinished session is picked up as the workout in progress")
+    func loadsActiveSession() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let finished = sessionJSON(finished: true).replacingOccurrences(of: #""id":12"#, with: #""id":11"#)
+        let open = sessionJSON()
+        server.respond { _ in .json(200, "[\(finished),\(open)]") }
+
+        await model.loadActiveSession()
+
+        #expect(model.activeSession?.id == 12)
+    }
+
+    @Test("with every session finished there is no workout in progress")
+    func noActiveSession() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let finished = sessionJSON(finished: true)
+        server.respond { _ in .json(200, "[\(finished)]") }
+
+        await model.loadActiveSession()
+
+        #expect(model.activeSession == nil)
+    }
+
+    @Test("starting a workout creates the session, then adds the day's exercises in plan order")
+    func startWorkout() async throws {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        let empty = sessionJSON()
+        let withBoth = sessionJSON(entries: [entryJSON(id: 30, order: 0, exercise: bench), entryJSON(id: 31, order: 1, exercise: squat)].joined(separator: ","))
+        server.respond { request in
+            request.path.hasSuffix("/entries") ? .json(200, withBoth) : .json(201, empty)
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.orderedEntries.map(\.exercise.name) == ["Barbell Bench Press", "Back Squat"])
+        #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == [
+            "POST /api/users/7/workout-sessions",
+            "POST /api/users/7/workout-sessions/12/entries",
+            "POST /api/users/7/workout-sessions/12/entries",
+        ])
+        let sent = try server.requests.dropFirst(before).map {
+            try #require(try JSONSerialization.jsonObject(with: $0.body) as? [String: Any])
+        }
+        #expect(sent[0]["planId"] as? Int == 5)
+        #expect(sent[0]["startedAt"] as? String == "2027-01-15T08:00:00Z")
+        #expect(sent[1]["exerciseId"] as? Int == 1)
+        #expect(sent[2]["exerciseId"] as? Int == 38)
+    }
+
+    @Test("a start that fails partway keeps the session that was created")
+    func startWorkoutPartialFailure() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let empty = sessionJSON()
+        server.respond { request in
+            request.path.hasSuffix("/entries") ? .json(500, #"{"status":500,"detail":"Unexpected error"}"#) : .json(201, empty)
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 12)
+        #expect(model.activeSession?.exerciseEntries.isEmpty == true)
+        #expect(model.errorMessage == "Unexpected error")
+    }
+
+    @Test("starting does nothing while a workout is already in progress")
+    func startWorkoutWhenActive() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        let before = server.requests.count
+
+        await model.startWorkout()
+
+        #expect(server.requests.count == before)
+    }
+
+    @Test("logging a set saves it and shows the updated session")
+    func logsSet() async throws {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        let before = server.requests.count
+        let updated = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench, sets: #"{"id":101,"setNumber":1,"reps":8,"weight":100.00,"rpe":null,"completed":true}"#))
+        server.respond { _ in .json(200, updated) }
+
+        let saved = await model.logSet(SetDraft(weight: "100", reps: "8"), entryId: 30)
+
+        #expect(saved)
+        #expect(model.activeSession?.loggedSetCount == 1)
+        #expect(model.fieldErrors.isEmpty)
+        #expect(calls(server, after: before) == ["POST /api/users/7/workout-sessions/12/entries/30/sets"])
+    }
+
+    @Test("a set with no reps is stopped on the device, with the message filed under its exercise")
+    func logSetValidatesFirst() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        let before = server.requests.count
+
+        let saved = await model.logSet(SetDraft(weight: "100"), entryId: 30)
+
+        #expect(!saved)
+        #expect(model.fieldErrors == ["entry.30.reps": "Enter reps from 1 to 1000"])
+        #expect(server.requests.count == before)
+    }
+
+    @Test("a server rejection of a set is filed under its exercise too")
+    func logSetServerRejects() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        server.respond { _ in
+            .json(400, #"{"status":400,"detail":"Validation failed","properties":{"errors":{"weight":"Weight must be 9999.99 or less"}}}"#)
+        }
+
+        let saved = await model.logSet(SetDraft(weight: "100", reps: "8"), entryId: 30)
+
+        #expect(!saved)
+        #expect(model.fieldErrors == ["entry.30.weight": "Weight must be 9999.99 or less"])
+        #expect(model.activeSession?.loggedSetCount == 0)
+    }
+
+    @Test("deleting a set shows the session the server returns")
+    func deletesSet() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        let before = server.requests.count
+        let updated = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+        server.respond { _ in .json(200, updated) }
+
+        await model.deleteSet(101, entryId: 30)
+
+        #expect(model.activeSession?.loggedSetCount == 0)
+        #expect(calls(server, after: before) == ["DELETE /api/users/7/workout-sessions/12/entries/30/sets/101"])
+    }
+
+    @Test("finishing ends the workout and reloads what comes next")
+    func finishWorkout() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        let before = server.requests.count
+        let finished = sessionJSON(finished: true)
+        let next = nextLiftWithDay.replacingOccurrences(of: #""alreadyTrainedToday":false"#, with: #""alreadyTrainedToday":true"#)
+        server.respond { request in
+            request.path.hasSuffix("/finish") ? .json(200, finished) : .json(200, next)
+        }
+
+        await model.finishWorkout()
+
+        #expect(model.activeSession == nil)
+        #expect(model.nextLift?.alreadyTrainedToday == true)
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == ["POST /api/users/7/workout-sessions/12/finish", "GET /api/users/7/next-lift"])
+    }
+
+    @Test("a finish that cannot reach the server keeps the workout open")
+    func finishWorkoutOffline() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        server.respond(nil)
+
+        await model.finishWorkout()
+
+        #expect(model.activeSession?.id == 12)
+        #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+    }
+
+    @Test("discarding deletes the session")
+    func discardWorkout() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        let before = server.requests.count
+        server.respond { _ in StubResponse(status: 204) }
+
+        await model.discardWorkout()
+
+        #expect(model.activeSession == nil)
+        #expect(calls(server, after: before) == ["DELETE /api/users/7/workout-sessions/12"])
+    }
+
+    @Test("a discard that fails keeps the workout")
+    func discardWorkoutFails() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        server.respond(nil)
+
+        await model.discardWorkout()
+
+        #expect(model.activeSession?.id == 12)
+    }
+
+    @Test("sign out forgets the workout in progress")
+    func signOutResetsWorkout() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        server.respond { _ in StubResponse(status: 204) }
+
+        await model.signOut()
+
+        #expect(model.activeSession == nil)
+    }
 }
