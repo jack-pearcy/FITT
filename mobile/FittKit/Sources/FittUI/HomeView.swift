@@ -9,6 +9,8 @@ struct HomeView: View {
                 .tabItem { Label("Today", systemImage: "figure.strengthtraining.traditional") }
             PlansView()
                 .tabItem { Label("Plans", systemImage: "list.bullet.clipboard") }
+            WeightView()
+                .tabItem { Label("Weight", systemImage: "scalemass") }
             AccountView()
                 .tabItem { Label("Account", systemImage: "person.crop.circle") }
         }
@@ -33,7 +35,7 @@ private struct ExerciseRow: View {
 }
 
 /// A full-screen message with a retry, for a screen that could not load at all.
-private struct LoadFailedView: View {
+struct LoadFailedView: View {
     let message: String
     let retry: () async -> Void
 
