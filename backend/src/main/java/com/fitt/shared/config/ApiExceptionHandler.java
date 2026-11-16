@@ -25,6 +25,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import com.fitt.identity.service.exception.BiometricsNotFoundException;
 import com.fitt.identity.service.exception.GoalNotFoundException;
+import com.fitt.identity.service.exception.InvalidRefreshTokenException;
 import com.fitt.workouts.service.exception.ExerciseEntryNotFoundException;
 import com.fitt.workouts.service.exception.SetEntryNotFoundException;
 
@@ -170,6 +171,14 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     public ResponseEntity<ProblemDetail> handleBadCredentials(BadCredentialsException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
         problem.setTitle("Bad Credentials");
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problem);
+    }
+
+    // 401 so the client knows the session is over and sends the user to sign in.
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidRefreshToken(InvalidRefreshTokenException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problem.setTitle("Invalid Refresh Token");
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problem);
     }
 
