@@ -25,6 +25,11 @@ public final class AppModel {
     /// Per-field messages from a 400, keyed by the request field name.
     public private(set) var fieldErrors: [String: String] = [:]
 
+    /// What to train next. Nil until loaded.
+    public private(set) var nextLift: NextLift?
+    /// The user's plans. Nil until loaded, empty when there are none.
+    public private(set) var plans: [WorkoutPlan]?
+
     public var onboardingComplete: Bool? { onboarding?.onboardingComplete }
 
     private let backend: Backend
@@ -81,6 +86,8 @@ public final class AppModel {
         try? tokenStore.clear()
         onboarding = nil
         maintenanceCalories = nil
+        nextLift = nil
+        plans = nil
         units = .metric
         phase = .signedOut
     }
@@ -133,6 +140,41 @@ public final class AppModel {
         guard case .signedIn(let userId) = phase else { return }
         do {
             maintenanceCalories = try await backend.maintenanceCalories(userId: userId)
+        } catch let error as BackendError {
+            show(error, duringSignIn: false)
+        } catch {
+            errorMessage = "Something went wrong. Try again."
+        }
+    }
+
+    // MARK: Workouts
+
+    public func loadNextLift() async {
+        await load { userId in self.nextLift = try await self.backend.nextLift(userId: userId) }
+    }
+
+    public func loadPlans() async {
+        await load { userId in self.plans = try await self.backend.workoutPlans(userId: userId) }
+    }
+
+    /// Switches the active plan, then reloads both screens that depend on it:
+    /// the server deactivates the old plan and changes what comes next.
+    public func activatePlan(_ planId: Int64) async {
+        guard case .signedIn = phase else { return }
+        isWorking = true
+        defer { isWorking = false }
+        await load { userId in _ = try await self.backend.activatePlan(planId, userId: userId) }
+        guard errorMessage == nil else { return }
+        await loadPlans()
+        await loadNextLift()
+    }
+
+    /// Runs one read or write for the signed-in user and shows what went wrong, if anything.
+    private func load(_ work: (Int64) async throws -> Void) async {
+        guard case .signedIn(let userId) = phase else { return }
+        errorMessage = nil
+        do {
+            try await work(userId)
         } catch let error as BackendError {
             show(error, duringSignIn: false)
         } catch {

@@ -371,4 +371,52 @@ struct BackendTests {
         #expect(request.headers["Authorization"] == nil)
         #expect(try JSONSerialization.jsonObject(with: request.body) as? [String: String] == ["refreshToken": "refresh-1"])
     }
+
+    // MARK: Workouts
+
+    private let planBody = #"{"id":3,"ownerUserId":10,"name":"Full Body","daysPerWeek":3,"splitType":"FULL_BODY","active":true,"days":[]}"#
+
+    @Test("next lift is read from the next-lift route")
+    func readsNextLift() async throws {
+        let server = StubServer()
+        server.respond { _ in
+            .json(200, #"{"hasActivePlan":false,"planId":null,"planName":null,"daysInRotation":0,"dayNumber":0,"weekInCycle":1,"deload":false,"alreadyTrainedToday":false,"day":null}"#)
+        }
+
+        let next = try await server.backend(tokenStore: InMemoryTokenStore(token: "stored")).nextLift(userId: 10)
+
+        #expect(next == NextLift(hasActivePlan: false))
+        let request = try #require(server.requests.first)
+        #expect(request.method == "GET")
+        #expect(request.path == "/api/users/10/next-lift")
+        #expect(request.headers["Authorization"] == "Bearer stored")
+    }
+
+    @Test("plans are read as a list")
+    func readsPlans() async throws {
+        let server = StubServer()
+        let planBody = planBody
+        server.respond { _ in .json(200, "[\(planBody)]") }
+
+        let plans = try await server.backend().workoutPlans(userId: 10)
+
+        #expect(plans == [WorkoutPlan(id: 3, name: "Full Body", daysPerWeek: 3, splitType: .fullBody, active: true, days: [])])
+        #expect(server.requests.first?.path == "/api/users/10/workout-plans")
+    }
+
+    @Test("activating a plan posts to its activate route with no body")
+    func activatesPlan() async throws {
+        let server = StubServer()
+        let planBody = planBody
+        server.respond { _ in .json(200, planBody) }
+
+        let plan = try await server.backend().activatePlan(3, userId: 10)
+
+        #expect(plan.active)
+        let request = try #require(server.requests.first)
+        #expect(request.method == "POST")
+        #expect(request.path == "/api/users/10/workout-plans/3/activate")
+        #expect(request.body.isEmpty)
+        #expect(request.headers["Content-Type"] == nil)
+    }
 }

@@ -467,4 +467,113 @@ struct AppModelTests {
 
         #expect(server.requests.isEmpty)
     }
+
+    // MARK: Workouts
+
+    private func planJSON(id: Int, name: String, active: Bool) -> String {
+        #"{"id":\#(id),"ownerUserId":7,"name":"\#(name)","daysPerWeek":3,"splitType":"FULL_BODY","active":\#(active),"days":[]}"#
+    }
+
+    private func nextLiftJSON(planId: Int, planName: String) -> String {
+        #"{"hasActivePlan":true,"planId":\#(planId),"planName":"\#(planName)","daysInRotation":0,"dayNumber":0,"weekInCycle":1,"deload":false,"alreadyTrainedToday":false,"day":null}"#
+    }
+
+    @Test("next lift loads for the signed-in user")
+    func loadsNextLift() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let body = nextLiftJSON(planId: 3, planName: "Full Body")
+        server.respond { _ in .json(200, body) }
+
+        await model.loadNextLift()
+
+        #expect(model.nextLift == NextLift(hasActivePlan: true, planId: 3, planName: "Full Body"))
+        #expect(server.requests.last?.path == "/api/users/7/next-lift")
+    }
+
+    @Test("plans load for the signed-in user")
+    func loadsPlans() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let body = "[\(planJSON(id: 3, name: "Full Body", active: true))]"
+        server.respond { _ in .json(200, body) }
+
+        await model.loadPlans()
+
+        #expect(model.plans?.map(\.name) == ["Full Body"])
+    }
+
+    @Test("a user with no plans gets an empty list, not a missing one")
+    func loadsNoPlans() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in .json(200, "[]") }
+
+        await model.loadPlans()
+
+        #expect(model.plans == [])
+    }
+
+    @Test("a failed load keeps what was already shown and reports the connection")
+    func loadFailureKeepsData() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in .json(200, "[]") }
+        await model.loadPlans()
+        server.respond(nil)
+
+        await model.loadPlans()
+
+        #expect(model.plans == [])
+        #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+    }
+
+    @Test("activating a plan reloads the plans and what to train next")
+    func activatePlanReloads() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let activated = planJSON(id: 4, name: "Push Pull", active: true)
+        let plans = "[\(planJSON(id: 3, name: "Full Body", active: false)),\(activated)]"
+        let next = nextLiftJSON(planId: 4, planName: "Push Pull")
+        server.respond { request in
+            if request.method == "POST" { return .json(200, activated) }
+            return request.path.hasSuffix("/next-lift") ? .json(200, next) : .json(200, plans)
+        }
+
+        await model.activatePlan(4)
+
+        #expect(model.plans?.first(where: \.active)?.id == 4)
+        #expect(model.nextLift?.planId == 4)
+        #expect(!model.isWorking)
+        #expect(server.requests.dropFirst().map(\.path) == [
+            "/api/users/7/workout-plans/4/activate",
+            "/api/users/7/workout-plans",
+            "/api/users/7/next-lift",
+        ])
+    }
+
+    @Test("a rejected activation shows the server's detail and reloads nothing")
+    func activatePlanRejected() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in .json(404, #"{"status":404,"title":"Workout Plan Not Found","detail":"Workout plan not found"}"#) }
+
+        await model.activatePlan(99)
+
+        #expect(model.errorMessage == "Workout plan not found")
+        #expect(server.requests.count == 2)
+    }
+
+    @Test("sign out forgets plans and next lift")
+    func signOutResetsWorkouts() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in .json(200, "[]") }
+        await model.loadPlans()
+
+        await model.signOut()
+
+        #expect(model.plans == nil)
+        #expect(model.nextLift == nil)
+    }
 }
