@@ -21,7 +21,7 @@ public struct RootView: View {
             case .signedOut:
                 SignInView()
             case .signedIn(let userId):
-                SignedInPlaceholderView(userId: userId)
+                SignedInView(userId: userId)
             }
         }
         .environment(model)
@@ -29,31 +29,68 @@ public struct RootView: View {
     }
 }
 
-/// Stands in for onboarding and the main tabs until those screens exist.
-private struct SignedInPlaceholderView: View {
+/// Chooses the screen for a signed-in user from what the server says is done.
+private struct SignedInView: View {
     @Environment(AppModel.self) private var model
     let userId: Int64
 
     var body: some View {
         NavigationStack {
-            List {
-                LabeledContent("User id", value: String(userId))
-                LabeledContent("Onboarding", value: onboardingText)
-                if let message = model.errorMessage {
-                    Text(message).foregroundStyle(.red)
+            Group {
+                if let onboarding = model.onboarding {
+                    if !onboarding.biometricsComplete {
+                        BiometricsStepView()
+                    } else if !onboarding.goalsComplete {
+                        GoalsStepView()
+                    } else {
+                        HomePlaceholderView(userId: userId)
+                    }
+                } else {
+                    OnboardingUnknownView()
                 }
-                Button("Sign Out", role: .destructive) { model.signOut() }
-                    .accessibilityIdentifier("signOut")
             }
-            .navigationTitle("Signed In")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Sign Out") { model.signOut() }
+                        .accessibilityIdentifier("signOut")
+                }
+            }
         }
     }
+}
 
-    private var onboardingText: String {
-        switch model.onboardingComplete {
-        case true?: "Complete"
-        case false?: "Not complete"
-        case nil: "Unknown"
+/// Shown while the onboarding status is loading, or when it could not be loaded.
+private struct OnboardingUnknownView: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if let message = model.errorMessage {
+            VStack(spacing: 16) {
+                Text(message)
+                    .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("error")
+                Button("Try Again") {
+                    Task { await model.refreshOnboarding() }
+                }
+                .disabled(model.isWorking)
+                .accessibilityIdentifier("retry")
+            }
+            .padding()
+        } else {
+            ProgressView()
         }
+    }
+}
+
+/// Stands in for the main tabs until those screens exist.
+private struct HomePlaceholderView: View {
+    let userId: Int64
+
+    var body: some View {
+        List {
+            LabeledContent("User id", value: String(userId))
+            LabeledContent("Onboarding", value: "Complete")
+        }
+        .navigationTitle("FITT")
     }
 }

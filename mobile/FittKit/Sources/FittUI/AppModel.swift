@@ -14,11 +14,18 @@ public final class AppModel {
 
     public private(set) var phase: Phase = .loading
     /// Nil until the server has answered, or when it could not be reached.
-    public private(set) var onboardingComplete: Bool?
+    public private(set) var onboarding: OnboardingStatus?
+    /// Maintenance calories per day, once biometrics are saved and the server has been asked.
+    public private(set) var maintenanceCalories: Int?
+    /// The units chosen on the biometrics step. The API has no route to read them
+    /// back, so after a relaunch this falls back to metric.
+    public private(set) var units = UnitsPreference.metric
     public private(set) var isWorking = false
     public private(set) var errorMessage: String?
     /// Per-field messages from a 400, keyed by the request field name.
     public private(set) var fieldErrors: [String: String] = [:]
+
+    public var onboardingComplete: Bool? { onboarding?.onboardingComplete }
 
     private let backend: Backend
     private let tokenStore: any TokenStore
@@ -58,8 +65,65 @@ public final class AppModel {
 
     public func signOut() {
         try? tokenStore.clear()
-        onboardingComplete = nil
+        onboarding = nil
+        maintenanceCalories = nil
+        units = .metric
         phase = .signedOut
+    }
+
+    // MARK: Onboarding
+
+    /// Asks the server again which onboarding steps are done, for a retry after a failed load.
+    public func refreshOnboarding() async {
+        guard case .signedIn(let userId) = phase else { return }
+        clearErrors()
+        isWorking = true
+        defer { isWorking = false }
+        await loadOnboardingStatus(userId: userId)
+    }
+
+    public func saveBiometrics(_ draft: BiometricsDraft) async {
+        guard case .signedIn(let userId) = phase else { return }
+        clearErrors()
+        let biometrics: Biometrics
+        do {
+            biometrics = try draft.biometrics(today: CalendarDate(now()))
+        } catch {
+            fieldErrors = error.fields
+            return
+        }
+        await save(userId: userId) {
+            try await self.backend.saveBiometrics(biometrics, userId: userId)
+            self.units = biometrics.unitsPreference
+        }
+    }
+
+    public func saveGoals(_ draft: GoalsDraft) async {
+        guard case .signedIn(let userId) = phase else { return }
+        clearErrors()
+        let goals: Goals
+        do {
+            goals = try draft.goals(units: units)
+        } catch {
+            fieldErrors = error.fields
+            return
+        }
+        await save(userId: userId) {
+            try await self.backend.saveGoals(goals, userId: userId)
+        }
+    }
+
+    /// Loads maintenance calories for the goals step. The step works without the
+    /// number, so a failure here is shown but does not block it.
+    public func loadMaintenanceCalories() async {
+        guard case .signedIn(let userId) = phase else { return }
+        do {
+            maintenanceCalories = try await backend.maintenanceCalories(userId: userId)
+        } catch let error as BackendError {
+            show(error, duringSignIn: false)
+        } catch {
+            errorMessage = "Something went wrong. Try again."
+        }
     }
 
     public func clearErrors() {
@@ -88,9 +152,26 @@ public final class AppModel {
         }
     }
 
+    /// Runs one onboarding write, then reads the status back so the server
+    /// decides which step comes next.
+    private func save(userId: Int64, _ write: () async throws -> Void) async {
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            try await write()
+        } catch let error as BackendError {
+            show(error, duringSignIn: false)
+            return
+        } catch {
+            errorMessage = "Something went wrong. Try again."
+            return
+        }
+        await loadOnboardingStatus(userId: userId)
+    }
+
     private func loadOnboardingStatus(userId: Int64) async {
         do {
-            onboardingComplete = try await backend.onboardingStatus(userId: userId).onboardingComplete
+            onboarding = try await backend.onboardingStatus(userId: userId)
         } catch let error as BackendError {
             show(error, duringSignIn: false)
         } catch {

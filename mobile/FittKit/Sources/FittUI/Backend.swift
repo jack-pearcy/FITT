@@ -44,15 +44,36 @@ public struct Backend: Sendable {
     // MARK: Onboarding
 
     public func onboardingStatus(userId: Int64) async throws -> OnboardingStatus {
-        try await send("GET", "/api/users/\(userId)/identity/onboarding/status")
+        try await get("/api/users/\(userId)/identity/onboarding/status")
+    }
+
+    public func saveBiometrics(_ biometrics: Biometrics, userId: Int64) async throws {
+        try await post("/api/users/\(userId)/identity/onboarding/biometrics", body: biometrics)
+    }
+
+    /// Maintenance calories, derived by the server from the saved biometrics.
+    public func maintenanceCalories(userId: Int64) async throws -> Int {
+        let response: Tdee = try await get("/api/users/\(userId)/identity/onboarding/tdee")
+        return response.tdee
+    }
+
+    // MARK: Goals
+
+    public func saveGoals(_ goals: Goals, userId: Int64) async throws {
+        try await post("/api/users/\(userId)/identity/goals", body: goals)
     }
 
     // MARK: Transport
 
     private struct NoBody: Encodable {}
 
-    private func send<Response: Decodable>(_ method: String, _ path: String) async throws -> Response {
-        try await send(method, path, body: nil as NoBody?, authenticated: true)
+    private func get<Response: Decodable>(_ path: String) async throws -> Response {
+        try await send("GET", path, body: nil as NoBody?, authenticated: true)
+    }
+
+    /// For the write routes that answer 204 with no body.
+    private func post(_ path: String, body: some Encodable) async throws {
+        _ = try await perform("POST", path, body: body, authenticated: true)
     }
 
     private func send<Response: Decodable>(
@@ -61,6 +82,21 @@ public struct Backend: Sendable {
         body: (some Encodable)?,
         authenticated: Bool
     ) async throws -> Response {
+        let data = try await perform(method, path, body: body, authenticated: authenticated)
+        do {
+            return try JSONDecoder().decode(Response.self, from: data)
+        } catch {
+            throw BackendError.undecodableResponse
+        }
+    }
+
+    /// Sends one request and returns the body of a 2xx response. Anything else throws a `BackendError`.
+    private func perform(
+        _ method: String,
+        _ path: String,
+        body: (some Encodable)?,
+        authenticated: Bool
+    ) async throws -> Data {
         var request = URLRequest(url: config.baseURL.appending(path: path))
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -89,11 +125,7 @@ public struct Backend: Sendable {
         guard (200..<300).contains(http.statusCode) else {
             throw Self.error(status: http.statusCode, headers: http, body: data)
         }
-        do {
-            return try JSONDecoder().decode(Response.self, from: data)
-        } catch {
-            throw BackendError.undecodableResponse
-        }
+        return data
     }
 
     private static func error(status: Int, headers: HTTPURLResponse, body: Data) -> BackendError {
