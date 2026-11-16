@@ -22,7 +22,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-// Slows down password guessing and account spam on the two public auth endpoints.
+// Slows down password guessing, account spam, and refresh token guessing on the
+// public auth endpoints.
 // A sliding window per client address: more than maxAttempts POSTs inside the
 // window gets a 429 with Retry-After until the oldest attempt ages out.
 //
@@ -36,7 +37,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     private static final Set<String> LIMITED_PATHS =
-            Set.of("/api/identity/auth/login", "/api/identity/auth/register");
+            Set.of("/api/identity/auth/login", "/api/identity/auth/register", "/api/identity/auth/refresh");
 
     // Above this many tracked clients, drop the idle ones so the map cannot grow
     // without bound under a flood of distinct addresses.

@@ -20,6 +20,11 @@ public class JwtProperties {
     // Shorter lived tokens limit the damage if one gets stolen.
     private long ttlSeconds = 3600;
 
+    // How long a refresh token stays valid, in seconds. 30 days by default.
+    // Each refresh issues a new one, so an active user is never signed out by this;
+    // it bounds how long an unused login (a lost phone, an old install) stays usable.
+    private long refreshTtlSeconds = 2_592_000;
+
     public String getSecretValue() {
         return secretValue;
     }
@@ -42,5 +47,13 @@ public class JwtProperties {
 
     public void setTtlSeconds(long ttlSeconds) {
         this.ttlSeconds = ttlSeconds;
+    }
+
+    public long getRefreshTtlSeconds() {
+        return refreshTtlSeconds;
+    }
+
+    public void setRefreshTtlSeconds(long refreshTtlSeconds) {
+        this.refreshTtlSeconds = refreshTtlSeconds;
     }
 }
