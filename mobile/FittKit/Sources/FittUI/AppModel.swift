@@ -30,6 +30,8 @@ public final class AppModel {
     /// The user's plans. Nil until loaded, empty when there are none.
     public private(set) var plans: [WorkoutPlan]?
 
+    /// The workout in progress, if there is one.
+    public private(set) var activeSession: WorkoutSession?
     /// The exercise library. Nil until loaded.
     public private(set) var exercises: [Exercise]?
 
@@ -92,6 +94,7 @@ public final class AppModel {
         nextLift = nil
         plans = nil
         exercises = nil
+        activeSession = nil
         units = .metric
         phase = .signedOut
     }
@@ -210,6 +213,101 @@ public final class AppModel {
         await loadNextLift()
         errorMessage = errorMessage ?? activationProblem
         return true
+    }
+
+    // MARK: Workout in progress
+
+    /// Field-error key for one entry's set form, so a message lands under the
+    /// right exercise when several are on screen.
+    public static func setFieldKey(entryId: Int64, field: String) -> String {
+        "entry.\(entryId).\(field)"
+    }
+
+    /// Finds a session left unfinished, such as one the app was closed in the middle of.
+    public func loadActiveSession() async {
+        await load { userId in
+            let sessions = try await self.backend.sessions(userId: userId)
+            self.activeSession = sessions.first { !$0.isFinished }
+        }
+    }
+
+    /// Starts a session for the day the server says is next, then adds that
+    /// day's exercises to it. The session is stored after every step, so if an
+    /// exercise fails to add, what was created is still shown.
+    public func startWorkout() async {
+        guard case .signedIn = phase, !isWorking, activeSession == nil,
+              let next = nextLift, let day = next.day
+        else { return }
+        isWorking = true
+        defer { isWorking = false }
+        let startedAt = now()
+        await load { userId in
+            var session = try await self.backend.startSession(
+                NewWorkoutSession(startedAt: startedAt, planId: next.planId), userId: userId)
+            self.activeSession = session
+            for item in day.orderedExercises {
+                session = try await self.backend.addEntry(exerciseId: item.exercise.id, sessionId: session.id, userId: userId)
+                self.activeSession = session
+            }
+        }
+    }
+
+    /// Logs one set. Returns true when it was saved.
+    public func logSet(_ draft: SetDraft, entryId: Int64) async -> Bool {
+        guard let session = activeSession else { return false }
+        clearErrors()
+        let set: LoggedSet
+        do {
+            set = try draft.loggedSet()
+        } catch {
+            fieldErrors = Self.keyed(error.fields, entryId: entryId)
+            return false
+        }
+        var saved = false
+        await load { userId in
+            self.activeSession = try await self.backend.logSet(set, entryId: entryId, sessionId: session.id, userId: userId)
+            saved = true
+        }
+        // A 400 from the server names the same fields; file them under this entry too.
+        fieldErrors = Self.keyed(fieldErrors, entryId: entryId)
+        return saved
+    }
+
+    public func deleteSet(_ setId: Int64, entryId: Int64) async {
+        guard let session = activeSession else { return }
+        await load { userId in
+            self.activeSession = try await self.backend.deleteSet(setId, entryId: entryId, sessionId: session.id, userId: userId)
+        }
+    }
+
+    /// Finishes the workout. A finished session is what moves the plan to its next day.
+    public func finishWorkout() async {
+        guard let session = activeSession, !isWorking else { return }
+        isWorking = true
+        defer { isWorking = false }
+        var finished = false
+        await load { userId in
+            _ = try await self.backend.finishSession(session.id, userId: userId)
+            finished = true
+        }
+        guard finished else { return }
+        activeSession = nil
+        await loadNextLift()
+    }
+
+    /// Deletes the workout in progress and everything logged in it.
+    public func discardWorkout() async {
+        guard let session = activeSession, !isWorking else { return }
+        isWorking = true
+        defer { isWorking = false }
+        await load { userId in
+            try await self.backend.deleteSession(session.id, userId: userId)
+            self.activeSession = nil
+        }
+    }
+
+    private static func keyed(_ fields: [String: String], entryId: Int64) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: fields.map { (setFieldKey(entryId: entryId, field: $0.key), $0.value) })
     }
 
     /// Runs one read or write for the signed-in user and shows what went wrong, if anything.
