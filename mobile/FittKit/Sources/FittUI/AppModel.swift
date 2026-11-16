@@ -30,6 +30,8 @@ public final class AppModel {
     /// The user's plans. Nil until loaded, empty when there are none.
     public private(set) var plans: [WorkoutPlan]?
 
+    /// The saved goals. Nil until loaded.
+    public private(set) var goals: Goals?
     /// Body weight entries, newest first. Nil until loaded.
     public private(set) var weightEntries: [BodyWeightEntry]?
     /// Average of the last seven days. Nil until loaded, or when nothing was logged in them.
@@ -101,6 +103,7 @@ public final class AppModel {
         activeSession = nil
         weightEntries = nil
         weightAverage = nil
+        goals = nil
         units = .metric
         phase = .signedOut
     }
@@ -218,6 +221,37 @@ public final class AppModel {
         await loadPlans()
         await loadNextLift()
         errorMessage = errorMessage ?? activationProblem
+        return true
+    }
+
+    // MARK: Goals after onboarding
+
+    public func loadGoals() async {
+        await load { userId in self.goals = try await self.backend.goals(userId: userId) }
+    }
+
+    /// Saves changed goals, then reads them back: in automatic mode the server
+    /// recalculates the calorie goal, so the saved value is not the one sent.
+    /// Returns true when the save went through, so the form knows to close.
+    public func updateGoals(_ draft: GoalsDraft) async -> Bool {
+        guard case .signedIn = phase else { return false }
+        clearErrors()
+        let changed: Goals
+        do {
+            changed = try draft.goals(units: units)
+        } catch {
+            fieldErrors = error.fields
+            return false
+        }
+        isWorking = true
+        defer { isWorking = false }
+        var saved = false
+        await load { userId in
+            try await self.backend.saveGoals(changed, userId: userId)
+            saved = true
+        }
+        guard saved else { return false }
+        await loadGoals()
         return true
     }
 

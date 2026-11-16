@@ -28,6 +28,12 @@ public enum UnitConversion {
     public static func kilograms(pounds: Decimal) -> Decimal {
         (pounds * kilogramsPerPound).rounded(scale: 2)
     }
+
+    /// For showing a stored weight to an imperial user. One decimal place is enough
+    /// that a whole number of pounds typed earlier comes back as the same number.
+    public static func pounds(kilograms: Decimal) -> Decimal {
+        (kilograms / kilogramsPerPound).rounded(scale: 1)
+    }
 }
 
 extension Decimal {

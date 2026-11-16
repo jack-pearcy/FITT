@@ -22,38 +22,6 @@ private extension ActivityLevel {
     }
 }
 
-private extension GoalDirection {
-    var label: String {
-        switch self {
-        case .bulk: "Bulk"
-        case .cut: "Cut"
-        case .maintain: "Maintain"
-        }
-    }
-}
-
-private struct SubmitSection: View {
-    @Environment(AppModel.self) private var model
-    let title: String
-    let action: () -> Void
-
-    var body: some View {
-        Section {
-            Button(action: action) {
-                HStack {
-                    Text(title)
-                    if model.isWorking {
-                        Spacer()
-                        ProgressView()
-                    }
-                }
-            }
-            .disabled(model.isWorking)
-            .accessibilityIdentifier("submit")
-        }
-    }
-}
-
 /// Step one of onboarding: the body measurements the calorie maths needs.
 struct BiometricsStepView: View {
     @Environment(AppModel.self) private var model
@@ -157,79 +125,11 @@ struct BiometricsStepView: View {
 struct GoalsStepView: View {
     @Environment(AppModel.self) private var model
     @State private var draft = GoalsDraft()
-    @FocusState private var focus: Field?
-
-    private enum Field { case targetWeight, timelineWeeks, calories }
 
     var body: some View {
-        Form {
-            Section {
-                Picker("Goal", selection: $draft.direction) {
-                    ForEach(GoalDirection.allCases, id: \.self) { direction in
-                        Text(direction.label).tag(Optional(direction))
-                    }
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("direction")
-                FieldError(field: "goalDirection")
-            }
-
-            Section {
-                LabeledContent("Target weight") {
-                    TextField(model.units == .metric ? "kg" : "lb", text: $draft.targetWeight)
-                        .numberEntry(decimal: true)
-                        .focused($focus, equals: .targetWeight)
-                        .accessibilityIdentifier("targetWeight")
-                }
-                FieldError(field: "targetWeightKg")
-
-                LabeledContent("Timeline") {
-                    TextField("weeks", text: $draft.timelineWeeks)
-                        .numberEntry(decimal: false)
-                        .focused($focus, equals: .timelineWeeks)
-                        .accessibilityIdentifier("timelineWeeks")
-                }
-                FieldError(field: "timelineWeeks")
-            } header: {
-                Text("Optional")
-            }
-
-            Section {
-                Picker("Calories", selection: $draft.mode) {
-                    Text("Automatic").tag(CalorieGoalMode.auto)
-                    Text("Manual").tag(CalorieGoalMode.manual)
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("calorieMode")
-
-                if draft.mode == .manual {
-                    LabeledContent("Daily calories") {
-                        TextField("kcal", text: $draft.calories)
-                            .numberEntry(decimal: false)
-                            .focused($focus, equals: .calories)
-                            .accessibilityIdentifier("calories")
-                    }
-                    FieldError(field: "calorieGoal")
-                }
-            } header: {
-                Text("Daily calorie goal")
-            } footer: {
-                if let maintenance = model.maintenanceCalories {
-                    Text("Your maintenance is about \(maintenance) calories a day. Automatic sets the goal from that and your goal above.")
-                        .accessibilityIdentifier("maintenance")
-                }
-            }
-
-            ErrorSection()
-            SubmitSection(title: "Finish") {
-                focus = nil
-                Task { await model.saveGoals(draft) }
-            }
+        GoalsForm(draft: $draft, submitTitle: "Finish") {
+            Task { await model.saveGoals(draft) }
         }
-        .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Your Goal")
-        .toolbar { KeyboardDoneButton { focus = nil } }
-        .onChange(of: draft) { model.clearErrors() }
-        .task { await model.loadMaintenanceCalories() }
     }
 }

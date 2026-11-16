@@ -72,6 +72,11 @@ public struct Backend: Sendable {
 
     // MARK: Goals
 
+    /// The saved goals. In automatic mode `calorieGoal` is the number the server worked out.
+    public func goals(userId: Int64) async throws -> Goals {
+        try await get("/api/users/\(userId)/identity/goals")
+    }
+
     public func saveGoals(_ goals: Goals, userId: Int64) async throws {
         try await post("/api/users/\(userId)/identity/goals", body: goals)
     }

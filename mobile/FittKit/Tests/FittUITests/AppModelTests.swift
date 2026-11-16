@@ -1102,4 +1102,127 @@ struct AppModelTests {
         #expect(model.weightEntries == nil)
         #expect(model.weightAverage == nil)
     }
+
+    // MARK: Goals after onboarding
+
+    private func goalsJSON(direction: String, calories: Int) -> String {
+        #"{"goalDirection":"\#(direction)","targetWeightKg":null,"timelineWeeks":null,"calorieGoalMode":"AUTO","calorieGoal":\#(calories)}"#
+    }
+
+    @Test("saved goals load for the account screen")
+    func loadsGoals() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let body = goalsJSON(direction: "CUT", calories: 2235)
+        server.respond { _ in .json(200, body) }
+
+        await model.loadGoals()
+
+        #expect(model.goals == Goals(goalDirection: .cut, calorieGoalMode: .auto, calorieGoal: 2235))
+        #expect(server.requests.last?.path == "/api/users/7/identity/goals")
+    }
+
+    @Test("changing goals saves them, then reads back what the server calculated")
+    func updatesGoals() async throws {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let before = server.requests.count
+        let recalculated = goalsJSON(direction: "BULK", calories: 3213)
+        server.respond { request in
+            request.method == "POST" ? StubResponse(status: 204) : .json(200, recalculated)
+        }
+        var draft = GoalsDraft()
+        draft.direction = .bulk
+
+        let saved = await model.updateGoals(draft)
+
+        #expect(saved)
+        #expect(model.goals?.goalDirection == .bulk)
+        #expect(model.goals?.calorieGoal == 3213)
+        #expect(!model.isWorking)
+        let requests = Array(server.requests.dropFirst(before))
+        #expect(requests.map { "\($0.method) \($0.path)" } == ["POST /api/users/7/identity/goals", "GET /api/users/7/identity/goals"])
+        let body = try #require(try JSONSerialization.jsonObject(with: requests[0].body) as? [String: Any])
+        #expect(body["goalDirection"] as? String == "BULK")
+        #expect(body["calorieGoal"] == nil)
+    }
+
+    @Test("changing goals does not touch the onboarding status")
+    func updateGoalsLeavesOnboarding() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let onboarding = model.onboarding
+        let before = server.requests.count
+        let body = goalsJSON(direction: "CUT", calories: 2235)
+        server.respond { request in
+            request.method == "POST" ? StubResponse(status: 204) : .json(200, body)
+        }
+        var draft = GoalsDraft()
+        draft.direction = .cut
+
+        _ = await model.updateGoals(draft)
+
+        #expect(model.onboarding == onboarding)
+        #expect(!server.requests.dropFirst(before).contains { $0.path.hasSuffix("/onboarding/status") })
+    }
+
+    @Test("changed goals with no direction are stopped on the device")
+    func updateGoalsValidatesFirst() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let before = server.requests.count
+
+        let saved = await model.updateGoals(GoalsDraft())
+
+        #expect(!saved)
+        #expect(model.fieldErrors == ["goalDirection": "Choose one"])
+        #expect(server.requests.count == before)
+    }
+
+    @Test("a server rejection keeps the form open and the saved goals as they were")
+    func updateGoalsServerRejects() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let current = goalsJSON(direction: "CUT", calories: 2235)
+        server.respond { _ in .json(200, current) }
+        await model.loadGoals()
+        server.respond { _ in
+            .json(400, #"{"status":400,"detail":"Validation failed","properties":{"errors":{"calorieGoal":"Calorie goal must be at least 500"}}}"#)
+        }
+        var draft = GoalsDraft()
+        draft.direction = .bulk
+
+        let saved = await model.updateGoals(draft)
+
+        #expect(!saved)
+        #expect(model.fieldErrors == ["calorieGoal": "Calorie goal must be at least 500"])
+        #expect(model.goals?.goalDirection == .cut)
+    }
+
+    @Test("a change that cannot reach the server keeps the form open")
+    func updateGoalsOffline() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond(nil)
+        var draft = GoalsDraft()
+        draft.direction = .bulk
+
+        let saved = await model.updateGoals(draft)
+
+        #expect(!saved)
+        #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+    }
+
+    @Test("sign out forgets the goals")
+    func signOutResetsGoals() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let body = goalsJSON(direction: "CUT", calories: 2235)
+        server.respond { request in request.method == "POST" ? StubResponse(status: 204) : .json(200, body) }
+        await model.loadGoals()
+
+        await model.signOut()
+
+        #expect(model.goals == nil)
+    }
 }
