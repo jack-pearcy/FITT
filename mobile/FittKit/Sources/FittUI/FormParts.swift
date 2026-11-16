@@ -55,3 +55,30 @@ struct ErrorSection: View {
         }
     }
 }
+
+extension View {
+    /// A number pad. The keyboard modifier exists only on iOS, and this module
+    /// also builds on macOS for tests.
+    func numberEntry(decimal: Bool) -> some View {
+        #if os(iOS)
+        self.keyboardType(decimal ? .decimalPad : .numberPad)
+            .multilineTextAlignment(.trailing)
+        #else
+        self.multilineTextAlignment(.trailing)
+        #endif
+    }
+}
+
+/// The number pads have no return key, so without this the keyboard stays up
+/// and covers the button at the bottom of the form.
+struct KeyboardDoneButton: ToolbarContent {
+    let action: () -> Void
+
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .keyboard) {
+            Spacer()
+            Button("Done", action: action)
+                .accessibilityIdentifier("keyboardDone")
+        }
+    }
+}
