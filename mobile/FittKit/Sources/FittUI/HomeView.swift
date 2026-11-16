@@ -51,24 +51,35 @@ private struct LoadFailedView: View {
     }
 }
 
-/// What to train next, as the server works it out from the active plan.
+/// The workout in progress when there is one, otherwise what to train next.
 struct TodayView: View {
     @Environment(AppModel.self) private var model
+    /// False until the first check for an unfinished session has come back, so
+    /// the Start button is not offered over a workout that is already running.
+    @State private var checkedForSession = false
 
     var body: some View {
         NavigationStack {
             Group {
-                if let next = model.nextLift {
+                if model.activeSession != nil {
+                    WorkoutView()
+                } else if let next = model.nextLift, checkedForSession {
                     content(next)
                 } else if let message = model.errorMessage {
-                    LoadFailedView(message: message) { await model.loadNextLift() }
+                    LoadFailedView(message: message) { await load() }
                 } else {
                     ProgressView()
                 }
             }
-            .navigationTitle("Today")
+            .navigationTitle(model.activeSession == nil ? "Today" : "Workout")
         }
-        .task { await model.loadNextLift() }
+        .task { await load() }
+    }
+
+    private func load() async {
+        await model.loadActiveSession()
+        checkedForSession = model.errorMessage == nil
+        await model.loadNextLift()
     }
 
     @ViewBuilder
@@ -101,8 +112,30 @@ struct TodayView: View {
                         ExerciseRow(item: item)
                     }
                 }
+
+                Section {
+                    Button {
+                        Task { await model.startWorkout() }
+                    } label: {
+                        HStack {
+                            Text("Start Workout")
+                            if model.isWorking {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(model.isWorking || day.exercises.isEmpty)
+                    .accessibilityIdentifier("startWorkout")
+                } footer: {
+                    if let message = model.errorMessage {
+                        Text(message)
+                            .foregroundStyle(.red)
+                            .accessibilityIdentifier("error")
+                    }
+                }
             }
-            .refreshable { await model.loadNextLift() }
+            .refreshable { await load() }
         } else {
             ContentUnavailableView(
                 "Nothing to train",

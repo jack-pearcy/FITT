@@ -103,6 +103,40 @@ public struct Backend: Sendable {
         try await send("POST", "/api/users/\(userId)/workout-plans", body: plan, authenticated: true)
     }
 
+    // MARK: Sessions
+
+    /// Every session of this user, newest first. The API has no route for just
+    /// the unfinished one, so the caller filters.
+    public func sessions(userId: Int64) async throws -> [WorkoutSession] {
+        try await get("/api/users/\(userId)/workout-sessions")
+    }
+
+    /// Creates an empty session. Its exercises are added one by one with `addEntry`.
+    public func startSession(_ session: NewWorkoutSession, userId: Int64) async throws -> WorkoutSession {
+        try await send("POST", "/api/users/\(userId)/workout-sessions", body: session, authenticated: true)
+    }
+
+    public func addEntry(exerciseId: Int64, sessionId: Int64, userId: Int64) async throws -> WorkoutSession {
+        try await send("POST", "/api/users/\(userId)/workout-sessions/\(sessionId)/entries", body: NewExerciseEntry(exerciseId: exerciseId), authenticated: true)
+    }
+
+    public func logSet(_ set: LoggedSet, entryId: Int64, sessionId: Int64, userId: Int64) async throws -> WorkoutSession {
+        try await send("POST", "/api/users/\(userId)/workout-sessions/\(sessionId)/entries/\(entryId)/sets", body: set, authenticated: true)
+    }
+
+    public func deleteSet(_ setId: Int64, entryId: Int64, sessionId: Int64, userId: Int64) async throws -> WorkoutSession {
+        try await send("DELETE", "/api/users/\(userId)/workout-sessions/\(sessionId)/entries/\(entryId)/sets/\(setId)", body: nil as NoBody?, authenticated: true)
+    }
+
+    /// Marks the session finished. Safe to repeat: the server keeps the first finish time.
+    public func finishSession(_ sessionId: Int64, userId: Int64) async throws -> WorkoutSession {
+        try await send("POST", "/api/users/\(userId)/workout-sessions/\(sessionId)/finish", body: nil as NoBody?, authenticated: true)
+    }
+
+    public func deleteSession(_ sessionId: Int64, userId: Int64) async throws {
+        _ = try await perform("DELETE", "/api/users/\(userId)/workout-sessions/\(sessionId)", body: nil as NoBody?, authenticated: true)
+    }
+
     // MARK: Transport
 
     private struct NoBody: Encodable {}

@@ -453,4 +453,90 @@ struct BackendTests {
         #expect(body["splitType"] as? String == "FULL_BODY")
         #expect((body["days"] as? [[String: Any]])?.first?["dayLabel"] as? String == "Full Body")
     }
+
+    // MARK: Sessions
+
+    private let sessionBody = #"{"id":12,"ownerUserId":10,"planId":5,"startedAt":"2026-11-16T05:20:32Z","finishedAt":null,"notes":null,"exerciseEntries":[]}"#
+
+    /// The method and path of the single request a call made, and its JSON body.
+    private func sent(_ server: StubServer) throws -> (line: String, body: [String: Any]) {
+        let request = try #require(server.requests.last)
+        let body = request.body.isEmpty ? [:] : try #require(try JSONSerialization.jsonObject(with: request.body) as? [String: Any])
+        return ("\(request.method) \(request.path)", body)
+    }
+
+    @Test("sessions are read as a list")
+    func readsSessions() async throws {
+        let server = StubServer()
+        let sessionBody = sessionBody
+        server.respond { _ in .json(200, "[\(sessionBody)]") }
+
+        #expect(try await server.backend().sessions(userId: 10).map(\.id) == [12])
+        #expect(try sent(server).line == "GET /api/users/10/workout-sessions")
+    }
+
+    @Test("starting a session posts the start time and plan")
+    func startsSession() async throws {
+        let server = StubServer()
+        let sessionBody = sessionBody
+        server.respond { _ in .json(201, sessionBody) }
+
+        let session = try await server.backend().startSession(
+            NewWorkoutSession(startedAt: Date(timeIntervalSince1970: 1_794_806_432), planId: 5), userId: 10)
+
+        #expect(session.id == 12)
+        let request = try sent(server)
+        #expect(request.line == "POST /api/users/10/workout-sessions")
+        #expect(request.body["startedAt"] as? String == "2026-11-16T05:20:32Z")
+        #expect(request.body["planId"] as? Int == 5)
+    }
+
+    @Test("adding an entry posts the exercise id")
+    func addsEntry() async throws {
+        let server = StubServer()
+        let sessionBody = sessionBody
+        server.respond { _ in .json(200, sessionBody) }
+
+        _ = try await server.backend().addEntry(exerciseId: 38, sessionId: 12, userId: 10)
+
+        let request = try sent(server)
+        #expect(request.line == "POST /api/users/10/workout-sessions/12/entries")
+        #expect(request.body["exerciseId"] as? Int == 38)
+    }
+
+    @Test("logging a set posts reps, weight and RPE to the entry")
+    func logsSet() async throws {
+        let server = StubServer()
+        let sessionBody = sessionBody
+        server.respond { _ in .json(200, sessionBody) }
+
+        _ = try await server.backend().logSet(
+            LoggedSet(reps: 8, weight: Decimal(string: "102.5"), rpe: Decimal(string: "8.5")), entryId: 30, sessionId: 12, userId: 10)
+
+        let request = try sent(server)
+        #expect(request.line == "POST /api/users/10/workout-sessions/12/entries/30/sets")
+        #expect(request.body["reps"] as? Int == 8)
+        #expect(request.body["weight"] as? Double == 102.5)
+        #expect(request.body["rpe"] as? Double == 8.5)
+    }
+
+    @Test("deleting a set, finishing and deleting a session use their routes")
+    func sessionRoutes() async throws {
+        let server = StubServer()
+        let sessionBody = sessionBody
+        server.respond { request in
+            request.method == "DELETE" && request.path.hasSuffix("/12") ? StubResponse(status: 204) : .json(200, sessionBody)
+        }
+        let backend = server.backend()
+
+        _ = try await backend.deleteSet(101, entryId: 30, sessionId: 12, userId: 10)
+        #expect(try sent(server).line == "DELETE /api/users/10/workout-sessions/12/entries/30/sets/101")
+
+        _ = try await backend.finishSession(12, userId: 10)
+        #expect(try sent(server).line == "POST /api/users/10/workout-sessions/12/finish")
+        #expect(server.requests.last?.body.isEmpty == true)
+
+        try await backend.deleteSession(12, userId: 10)
+        #expect(try sent(server).line == "DELETE /api/users/10/workout-sessions/12")
+    }
 }
