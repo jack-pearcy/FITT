@@ -570,6 +570,9 @@ Completed this phase (as of 2026-11-16):
 - Weight log shipped (PR #76): a fourth tab with the 7 day average and the last 90 days, a form to log a
   day's weight, and swipe to delete. The server keeps one entry per day, so logging a day again replaces
   it, and the form says which value will be replaced.
+- Goals after onboarding shipped (PR #78): the Account tab shows the saved goals, and a Change Goals screen
+  reuses the onboarding form filled in with them. The app reads the goals back after a save, so the calorie
+  figure shown is always the one the server worked out.
 
 The loop a lifter needs now works end to end on the phone: account, onboarding, plan, workout, next day.
 Each piece was run on the simulator against a local backend before it merged, and three defects were found
@@ -580,19 +583,19 @@ Not yet deployed: production still runs the build from before PR #69. Until it i
 has no refresh tokens and the app falls back to a one hour session.
 
 Remaining in this phase:
-- Goals after onboarding (view and change).
 - Settings: units preference, delete account. Both need API work first (see the gaps below).
 - Editing and deleting a plan; creating a custom exercise.
 - Session history, and progression suggestions with the model preference.
 - During a workout: add or remove an exercise, notes.
 - Make the mobile-test job a required check in the branch ruleset (a repository setting), and add a CI
-  build of the app target. The job runs the package tests only (197 at PR #76).
+  build of the app target. The job runs the package tests only (211 at PR #78).
 - Exercise how-to videos: a how-to icon beside an exercise that plays a short generated 3D clip of the
   movement, with the clips served from the existing Hetzner server. Noted 2026-11-15; not started.
 
 API gaps found while building the client:
 - No route to read biometrics back, so the units preference cannot be shown after a relaunch, and a set's
-  weight and a body weight are displayed without a unit.
+  weight and a body weight are displayed without a unit. For the same reason an imperial user sees and
+  edits the target weight in kilograms after a relaunch.
 - No route for the unfinished workout session. The client reads the whole session list to resume, which
   will slow down as history grows.
 - No update route for a custom exercise, no delete account, no streak, and no profile or notification
