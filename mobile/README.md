@@ -18,8 +18,21 @@ FittCore imports no UI or networking framework, so its tests run on the Mac with
 ## Commands
 
 ```
-cd FittKit && swift test        # core unit tests
+cd FittKit && swift test        # unit tests for FittCore and FittUI
 xcodegen && open FITT.xcodeproj # generate and open the Xcode project
 ```
+
+## Running against a local backend
+
+The app talks to https://fittapp.dev by default. A debug build reads `FITT_API_BASE_URL`,
+so the simulator can use a backend on this Mac instead:
+
+```
+docker compose up -d mysql backend   # from the repo root, serves http://localhost:8080
+SIMCTL_CHILD_FITT_API_BASE_URL=http://localhost:8080 xcrun simctl launch booted dev.fittapp.fitt
+```
+
+Build the app with normal signing (the Xcode default). An unsigned build cannot write to
+the Keychain, so sign in fails after the server has already accepted the credentials.
 
 Setup: Xcode with an iOS simulator runtime, and `brew install xcodegen`.
