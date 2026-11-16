@@ -1,7 +1,8 @@
 import Foundation
 
-/// The body of `POST /api/users/{id}/workout-plans`. Mirrors the backend
-/// `CreateWorkoutPlanRequest` record and the two records nested in it.
+/// The body of `POST /api/users/{id}/workout-plans` and of `PUT .../{planId}`.
+/// Mirrors the backend `CreateWorkoutPlanRequest` and `UpdateWorkoutPlanRequest`
+/// records, which have the same fields, and the two records nested in them.
 public struct NewWorkoutPlan: Encodable, Equatable, Sendable {
     public struct Day: Encodable, Equatable, Sendable {
         public let orderIndex: Int
@@ -67,6 +68,20 @@ public struct PlanDraft: Equatable, Sendable {
         self.splitType = splitType
         self.daysPerWeek = Self.suggestedDaysPerWeek(for: splitType)
         self.days = Self.suggestedLabels(for: splitType).map { Day(label: $0) }
+    }
+
+    /// A draft holding a saved plan, for the edit form. Days and exercises are
+    /// put in `orderIndex` order, because the position in the draft is the order
+    /// that gets sent back.
+    public init(plan: WorkoutPlan) {
+        self.name = plan.name
+        self.splitType = plan.splitType
+        self.daysPerWeek = plan.daysPerWeek
+        self.days = plan.orderedDays.map { day in
+            Day(label: day.dayLabel, slots: day.orderedExercises.map {
+                Slot(exercise: $0.exercise, sets: $0.sets, reps: $0.reps)
+            })
+        }
     }
 
     /// The day names a split starts with.
