@@ -183,6 +183,58 @@ struct PlanDraftTests {
 
     // MARK: Exercise catalog
 
+    private static let squat = Exercise(id: 38, name: "Back Squat", muscleGroup: .legs, custom: false)
+    private static let bench = Exercise(id: 1, name: "Bench Press", muscleGroup: .chest, custom: false)
+
+    /// A saved plan whose days and exercises arrive out of order, as the server may send them.
+    private static let savedPlan = WorkoutPlan(id: 9, name: "Two Day", daysPerWeek: 5, splitType: .upperLower, active: true, days: [
+        WorkoutPlanDay(id: 21, orderIndex: 1, dayLabel: "Lower", exercises: [
+            PlanDayExercise(id: 31, orderIndex: 0, sets: 5, reps: 5, exercise: squat),
+        ]),
+        WorkoutPlanDay(id: 20, orderIndex: 0, dayLabel: "Upper", exercises: [
+            PlanDayExercise(id: 33, orderIndex: 1, sets: 3, reps: 12, exercise: squat),
+            PlanDayExercise(id: 32, orderIndex: 0, sets: 4, reps: 8, exercise: bench),
+        ]),
+    ])
+
+    @Test("a draft made from a saved plan holds its fields, with days and exercises in order")
+    func prefillsFromPlan() {
+        let draft = PlanDraft(plan: Self.savedPlan)
+
+        #expect(draft.name == "Two Day")
+        #expect(draft.splitType == .upperLower)
+        #expect(draft.daysPerWeek == 5)
+        #expect(draft.days.map(\.label) == ["Upper", "Lower"])
+        #expect(draft.days[0].slots.map(\.exercise.name) == ["Bench Press", "Back Squat"])
+        #expect(draft.days[0].slots.map(\.sets) == [4, 3])
+        #expect(draft.days[0].slots.map(\.reps) == [8, 12])
+    }
+
+    @Test("a saved plan that is not changed goes back to the server as it was")
+    func editRoundTrip() throws {
+        let request = try PlanDraft(plan: Self.savedPlan).plan()
+
+        #expect(request == NewWorkoutPlan(name: "Two Day", daysPerWeek: 5, splitType: .upperLower, days: [
+            NewWorkoutPlan.Day(orderIndex: 0, dayLabel: "Upper", exercises: [
+                NewWorkoutPlan.Slot(exerciseId: 1, sets: 4, reps: 8),
+                NewWorkoutPlan.Slot(exerciseId: 38, sets: 3, reps: 12),
+            ]),
+            NewWorkoutPlan.Day(orderIndex: 1, dayLabel: "Lower", exercises: [
+                NewWorkoutPlan.Slot(exerciseId: 38, sets: 5, reps: 5),
+            ]),
+        ]))
+    }
+
+    @Test("changing the split of a saved plan keeps its days and its chosen frequency")
+    func editKeepsDaysOnSplitChange() {
+        var draft = PlanDraft(plan: Self.savedPlan)
+
+        draft.setSplitType(.custom)
+
+        #expect(draft.days.map(\.label) == ["Upper", "Lower"])
+        #expect(draft.daysPerWeek == 5)
+    }
+
     @Test("exercises are grouped in the server's muscle group order and sorted by name")
     func groupsExercises() {
         let curl = Exercise(id: 30, name: "barbell curl", muscleGroup: .arms, custom: true)

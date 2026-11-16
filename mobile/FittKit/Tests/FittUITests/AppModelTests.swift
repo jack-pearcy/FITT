@@ -577,6 +577,112 @@ struct AppModelTests {
         #expect(model.nextLift == nil)
     }
 
+    // MARK: Changing and deleting a plan
+
+    @Test("a changed plan is saved, then the plans and next lift are read again")
+    func updatePlanReloads() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let renamed = planJSON(id: 9, name: "Renamed", active: true)
+        let next = nextLiftJSON(planId: 9, planName: "Renamed")
+        server.respond { request in
+            // The server's real answer to a PUT has null day ids; the model must not depend on it.
+            if request.method == "PUT" {
+                return .json(200, #"{"id":9,"ownerUserId":7,"name":"Renamed","daysPerWeek":3,"splitType":"FULL_BODY","active":true,"days":[{"id":null,"orderIndex":0,"dayLabel":"Full Body","exercises":[]}]}"#)
+            }
+            return request.path.hasSuffix("/next-lift") ? .json(200, next) : .json(200, "[\(renamed)]")
+        }
+
+        let saved = await model.updatePlan(9, with: namedDraft("Renamed"))
+
+        #expect(saved)
+        #expect(model.plans?.map(\.name) == ["Renamed"])
+        #expect(model.nextLift?.planName == "Renamed")
+        #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
+        #expect(server.requests.dropFirst().map { "\($0.method) \($0.path)" } == [
+            "PUT /api/users/7/workout-plans/9",
+            "GET /api/users/7/workout-plans",
+            "GET /api/users/7/next-lift",
+        ])
+    }
+
+    @Test("a change with no name is stopped on the device")
+    func updatePlanValidatesFirst() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+
+        let saved = await model.updatePlan(9, with: PlanDraft(splitType: .fullBody))
+
+        #expect(!saved)
+        #expect(model.fieldErrors == ["name": "Plan name is required"])
+        #expect(server.requests.count == 1)
+    }
+
+    @Test("a change the server rejects keeps the form open with the field message")
+    func updatePlanServerRejects() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in
+            .json(400, #"{"status":400,"detail":"Validation failed","properties":{"errors":{"days[0].dayLabel":"Day label is required"}}}"#)
+        }
+
+        let saved = await model.updatePlan(9, with: namedDraft())
+
+        #expect(!saved)
+        #expect(model.fieldErrors == ["days[0].dayLabel": "Day label is required"])
+        #expect(server.requests.dropFirst().count == 1)
+    }
+
+    @Test("a change that cannot reach the server keeps the form open")
+    func updatePlanOffline() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond(nil)
+
+        let saved = await model.updatePlan(9, with: namedDraft())
+
+        #expect(!saved)
+        #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+    }
+
+    @Test("a deleted plan is gone from the list, and the next lift is read again")
+    func deletePlanReloads() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let noPlan = #"{"hasActivePlan":false,"planId":null,"planName":null,"daysInRotation":0,"dayNumber":0,"weekInCycle":1,"deload":false,"alreadyTrainedToday":false,"day":null}"#
+        server.respond { request in
+            if request.method == "DELETE" { return StubResponse(status: 204) }
+            return request.path.hasSuffix("/next-lift") ? .json(200, noPlan) : .json(200, "[]")
+        }
+
+        let deleted = await model.deletePlan(9)
+
+        #expect(deleted)
+        #expect(model.plans == [])
+        #expect(model.nextLift?.hasActivePlan == false)
+        #expect(!model.isWorking)
+        #expect(server.requests.dropFirst().map { "\($0.method) \($0.path)" } == [
+            "DELETE /api/users/7/workout-plans/9",
+            "GET /api/users/7/workout-plans",
+            "GET /api/users/7/next-lift",
+        ])
+    }
+
+    @Test("a delete the server refuses leaves the plan and says why")
+    func deletePlanRejected() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in .json(404, #"{"status":404,"title":"Not Found","detail":"Workout plan not found"}"#) }
+
+        let deleted = await model.deletePlan(9)
+
+        #expect(!deleted)
+        #expect(model.errorMessage != nil)
+        #expect(model.plans == nil)
+        #expect(server.requests.dropFirst().count == 1)
+    }
+
     // MARK: Creating a plan
 
     private func namedDraft(_ name: String = "Full Body") -> PlanDraft {
