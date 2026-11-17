@@ -582,6 +582,10 @@ struct BackendTests {
         _ = try await backend.deleteSet(101, entryId: 30, sessionId: 12, userId: 10)
         #expect(try sent(server).line == "DELETE /api/users/10/workout-sessions/12/entries/30/sets/101")
 
+        _ = try await backend.removeEntry(30, sessionId: 12, userId: 10)
+        #expect(try sent(server).line == "DELETE /api/users/10/workout-sessions/12/entries/30")
+        #expect(server.requests.last?.body.isEmpty == true)
+
         _ = try await backend.finishSession(12, userId: 10)
         #expect(try sent(server).line == "POST /api/users/10/workout-sessions/12/finish")
         #expect(server.requests.last?.body.isEmpty == true)

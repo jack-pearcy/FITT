@@ -484,6 +484,28 @@ public final class AppModel {
         }
     }
 
+    /// Adds an exercise to the workout in progress, after the ones already in
+    /// it. The plan is not changed: this is for today only.
+    public func addExercise(_ exercise: Exercise) async {
+        guard let session = activeSession, !isWorking else { return }
+        isWorking = true
+        defer { isWorking = false }
+        await load { userId in
+            self.activeSession = try await self.backend.addEntry(exerciseId: exercise.id, sessionId: session.id, userId: userId)
+        }
+    }
+
+    /// Removes an exercise from the workout in progress. The server deletes the
+    /// sets logged for it too.
+    public func removeExercise(entryId: Int64) async {
+        guard let session = activeSession, !isWorking else { return }
+        isWorking = true
+        defer { isWorking = false }
+        await load { userId in
+            self.activeSession = try await self.backend.removeEntry(entryId, sessionId: session.id, userId: userId)
+        }
+    }
+
     /// Logs one set. Returns true when it was saved.
     public func logSet(_ draft: SetDraft, entryId: Int64) async -> Bool {
         guard let session = activeSession else { return false }

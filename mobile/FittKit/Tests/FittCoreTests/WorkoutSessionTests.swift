@@ -53,6 +53,20 @@ struct WorkoutSessionTests {
         ))
     }
 
+    @Test("entries that share an index, as happens after one is removed and another added, keep the newer one last")
+    func ordersTiedEntries() throws {
+        let json = #"""
+        {"id":12,"ownerUserId":7,"planId":5,"startedAt":"2026-11-16T05:20:32Z","finishedAt":null,"notes":null,"exerciseEntries":[
+          {"id":40,"orderIndex":2,"exercise":{"id":38,"name":"Back Squat","muscleGroup":"LEGS","custom":false},"sets":[]},
+          {"id":32,"orderIndex":2,"exercise":{"id":14,"name":"Bent Over Barbell Row","muscleGroup":"BACK","custom":false},"sets":[]},
+          {"id":31,"orderIndex":1,"exercise":{"id":1,"name":"Barbell Bench Press","muscleGroup":"CHEST","custom":false},"sets":[]}
+        ]}
+        """#
+        let session = try JSONDecoder().decode(WorkoutSession.self, from: Data(json.utf8))
+
+        #expect(session.orderedEntries.map(\.id) == [31, 32, 40])
+    }
+
     @Test("entries and sets are ordered by their index and set number")
     func orders() throws {
         let session = try session()

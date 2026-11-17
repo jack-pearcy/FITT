@@ -145,6 +145,11 @@ public struct Backend: Sendable {
         try await send("POST", "/api/users/\(userId)/workout-sessions/\(sessionId)/entries", body: NewExerciseEntry(exerciseId: exerciseId), authenticated: true)
     }
 
+    /// Removes an exercise from a session, along with the sets logged for it.
+    public func removeEntry(_ entryId: Int64, sessionId: Int64, userId: Int64) async throws -> WorkoutSession {
+        try await send("DELETE", "/api/users/\(userId)/workout-sessions/\(sessionId)/entries/\(entryId)", body: nil as NoBody?, authenticated: true)
+    }
+
     public func logSet(_ set: LoggedSet, entryId: Int64, sessionId: Int64, userId: Int64) async throws -> WorkoutSession {
         try await send("POST", "/api/users/\(userId)/workout-sessions/\(sessionId)/entries/\(entryId)/sets", body: set, authenticated: true)
     }
