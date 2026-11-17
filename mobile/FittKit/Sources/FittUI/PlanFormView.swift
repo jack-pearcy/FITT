@@ -62,6 +62,7 @@ struct PlanFormView: View {
                             SlotRow(slot: $slot)
                         }
                         .onDelete { day.slots.remove(atOffsets: $0) }
+                        .onMove { draft.moveSlots(inDay: day.id, from: $0, to: $1) }
                         FieldError(field: "days[\(index)].exercises")
 
                         Button("Add Exercise") {
@@ -78,7 +79,23 @@ struct PlanFormView: View {
                             .accessibilityIdentifier("removeDay.\(index)")
                         }
                     } header: {
-                        Text("Day \(index + 1)")
+                        HStack {
+                            Text("Day \(index + 1)")
+                            Spacer()
+                            // A section cannot be dragged, so a day moves one place at a time.
+                            Button("Move Day Earlier", systemImage: "chevron.up") {
+                                withAnimation { draft.moveDay(day.id, by: -1) }
+                            }
+                            .disabled(!draft.canMoveDay(day.id, by: -1))
+                            .accessibilityIdentifier("moveDayEarlier.\(index)")
+                            Button("Move Day Later", systemImage: "chevron.down") {
+                                withAnimation { draft.moveDay(day.id, by: 1) }
+                            }
+                            .disabled(!draft.canMoveDay(day.id, by: 1))
+                            .accessibilityIdentifier("moveDayLater.\(index)")
+                        }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.borderless)
                     }
                 }
 
