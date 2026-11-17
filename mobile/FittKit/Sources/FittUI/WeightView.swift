@@ -135,6 +135,7 @@ private struct LogWeightView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .secondaryAction()
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {

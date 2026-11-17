@@ -115,6 +115,18 @@ extension View {
             .background(Theme.canvas.ignoresSafeArea())
     }
 
+    /// A button that is not the main action of its screen, such as Cancel. It
+    /// takes the text color, so the accent stays on the one action that matters.
+    func secondaryAction() -> some View {
+        tint(Theme.textPrimary)
+    }
+
+    /// A control that shows a current value, such as a menu picker. The value is
+    /// a setting, not an action, so it does not take the accent.
+    func quietValue() -> some View {
+        tint(Theme.textSecondary)
+    }
+
     /// A secondary label: small, uppercase, widely tracked, in the muted text tone.
     func sectionLabel() -> some View {
         self

@@ -205,6 +205,7 @@ struct WorkoutView: View {
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Cancel") { addingExercise = false }
+                                .secondaryAction()
                         }
                     }
                 }

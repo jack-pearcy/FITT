@@ -27,6 +27,7 @@ struct NewExerciseView: View {
                         }
                     }
                     .accessibilityIdentifier("muscleGroup")
+                    .quietValue()
                     FieldError(field: "muscleGroup")
                 } footer: {
                     Text("Only you can see an exercise you create.")
@@ -42,6 +43,7 @@ struct NewExerciseView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .secondaryAction()
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
