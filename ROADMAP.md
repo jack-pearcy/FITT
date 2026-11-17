@@ -573,22 +573,28 @@ Completed this phase (as of 2026-11-16):
 - Goals after onboarding shipped (PR #78): the Account tab shows the saved goals, and a Change Goals screen
   reuses the onboarding form filled in with them. The app reads the goals back after a save, so the calorie
   figure shown is always the one the server worked out.
+- Editing and deleting a plan shipped (PR #80): the plan form now serves a new plan and a saved one, and
+  the plan screen has Edit and Delete. Workouts logged with a deleted plan are kept. The first simulator
+  run found a backend defect: the update route answered with null ids for the rebuilt days and exercises.
+  The app reads the plans back instead of trusting that answer, and the fix for the route itself is PR #81.
 
 The loop a lifter needs now works end to end on the phone: account, onboarding, plan, workout, next day.
 Each piece was run on the simulator against a local backend before it merged, and three defects were found
 that way that the unit tests could not see (an unsigned build cannot write to the Keychain, the number pad
-covered the Continue button, and a keyboard toolbar item did not appear inside the tab view).
+covered the Continue button, and a keyboard toolbar item did not appear inside the tab view). A fourth, in
+the backend, was found the same way while building plan editing.
 
 Not yet deployed: production still runs the build from before PR #69. Until it is deployed the live API
 has no refresh tokens and the app falls back to a one hour session.
 
 Remaining in this phase:
 - Settings: units preference, delete account. Both need API work first (see the gaps below).
-- Editing and deleting a plan; creating a custom exercise.
+- Creating a custom exercise.
+- Reordering the days and exercises of a plan.
 - Session history, and progression suggestions with the model preference.
 - During a workout: add or remove an exercise, notes.
 - Make the mobile-test job a required check in the branch ruleset (a repository setting), and add a CI
-  build of the app target. The job runs the package tests only (211 at PR #78).
+  build of the app target. The job runs the package tests only (222 at PR #80).
 - Exercise how-to videos: a how-to icon beside an exercise that plays a short generated 3D clip of the
   movement, with the clips served from the existing Hetzner server. Noted 2026-11-15; not started.
 
