@@ -63,8 +63,11 @@ public struct WorkoutSession: Decodable, Equatable, Identifiable, Sendable {
 
     public var isFinished: Bool { finishedAt != nil }
 
+    /// The server numbers a new entry by how many the session has, so after one
+    /// is removed two can share an index. The id breaks the tie: the newer entry
+    /// comes last.
     public var orderedEntries: [ExerciseEntry] {
-        exerciseEntries.sorted { $0.orderIndex < $1.orderIndex }
+        exerciseEntries.sorted { ($0.orderIndex, $0.id) < ($1.orderIndex, $1.id) }
     }
 
     public var loggedSetCount: Int {

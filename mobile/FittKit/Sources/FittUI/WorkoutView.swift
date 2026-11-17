@@ -31,6 +31,9 @@ struct WorkoutView: View {
     /// What is typed for the next set of each entry, keyed by entry id.
     @State private var drafts: [Int64: SetDraft] = [:]
     @State private var confirmingDiscard = false
+    @State private var addingExercise = false
+    /// The exercise waiting for a yes before it is removed with its sets.
+    @State private var removing: ExerciseEntry?
     @FocusState private var focus: Field?
 
     private struct Field: Hashable {
@@ -62,7 +65,18 @@ struct WorkoutView: View {
                         }
                         setForm(for: entry)
                     } header: {
-                        Text(entry.exercise.name)
+                        HStack {
+                            Text(entry.exercise.name)
+                            Spacer()
+                            Menu {
+                                Button("Remove Exercise", role: .destructive) { remove(entry) }
+                            } label: {
+                                Image(systemName: "ellipsis.circle")
+                            }
+                            .disabled(model.isWorking)
+                            .accessibilityLabel("Options for \(entry.exercise.name)")
+                            .accessibilityIdentifier("entryMenu.\(entry.id)")
+                        }
                     } footer: {
                         VStack(alignment: .leading, spacing: 4) {
                             if let target = target(for: entry) {
@@ -84,6 +98,17 @@ struct WorkoutView: View {
                         Text("This workout has no exercises.")
                             .foregroundStyle(.secondary)
                     }
+                }
+
+                Section {
+                    Button("Add Exercise") {
+                        focus = nil
+                        addingExercise = true
+                    }
+                    .disabled(model.isWorking)
+                    .accessibilityIdentifier("addExercise")
+                } footer: {
+                    Text("Added for this workout only. Your plan stays as it is.")
                 }
 
                 ErrorSection()
@@ -130,8 +155,33 @@ struct WorkoutView: View {
                     ? "Nothing has been logged yet."
                     : "The \(session.loggedSetCount) sets you logged will be deleted.")
             }
+            .confirmationDialog(
+                "Remove \(removing?.exercise.name ?? "exercise")?",
+                isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+                titleVisibility: .visible,
+                presenting: removing
+            ) { entry in
+                Button("Remove Exercise", role: .destructive) {
+                    Task { await model.removeExercise(entryId: entry.id) }
+                }
+            } message: { entry in
+                Text("The \(entry.sets.count) \(entry.sets.count == 1 ? "set" : "sets") you logged for it will be deleted.")
+            }
+            .sheet(isPresented: $addingExercise) {
+                NavigationStack {
+                    ExercisePickerView { exercise in
+                        addingExercise = false
+                        Task { await model.addExercise(exercise) }
+                    }
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { addingExercise = false }
+                        }
+                    }
+                }
+            }
             // Runs again when an exercise is added, which happens one by one as a
-            // workout starts.
+            // workout starts and again each time the user adds one.
             .task(id: session.exerciseEntries.map(\.id)) { await model.loadSuggestions() }
         }
     }
@@ -169,6 +219,17 @@ struct WorkoutView: View {
         }
         ForEach(["weight", "reps", "rpe"], id: \.self) { field in
             FieldError(field: AppModel.setFieldKey(entryId: entry.id, field: field))
+        }
+    }
+
+    /// An exercise with nothing logged goes at once. One with sets asks first,
+    /// because the sets go with it.
+    private func remove(_ entry: ExerciseEntry) {
+        focus = nil
+        if entry.sets.isEmpty {
+            Task { await model.removeExercise(entryId: entry.id) }
+        } else {
+            removing = entry
         }
     }
 

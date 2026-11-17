@@ -1065,6 +1065,68 @@ struct AppModelTests {
         #expect(calls(server, after: before) == ["DELETE /api/users/7/workout-sessions/12/entries/30/sets/101"])
     }
 
+    @Test("adding an exercise posts it to the session and shows the server's answer")
+    func addsExercise() async throws {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        let before = server.requests.count
+        let updated = sessionJSON(entries: [entryJSON(id: 30, order: 0, exercise: bench), entryJSON(id: 31, order: 1, exercise: squat)].joined(separator: ","))
+        server.respond { _ in .json(200, updated) }
+        let exercise = try JSONDecoder().decode(Exercise.self, from: Data(squat.utf8))
+
+        await model.addExercise(exercise)
+
+        #expect(model.activeSession?.orderedEntries.map(\.exercise.id) == [1, 38])
+        #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == ["POST /api/users/7/workout-sessions/12/entries"])
+        let body = try #require(JSONSerialization.jsonObject(with: server.requests.last?.body ?? Data()) as? [String: Any])
+        #expect(body["exerciseId"] as? Int == 38)
+    }
+
+    @Test("an exercise that fails to add leaves the workout as it was and says why")
+    func addExerciseFails() async throws {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        server.respond(nil)
+        let exercise = try JSONDecoder().decode(Exercise.self, from: Data(squat.utf8))
+
+        await model.addExercise(exercise)
+
+        #expect(model.activeSession?.exerciseEntries.map(\.id) == [30])
+        #expect(model.errorMessage != nil)
+        #expect(!model.isWorking)
+    }
+
+    @Test("removing an exercise deletes its entry and shows the server's answer")
+    func removesExercise() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        let before = server.requests.count
+        let updated = sessionJSON()
+        server.respond { _ in .json(200, updated) }
+
+        await model.removeExercise(entryId: 30)
+
+        #expect(model.activeSession?.exerciseEntries.isEmpty == true)
+        #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == ["DELETE /api/users/7/workout-sessions/12/entries/30"])
+    }
+
+    @Test("with no workout in progress, adding and removing send nothing")
+    func addAndRemoveNeedAWorkout() async throws {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        let exercise = try JSONDecoder().decode(Exercise.self, from: Data(squat.utf8))
+
+        await model.addExercise(exercise)
+        await model.removeExercise(entryId: 30)
+
+        #expect(server.requests.count == before)
+    }
+
     @Test("finishing ends the workout and reloads what comes next")
     func finishWorkout() async {
         let server = StubServer()
