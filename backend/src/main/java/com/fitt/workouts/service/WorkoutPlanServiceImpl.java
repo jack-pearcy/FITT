@@ -69,7 +69,11 @@ public class WorkoutPlanServiceImpl implements WorkoutPlanService {
 
         addDaysFromRequest(plan, request.days());
 
-        // plan is managed so dirty checking flushes the changes at commit. no save needed.
+        // plan is managed, so dirty checking writes the changes with no save call. The flush
+        // has to happen before the response is built: the rebuilt days and exercises get
+        // their ids from the insert, and without it the response carries null ids.
+        planRepository.flush();
+
         return toResponse(plan);
     }
 
