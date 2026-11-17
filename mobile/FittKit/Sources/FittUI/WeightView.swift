@@ -30,11 +30,15 @@ struct WeightView: View {
                                 .accessibilityIdentifier("logFirstWeight")
                         }
                     } else {
-                        List {
+                        ThemedList {
                             if let average = model.weightAverage {
                                 Section {
-                                    LabeledContent("7 day average", value: average.formatted())
-                                        .accessibilityIdentifier("weightAverage")
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("7 day average").sectionLabel()
+                                        Text(average.formatted()).heroMetric()
+                                    }
+                                    .accessibilityElement(children: .combine)
+                                    .accessibilityIdentifier("weightAverage")
                                 }
                             }
                             Section {
@@ -50,11 +54,11 @@ struct WeightView: View {
                                     }
                                 }
                             } header: {
-                                Text("Last \(AppModel.weightLogDays) days")
+                                Text("Last \(AppModel.weightLogDays) days").sectionLabel()
                             } footer: {
                                 if let message = model.errorMessage {
                                     Text(message)
-                                        .foregroundStyle(.red)
+                                        .foregroundStyle(Theme.negative)
                                         .accessibilityIdentifier("error")
                                 }
                             }
@@ -67,6 +71,7 @@ struct WeightView: View {
                     ProgressView()
                 }
             }
+            .canvas()
             .navigationTitle("Weight")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -99,7 +104,7 @@ private struct LogWeightView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            ThemedForm {
                 Section {
                     DatePicker("Date", selection: date, in: ...Date.now, displayedComponents: .date)
                         .environment(\.calendar, CalendarDate.gregorian)
@@ -122,6 +127,7 @@ private struct LogWeightView: View {
 
                 ErrorSection()
             }
+            .canvas()
             .navigationTitle("Log Weight")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

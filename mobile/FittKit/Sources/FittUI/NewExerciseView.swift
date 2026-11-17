@@ -13,7 +13,7 @@ struct NewExerciseView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            ThemedForm {
                 Section {
                     TextField("Name", text: $draft.name)
                         .focused($nameFocused)
@@ -34,6 +34,7 @@ struct NewExerciseView: View {
 
                 ErrorSection()
             }
+            .canvas()
             .navigationTitle("New Exercise")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
