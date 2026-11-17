@@ -583,6 +583,10 @@ Completed this phase (as of 2026-11-16):
 - Session history shipped (PR #85): a fifth tab lists finished workouts newest first, and a workout opens
   to its exercises and sets, with delete behind a confirmation. It needs no new request: the session list
   the app already read to find the unfinished workout is the same list.
+- Progression suggestions shipped (PR #87): during a workout each exercise shows the server's suggestion
+  for next time with its reasoning, and the Account tab has a picker for the three models. A suggestion
+  that fails to load is left out, so it never blocks logging a set. The suggestion is shown only; it does
+  not fill in the weight and reps fields.
 
 The loop a lifter needs now works end to end on the phone: account, onboarding, plan, workout, next day.
 Each piece was run on the simulator against a local backend before it merged, and three defects were found
@@ -597,10 +601,9 @@ Remaining in this phase:
 - Settings: units preference, delete account. Both need API work first (see the gaps below).
 - An exercise library screen, with delete for a custom exercise.
 - Reordering the days and exercises of a plan.
-- Progression suggestions with the model preference.
 - During a workout: add or remove an exercise, notes.
 - Make the mobile-test job a required check in the branch ruleset (a repository setting), and add a CI
-  build of the app target. The job runs the package tests only (243 at PR #85).
+  build of the app target. The job runs the package tests only (258 at PR #87).
 - Exercise how-to videos: a how-to icon beside an exercise that plays a short generated 3D clip of the
   movement, with the clips served from the existing Hetzner server. Noted 2026-11-15; not started.
 
