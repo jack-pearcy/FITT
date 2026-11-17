@@ -72,6 +72,73 @@ struct PlanDraftTests {
         #expect(draft.days.count == 13)
     }
 
+    @Test("a day moves one place earlier or later and stops at either end")
+    func movesDay() {
+        var draft = PlanDraft(splitType: .pushPullLegs)
+        let push = draft.days[0].id
+        let legs = draft.days[2].id
+
+        #expect(!draft.canMoveDay(push, by: -1))
+        #expect(!draft.canMoveDay(legs, by: 1))
+        #expect(!draft.canMoveDay(UUID(), by: 1))
+
+        draft.moveDay(push, by: 1)
+        #expect(draft.days.map(\.label) == ["Pull", "Push", "Legs"])
+        draft.moveDay(legs, by: -1)
+        #expect(draft.days.map(\.label) == ["Pull", "Legs", "Push"])
+
+        draft.moveDay(push, by: 1)
+        draft.moveDay(UUID(), by: -1)
+        #expect(draft.days.map(\.label) == ["Pull", "Legs", "Push"])
+    }
+
+    @Test("a moved day keeps its exercises and is sent at its new position")
+    func movedDayIsSentInNewOrder() throws {
+        var draft = PlanDraft(splitType: .upperLower)
+        draft.name = "Plan"
+        draft.add(bench, toDay: draft.days[0].id)
+        draft.moveDay(draft.days[0].id, by: 1)
+
+        let days = try draft.plan().days
+        #expect(days.map(\.orderIndex) == [0, 1])
+        #expect(days.map(\.dayLabel) == ["Lower", "Upper"])
+        #expect(days[1].exercises.map(\.exerciseId) == [bench.id])
+    }
+
+    @Test("exercises move inside a day the way a list's move action reports it", arguments: [
+        (IndexSet(integer: 0), 3, [2, 3, 1]),
+        (IndexSet(integer: 2), 0, [3, 1, 2]),
+        (IndexSet(integer: 0), 2, [2, 1, 3]),
+        (IndexSet(integer: 1), 1, [1, 2, 3]),
+        (IndexSet([0, 2]), 2, [2, 1, 3]),
+    ])
+    func movesSlots(source: IndexSet, destination: Int, expected: [Int]) {
+        var draft = PlanDraft(splitType: .fullBody)
+        let day = draft.days[0].id
+        for id in 1...3 {
+            draft.add(Exercise(id: Int64(id), name: "Exercise \(id)", muscleGroup: .chest, custom: false), toDay: day)
+        }
+
+        draft.moveSlots(inDay: day, from: source, to: destination)
+
+        #expect(draft.days[0].slots.map(\.exercise.id) == expected.map(Int64.init))
+    }
+
+    @Test("a move that names a missing day or a position outside the day changes nothing")
+    func ignoresBadSlotMoves() {
+        var draft = PlanDraft(splitType: .fullBody)
+        let day = draft.days[0].id
+        draft.add(bench, toDay: day)
+        draft.add(squat, toDay: day)
+        let before = draft
+
+        draft.moveSlots(inDay: UUID(), from: IndexSet(integer: 0), to: 2)
+        draft.moveSlots(inDay: day, from: IndexSet(integer: 5), to: 0)
+        draft.moveSlots(inDay: day, from: IndexSet(integer: 0), to: 3)
+
+        #expect(draft == before)
+    }
+
     @Test("an added exercise starts at three sets of ten")
     func addsExerciseWithDefaults() {
         var draft = PlanDraft(splitType: .custom)
