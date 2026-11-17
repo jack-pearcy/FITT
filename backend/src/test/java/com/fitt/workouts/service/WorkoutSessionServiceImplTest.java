@@ -185,6 +185,38 @@ class WorkoutSessionServiceImplTest {
     }
 
     @Test
+    void addExerciseEntry_afterFirstEntryRemoved_usesHighestOrderIndexPlusOne() {
+        WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
+        // Entries 1 and 2 remain after entry 0 was removed. size() would give 2 again.
+        session.addExerciseEntry(new ExerciseEntryEntity(exerciseWithId(EXERCISE_ID + 1), 1));
+        session.addExerciseEntry(new ExerciseEntryEntity(exerciseWithId(EXERCISE_ID + 2), 2));
+
+        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(exerciseRepository.findAccessibleById(EXERCISE_ID, OWNER_USER_ID))
+                .thenReturn(Optional.of(exerciseWithId(EXERCISE_ID)));
+        when(sessionRepository.save(any(WorkoutSessionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.addExerciseEntry(OWNER_USER_ID, SESSION_ID, new AddExerciseEntryRequest(EXERCISE_ID));
+
+        assertThat(session.getExerciseEntries().get(2).getOrderIndex()).isEqualTo(3);
+    }
+
+    @Test
+    void addExerciseEntry_firstEntryOfSession_startsAtZero() {
+        WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
+        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(exerciseRepository.findAccessibleById(EXERCISE_ID, OWNER_USER_ID))
+                .thenReturn(Optional.of(exerciseWithId(EXERCISE_ID)));
+        when(sessionRepository.save(any(WorkoutSessionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.addExerciseEntry(OWNER_USER_ID, SESSION_ID, new AddExerciseEntryRequest(EXERCISE_ID));
+
+        assertThat(session.getExerciseEntries().get(0).getOrderIndex()).isZero();
+    }
+
+    @Test
     void addExerciseEntry_exerciseNotInLibrary_throwsExerciseNotFoundException() {
         WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
