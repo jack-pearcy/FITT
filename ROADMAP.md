@@ -587,12 +587,18 @@ Completed this phase (as of 2026-11-16):
   for next time with its reasoning, and the Account tab has a picker for the three models. A suggestion
   that fails to load is left out, so it never blocks logging a set. The suggestion is shown only; it does
   not fill in the weight and reps fields.
+- Adding and removing an exercise during a workout shipped (PR #89): the workout screen opens the exercise
+  picker to add one for today only, and each exercise has a menu to remove it, with a confirmation when
+  sets were logged. The simulator run found a backend defect: a new entry was numbered by the count of
+  entries, so after a removal two entries shared an order index. The app breaks the tie by entry id, and
+  the route itself was fixed in PR #90.
 
 The loop a lifter needs now works end to end on the phone: account, onboarding, plan, workout, next day.
 Each piece was run on the simulator against a local backend before it merged, and three defects were found
 that way that the unit tests could not see (an unsigned build cannot write to the Keychain, the number pad
 covered the Continue button, and a keyboard toolbar item did not appear inside the tab view). A fourth, in
-the backend, was found the same way while building plan editing.
+the backend, was found the same way while building plan editing, and a fifth while building exercise
+changes during a workout.
 
 Not yet deployed: production still runs the build from before PR #69. Until it is deployed the live API
 has no refresh tokens and the app falls back to a one hour session.
@@ -601,9 +607,9 @@ Remaining in this phase:
 - Settings: units preference, delete account. Both need API work first (see the gaps below).
 - An exercise library screen, with delete for a custom exercise.
 - Reordering the days and exercises of a plan.
-- During a workout: add or remove an exercise, notes.
+- During a workout: notes.
 - Make the mobile-test job a required check in the branch ruleset (a repository setting), and add a CI
-  build of the app target. The job runs the package tests only (258 at PR #87).
+  build of the app target. The job runs the package tests only (263 at PR #89).
 - Exercise how-to videos: a how-to icon beside an exercise that plays a short generated 3D clip of the
   movement, with the clips served from the existing Hetzner server. Noted 2026-11-15; not started.
 
