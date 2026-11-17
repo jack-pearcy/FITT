@@ -10,6 +10,21 @@ extension SetEntry {
     }
 }
 
+extension ProgressionSuggestion {
+    /// "102.5 × 8, 3 sets". Nil when the server had no weight to suggest.
+    var targetText: String? {
+        guard hasTarget else { return nil }
+        var text = suggestedWeight.formatted()
+        if let suggestedReps {
+            text += " × \(suggestedReps)"
+        }
+        if let suggestedSets {
+            text += ", \(suggestedSets) \(suggestedSets == 1 ? "set" : "sets")"
+        }
+        return text
+    }
+}
+
 /// The workout in progress: each exercise with its logged sets and a row to log the next one.
 struct WorkoutView: View {
     @Environment(AppModel.self) private var model
@@ -49,8 +64,17 @@ struct WorkoutView: View {
                     } header: {
                         Text(entry.exercise.name)
                     } footer: {
-                        if let target = target(for: entry) {
-                            Text("Plan: \(target.sets) × \(target.reps)")
+                        VStack(alignment: .leading, spacing: 4) {
+                            if let target = target(for: entry) {
+                                Text("Plan: \(target.sets) × \(target.reps)")
+                            }
+                            if let suggestion = model.suggestions[entry.exercise.id] {
+                                if let targetText = suggestion.targetText {
+                                    Text("Suggested: \(targetText)")
+                                        .accessibilityIdentifier("suggestion.\(entry.exercise.id)")
+                                }
+                                Text(suggestion.reasoning)
+                            }
                         }
                     }
                 }
@@ -106,6 +130,9 @@ struct WorkoutView: View {
                     ? "Nothing has been logged yet."
                     : "The \(session.loggedSetCount) sets you logged will be deleted.")
             }
+            // Runs again when an exercise is added, which happens one by one as a
+            // workout starts.
+            .task(id: session.exerciseEntries.map(\.id)) { await model.loadSuggestions() }
         }
     }
 

@@ -337,6 +337,32 @@ private struct AccountView: View {
                     Text("Goals")
                 }
 
+                if let progressionModel = model.progressionModel {
+                    Section {
+                        Picker("Model", selection: Binding(
+                            get: { progressionModel },
+                            set: { chosen in Task { await model.setProgressionModel(chosen) } }
+                        )) {
+                            ForEach(ProgressionModel.allCases, id: \.self) { option in
+                                Text(option.label).tag(option)
+                            }
+                        }
+                        .disabled(model.isWorking)
+                        .accessibilityIdentifier("progressionModel")
+                    } header: {
+                        Text("Progression")
+                    } footer: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(progressionModel.summary)
+                            if model.goals != nil, let message = model.errorMessage {
+                                Text(message)
+                                    .foregroundStyle(.red)
+                                    .accessibilityIdentifier("error")
+                            }
+                        }
+                    }
+                }
+
                 Section {
                     Button("Sign Out", role: .destructive) {
                         Task { await model.signOut() }
@@ -346,7 +372,14 @@ private struct AccountView: View {
             }
             .navigationTitle("Account")
         }
-        .task { await model.loadGoals() }
+        .task {
+            await model.loadGoals()
+            // A later load clears the message of an earlier one, so the model is
+            // only read once the goals are in and their error has nowhere to hide.
+            if model.goals != nil {
+                await model.loadProgressionModel()
+            }
+        }
     }
 
     /// The target in the units the user works in, with the unit named.
