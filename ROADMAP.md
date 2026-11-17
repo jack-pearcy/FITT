@@ -577,6 +577,9 @@ Completed this phase (as of 2026-11-16):
   the plan screen has Edit and Delete. Workouts logged with a deleted plan are kept. The first simulator
   run found a backend defect: the update route answered with null ids for the rebuilt days and exercises.
   The app reads the plans back instead of trusting that answer, and the fix for the route itself is PR #81.
+- Creating a custom exercise shipped (PR #83): the exercise picker has a New button that opens a form with
+  a name and a muscle group. The saved exercise goes straight into the day it was being picked for and
+  shows in the picker afterwards. Deleting one from the app is not built; it belongs with a library screen.
 
 The loop a lifter needs now works end to end on the phone: account, onboarding, plan, workout, next day.
 Each piece was run on the simulator against a local backend before it merged, and three defects were found
@@ -589,12 +592,12 @@ has no refresh tokens and the app falls back to a one hour session.
 
 Remaining in this phase:
 - Settings: units preference, delete account. Both need API work first (see the gaps below).
-- Creating a custom exercise.
+- An exercise library screen, with delete for a custom exercise.
 - Reordering the days and exercises of a plan.
 - Session history, and progression suggestions with the model preference.
 - During a workout: add or remove an exercise, notes.
 - Make the mobile-test job a required check in the branch ruleset (a repository setting), and add a CI
-  build of the app target. The job runs the package tests only (222 at PR #80).
+  build of the app target. The job runs the package tests only (232 at PR #83).
 - Exercise how-to videos: a how-to icon beside an exercise that plays a short generated 3D clip of the
   movement, with the clips served from the existing Hetzner server. Noted 2026-11-15; not started.
 
