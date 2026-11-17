@@ -487,6 +487,23 @@ struct BackendTests {
         #expect((body["days"] as? [[String: Any]])?.first?["dayLabel"] as? String == "Full Body")
     }
 
+    @Test("creating an exercise posts the name and muscle group and accepts a 201 with the exercise")
+    func createsExercise() async throws {
+        let server = StubServer()
+        server.respond { _ in .json(201, #"{"id":71,"name":"Landmine Press","muscleGroup":"SHOULDERS","custom":true}"#) }
+        let request = try ExerciseDraft(name: "Landmine Press", muscleGroup: .shoulders).exercise()
+
+        let exercise = try await server.backend(tokenStore: InMemoryTokenStore(token: "stored")).createExercise(request, userId: 10)
+
+        #expect(exercise == Exercise(id: 71, name: "Landmine Press", muscleGroup: .shoulders, custom: true))
+        let sent = try #require(server.requests.first)
+        #expect(sent.method == "POST")
+        #expect(sent.path == "/api/users/10/exercises")
+        #expect(sent.headers["Authorization"] == "Bearer stored")
+        let body = try #require(try JSONSerialization.jsonObject(with: sent.body) as? [String: String])
+        #expect(body == ["name": "Landmine Press", "muscleGroup": "SHOULDERS"])
+    }
+
     // MARK: Sessions
 
     private let sessionBody = #"{"id":12,"ownerUserId":10,"planId":5,"startedAt":"2026-11-16T05:20:32Z","finishedAt":null,"notes":null,"exerciseEntries":[]}"#

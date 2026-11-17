@@ -153,6 +153,7 @@ private struct SlotRow: View {
 private struct ExercisePickerView: View {
     @Environment(AppModel.self) private var model
     @State private var query = ""
+    @State private var creating = false
     let choose: (Exercise) -> Void
 
     var body: some View {
@@ -188,6 +189,19 @@ private struct ExercisePickerView: View {
         }
         .navigationTitle("Add Exercise")
         .searchable(text: $query, prompt: "Search exercises")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button("New") { creating = true }
+                    // Until the library has loaded, an error on this screen means the
+                    // load failed, so the form is kept away from that state.
+                    .disabled(model.exercises == nil)
+                    .accessibilityIdentifier("newExercise")
+            }
+        }
+        .sheet(isPresented: $creating) {
+            // A new exercise is made to be used, so it goes straight into the day.
+            NewExerciseView { exercise in choose(exercise) }
+        }
         .task {
             if model.exercises == nil {
                 await model.loadExercises()

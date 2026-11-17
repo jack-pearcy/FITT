@@ -234,6 +234,32 @@ public final class AppModel {
         await load { userId in self.exercises = try await self.backend.exercises(userId: userId) }
     }
 
+    /// Creates the custom exercise in `draft` and returns it, or nil when it was
+    /// not saved. The server's answer is the stored exercise, so it is added to
+    /// the loaded library as it is, with no second request.
+    public func createExercise(_ draft: ExerciseDraft) async -> Exercise? {
+        guard case .signedIn = phase else { return nil }
+        clearErrors()
+        let request: NewExercise
+        do {
+            request = try draft.exercise()
+        } catch {
+            fieldErrors = error.fields
+            return nil
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+        var created: Exercise?
+        await load { userId in
+            created = try await self.backend.createExercise(request, userId: userId)
+        }
+        if let created {
+            exercises?.append(created)
+        }
+        return created
+    }
+
     /// Creates the plan in `draft`. Returns true when it was saved, so the form
     /// knows to close. A plan becomes the active one when no other plan is:
     /// a first plan should show up under Today without a second step.
