@@ -138,6 +138,36 @@ public struct PlanDraft: Equatable, Sendable {
         days[index].slots.append(Slot(exercise: exercise))
     }
 
+    /// Whether the day can move `offset` places, where -1 is one place earlier.
+    public func canMoveDay(_ id: UUID, by offset: Int) -> Bool {
+        guard let index = days.firstIndex(where: { $0.id == id }) else { return false }
+        return offset != 0 && days.indices.contains(index + offset)
+    }
+
+    /// Moves a day `offset` places, keeping the other days in their order.
+    public mutating func moveDay(_ id: UUID, by offset: Int) {
+        guard canMoveDay(id, by: offset), let index = days.firstIndex(where: { $0.id == id }) else { return }
+        let day = days.remove(at: index)
+        days.insert(day, at: index + offset)
+    }
+
+    /// Moves exercises inside one day. `source` and `destination` mean what they
+    /// mean in a list's move action: `destination` is a position in the list as
+    /// it is before anything is taken out.
+    public mutating func moveSlots(inDay id: UUID, from source: IndexSet, to destination: Int) {
+        guard let index = days.firstIndex(where: { $0.id == id }) else { return }
+        var slots = days[index].slots
+        guard source.allSatisfy(slots.indices.contains), (0...slots.count).contains(destination) else { return }
+
+        let moving = source.map { slots[$0] }
+        let insertAt = destination - source.count(in: 0..<destination)
+        for offset in source.reversed() {
+            slots.remove(at: offset)
+        }
+        slots.insert(contentsOf: moving, at: insertAt)
+        days[index].slots = slots
+    }
+
     /// The request for this draft. Field keys follow the server's names for
     /// nested fields, such as `days[1].dayLabel`.
     public func plan() throws(ValidationFailure) -> NewWorkoutPlan {
