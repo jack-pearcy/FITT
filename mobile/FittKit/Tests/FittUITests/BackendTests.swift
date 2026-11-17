@@ -590,6 +590,51 @@ struct BackendTests {
         #expect(try sent(server).line == "DELETE /api/users/10/workout-sessions/12")
     }
 
+    // MARK: Progression
+
+    @Test("a suggestion is read for one exercise, named in the query")
+    func readsSuggestion() async throws {
+        let server = StubServer()
+        server.respond { _ in
+            .json(200, #"{"exerciseId":38,"modelUsed":"DOUBLE_PROGRESSION","suggestedWeight":"102.50","suggestedReps":8,"suggestedSets":3,"reasoning":"Increase weight."}"#)
+        }
+
+        let suggestion = try await server.backend(tokenStore: InMemoryTokenStore(token: "stored")).suggestion(exerciseId: 38, userId: 10)
+
+        #expect(suggestion.suggestedWeight == Decimal(string: "102.5"))
+        #expect(suggestion.suggestedReps == 8)
+        let request = try #require(server.requests.first)
+        #expect(request.method == "GET")
+        #expect(request.path == "/api/users/10/progression/suggestions")
+        #expect(request.query == "exerciseId=38")
+        #expect(request.headers["Authorization"] == "Bearer stored")
+    }
+
+    @Test("the progression model is read from a bare JSON string")
+    func readsProgressionModel() async throws {
+        let server = StubServer()
+        server.respond { _ in .json(200, #""RPE_AUTOREGULATION""#) }
+
+        let model = try await server.backend(tokenStore: InMemoryTokenStore(token: "stored")).progressionModel(userId: 10)
+
+        #expect(model == .rpeAutoregulation)
+        #expect(server.requests.first?.path == "/api/users/10/progression/preference")
+    }
+
+    @Test("changing the progression model puts the model and accepts a 204")
+    func setsProgressionModel() async throws {
+        let server = StubServer()
+        server.respond { _ in StubResponse(status: 204) }
+
+        try await server.backend(tokenStore: InMemoryTokenStore(token: "stored")).setProgressionModel(.linearPeriodization, userId: 10)
+
+        let request = try #require(server.requests.first)
+        #expect(request.method == "PUT")
+        #expect(request.path == "/api/users/10/progression/preference")
+        let body = try #require(try JSONSerialization.jsonObject(with: request.body) as? [String: String])
+        #expect(body == ["progressionModel": "LINEAR_PERIODIZATION"])
+    }
+
     // MARK: Body weight
 
     @Test("weight entries are read with the days sent as a query, not as part of the path")
