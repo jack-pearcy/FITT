@@ -108,8 +108,12 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
                 .findAccessibleById(request.exerciseId(), ownerUserId)
                 .orElseThrow(() -> new ExerciseNotFoundException(request.exerciseId()));
 
-        // append to end of existing entries
-        int nextIndex = session.getExerciseEntries().size();
+        // One past the highest existing index, not size(), so removing an entry
+        // and adding another cannot produce two entries with the same index.
+        int nextIndex = session.getExerciseEntries().stream()
+                .mapToInt(ExerciseEntryEntity::getOrderIndex)
+                .max()
+                .orElse(-1) + 1;
 
         // entity constructor takes exercise and orderIndex
         ExerciseEntryEntity entry = new ExerciseEntryEntity(exercise, nextIndex);
