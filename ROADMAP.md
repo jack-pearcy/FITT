@@ -580,6 +580,9 @@ Completed this phase (as of 2026-11-16):
 - Creating a custom exercise shipped (PR #83): the exercise picker has a New button that opens a form with
   a name and a muscle group. The saved exercise goes straight into the day it was being picked for and
   shows in the picker afterwards. Deleting one from the app is not built; it belongs with a library screen.
+- Session history shipped (PR #85): a fifth tab lists finished workouts newest first, and a workout opens
+  to its exercises and sets, with delete behind a confirmation. It needs no new request: the session list
+  the app already read to find the unfinished workout is the same list.
 
 The loop a lifter needs now works end to end on the phone: account, onboarding, plan, workout, next day.
 Each piece was run on the simulator against a local backend before it merged, and three defects were found
@@ -594,10 +597,10 @@ Remaining in this phase:
 - Settings: units preference, delete account. Both need API work first (see the gaps below).
 - An exercise library screen, with delete for a custom exercise.
 - Reordering the days and exercises of a plan.
-- Session history, and progression suggestions with the model preference.
+- Progression suggestions with the model preference.
 - During a workout: add or remove an exercise, notes.
 - Make the mobile-test job a required check in the branch ruleset (a repository setting), and add a CI
-  build of the app target. The job runs the package tests only (232 at PR #83).
+  build of the app target. The job runs the package tests only (243 at PR #85).
 - Exercise how-to videos: a how-to icon beside an exercise that plays a short generated 3D clip of the
   movement, with the clips served from the existing Hetzner server. Noted 2026-11-15; not started.
 
@@ -605,8 +608,8 @@ API gaps found while building the client:
 - No route to read biometrics back, so the units preference cannot be shown after a relaunch, and a set's
   weight and a body weight are displayed without a unit. For the same reason an imperial user sees and
   edits the target weight in kilograms after a relaunch.
-- No route for the unfinished workout session. The client reads the whole session list to resume, which
-  will slow down as history grows.
+- No route for the unfinished workout session, and no paging on the session list. The client reads the
+  whole list to resume and to show history, which will slow down as history grows.
 - No update route for a custom exercise, no delete account, no streak, and no profile or notification
   endpoints. These were known before the phase began and are still open.
 
