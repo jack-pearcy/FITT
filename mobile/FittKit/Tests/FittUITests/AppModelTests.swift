@@ -702,6 +702,82 @@ struct AppModelTests {
         #expect(model.exercises?.map(\.name) == ["Back Squat"])
     }
 
+    // MARK: Creating an exercise
+
+    private let customExercise = #"{"id":71,"name":"Landmine Press","muscleGroup":"SHOULDERS","custom":true}"#
+
+    @Test("a created exercise is returned and added to the loaded library")
+    func createExerciseAddsToLibrary() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in .json(200, #"[{"id":38,"name":"Back Squat","muscleGroup":"LEGS","custom":false}]"#) }
+        await model.loadExercises()
+        let custom = customExercise
+        server.respond { _ in .json(201, custom) }
+
+        let created = await model.createExercise(ExerciseDraft(name: " Landmine Press ", muscleGroup: .shoulders))
+
+        #expect(created == Exercise(id: 71, name: "Landmine Press", muscleGroup: .shoulders, custom: true))
+        #expect(model.exercises?.map(\.id) == [38, 71])
+        #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
+        #expect(server.requests.suffix(1).map { "\($0.method) \($0.path)" } == ["POST /api/users/7/exercises"])
+    }
+
+    @Test("an exercise created before the library has loaded leaves the library unloaded")
+    func createExerciseBeforeLoad() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let custom = customExercise
+        server.respond { _ in .json(201, custom) }
+
+        let created = await model.createExercise(ExerciseDraft(name: "Landmine Press", muscleGroup: .shoulders))
+
+        #expect(created?.id == 71)
+        #expect(model.exercises == nil)
+    }
+
+    @Test("an exercise with no name is stopped on the device")
+    func createExerciseValidatesFirst() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+
+        let created = await model.createExercise(ExerciseDraft())
+
+        #expect(created == nil)
+        #expect(model.fieldErrors == ["name": "Exercise name is required"])
+        #expect(server.requests.count == 1)
+    }
+
+    @Test("a server validation failure on an exercise shows the field message")
+    func createExerciseServerRejects() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in
+            .json(400, #"{"status":400,"detail":"Validation failed","properties":{"errors":{"name":"Exercise name is required"}}}"#)
+        }
+
+        let created = await model.createExercise(ExerciseDraft(name: "Landmine Press"))
+
+        #expect(created == nil)
+        #expect(model.fieldErrors == ["name": "Exercise name is required"])
+    }
+
+    @Test("an exercise that cannot reach the server is not added")
+    func createExerciseOffline() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in .json(200, "[]") }
+        await model.loadExercises()
+        server.respond(nil)
+
+        let created = await model.createExercise(ExerciseDraft(name: "Landmine Press"))
+
+        #expect(created == nil)
+        #expect(model.exercises == [])
+        #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+    }
+
     @Test("a first plan is created, made active, and shown")
     func createFirstPlanActivatesIt() async {
         let server = StubServer()
