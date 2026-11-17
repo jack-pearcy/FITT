@@ -24,6 +24,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -120,6 +121,50 @@ class WorkoutSessionControllerTest {
                         .with(jwt().jwt(token -> token.claim("uid", USER_ID))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.finishedAt").value("2026-05-25T11:00:00Z"));
+    }
+
+    @Test
+    void updateNotes_validOwnership_returns200WithUpdatedSession() throws Exception {
+        WorkoutSessionResponse updated = new WorkoutSessionResponse(
+                SESSION_ID, USER_ID, PLAN_ID,
+                Instant.parse("2026-05-25T10:00:00Z"), null,
+                "Left shoulder felt tight", List.of());
+        when(workoutSessionService.updateNotes(eq(USER_ID), eq(SESSION_ID), any()))
+                .thenReturn(updated);
+
+        mockMvc.perform(put("/api/users/{userId}/workout-sessions/{sessionId}/notes",
+                        USER_ID, SESSION_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"notes\":\"Left shoulder felt tight\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notes").value("Left shoulder felt tight"));
+    }
+
+    @Test
+    void updateNotes_longerThan5000Characters_returns400AndSavesNothing() throws Exception {
+        String tooLong = "a".repeat(5001);
+
+        mockMvc.perform(put("/api/users/{userId}/workout-sessions/{sessionId}/notes",
+                        USER_ID, SESSION_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"notes\":\"" + tooLong + "\"}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(workoutSessionService);
+    }
+
+    @Test
+    void updateNotes_anotherUsersPath_returns403AndSavesNothing() throws Exception {
+        mockMvc.perform(put("/api/users/{userId}/workout-sessions/{sessionId}/notes",
+                        USER_ID + 1, SESSION_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"notes\":\"x\"}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(workoutSessionService);
     }
 
     @Test
