@@ -1161,6 +1161,62 @@ struct AppModelTests {
         #expect(server.requests.count == before)
     }
 
+    @Test("notes are saved and the session the server returns is shown")
+    func savesNotes() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        let before = server.requests.count
+        let updated = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+            .replacingOccurrences(of: #""notes":null"#, with: #""notes":"Felt strong""#)
+        server.respond { _ in .json(200, updated) }
+
+        let saved = await model.saveNotes("  Felt strong ")
+
+        #expect(saved)
+        #expect(model.activeSession?.notes == "Felt strong")
+        #expect(model.errorMessage == nil)
+        #expect(calls(server, after: before) == ["PUT /api/users/7/workout-sessions/12/notes"])
+        #expect(String(decoding: server.requests.last?.body ?? Data(), as: UTF8.self) == #"{"notes":"Felt strong"}"#)
+    }
+
+    @Test("notes that match what is stored send nothing")
+    func unchangedNotesSendNothing() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        let before = server.requests.count
+
+        let saved = await model.saveNotes("   ")
+
+        #expect(saved)
+        #expect(server.requests.count == before)
+    }
+
+    @Test("notes that are too long show a field error without calling the server")
+    func longNotesAreRejectedLocally() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        let before = server.requests.count
+
+        let saved = await model.saveNotes(String(repeating: "a", count: 5001))
+
+        #expect(!saved)
+        #expect(model.fieldErrors["notes"] == "Notes must be 5000 characters or fewer")
+        #expect(server.requests.count == before)
+    }
+
+    @Test("notes that cannot reach the server are reported, and the stored notes stay")
+    func saveNotesOffline() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        server.respond(nil)
+
+        let saved = await model.saveNotes("Felt strong")
+
+        #expect(!saved)
+        #expect(model.activeSession?.notes == nil)
+        #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+    }
+
     @Test("finishing ends the workout and reloads what comes next")
     func finishWorkout() async {
         let server = StubServer()

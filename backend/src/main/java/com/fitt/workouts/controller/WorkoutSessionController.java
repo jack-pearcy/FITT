@@ -3,6 +3,7 @@ package com.fitt.workouts.controller;
 import com.fitt.workouts.dto.AddExerciseEntryRequest;
 import com.fitt.workouts.dto.CreateWorkoutSessionRequest;
 import com.fitt.workouts.dto.LogSetRequest;
+import com.fitt.workouts.dto.UpdateSessionNotesRequest;
 import com.fitt.workouts.dto.WorkoutSessionResponse;
 import com.fitt.workouts.service.WorkoutSessionService;
 import jakarta.validation.Valid;
@@ -79,6 +80,19 @@ public class WorkoutSessionController {
     ) {
         enforceOwnership(userId, currentUserId(jwt));
         return workoutSessionService.finishSession(userId, sessionId);
+    }
+
+    // Replaces the notes of a session, finished or not. Returns the updated
+    // session so the client shows what was stored.
+    @PutMapping("/{sessionId}/notes")
+    public WorkoutSessionResponse updateNotes(
+            @PathVariable Long userId,
+            @PathVariable Long sessionId,
+            @Valid @RequestBody UpdateSessionNotesRequest request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        enforceOwnership(userId, currentUserId(jwt));
+        return workoutSessionService.updateNotes(userId, sessionId, request);
     }
 
     // Top-level session delete. 204 because the resource is gone.

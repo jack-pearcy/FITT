@@ -544,6 +544,31 @@ public final class AppModel {
         }
     }
 
+    /// Saves the notes of the workout in progress. Returns true when the server
+    /// has them, or when the text is what is already stored, in which case
+    /// nothing is sent.
+    public func saveNotes(_ text: String) async -> Bool {
+        guard let session = activeSession else { return false }
+        let notes: SessionNotes
+        do {
+            notes = try SessionNotes(text: text)
+        } catch {
+            fieldErrors = error.fields
+            return false
+        }
+        guard notes.notes != session.notes else { return true }
+        var saved = false
+        await load { userId in
+            let updated = try await self.backend.updateNotes(notes, sessionId: session.id, userId: userId)
+            // The user may have discarded the workout while the request was out.
+            if self.activeSession?.id == updated.id {
+                self.activeSession = updated
+            }
+            saved = true
+        }
+        return saved
+    }
+
     /// Finishes the workout. A finished session is what moves the plan to its next day.
     public func finishWorkout() async {
         guard let session = activeSession, !isWorking else { return }

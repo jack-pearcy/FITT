@@ -3,6 +3,7 @@ package com.fitt.workouts.service;
 import com.fitt.workouts.dto.AddExerciseEntryRequest;
 import com.fitt.workouts.dto.CreateWorkoutSessionRequest;
 import com.fitt.workouts.dto.LogSetRequest;
+import com.fitt.workouts.dto.UpdateSessionNotesRequest;
 import com.fitt.workouts.dto.WorkoutSessionResponse;
 import com.fitt.workouts.persistence.entity.ExerciseEntity;
 import com.fitt.workouts.persistence.entity.ExerciseEntryEntity;
@@ -149,6 +150,48 @@ class WorkoutSessionServiceImplTest {
         // an exact value because Instant.now() is non-deterministic.
         assertThat(session.getFinishedAt()).isNotNull();
         verify(sessionRepository).save(session);
+    }
+
+    @Test
+    void updateNotes_storesTheTextWithoutSurroundingWhitespace() {
+        WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
+        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(WorkoutSessionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.updateNotes(OWNER_USER_ID, SESSION_ID,
+                new UpdateSessionNotesRequest("  Left shoulder felt tight\n"));
+
+        assertThat(session.getNotes()).isEqualTo("Left shoulder felt tight");
+        verify(sessionRepository).save(session);
+    }
+
+    @Test
+    void updateNotes_blankOrNull_clearsTheNotes() {
+        WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
+        session.setNotes("Old notes");
+        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any(WorkoutSessionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.updateNotes(OWNER_USER_ID, SESSION_ID, new UpdateSessionNotesRequest("   "));
+        assertThat(session.getNotes()).isNull();
+
+        session.setNotes("Old notes");
+        service.updateNotes(OWNER_USER_ID, SESSION_ID, new UpdateSessionNotesRequest(null));
+        assertThat(session.getNotes()).isNull();
+    }
+
+    @Test
+    void updateNotes_notOwnedByCaller_throwsAccessDeniedAndSavesNothing() {
+        WorkoutSessionEntity session = sessionFor(OTHER_USER_ID);
+        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> service.updateNotes(OWNER_USER_ID, SESSION_ID,
+                new UpdateSessionNotesRequest("x")))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verify(sessionRepository, never()).save(any(WorkoutSessionEntity.class));
     }
 
     @Test

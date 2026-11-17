@@ -95,6 +95,13 @@ private struct SessionDetailView: View {
                 }
             }
 
+            if let notes = session.notes {
+                Section("Notes") {
+                    Text(notes)
+                        .accessibilityIdentifier("sessionNotes")
+                }
+            }
+
             ForEach(session.orderedEntries) { entry in
                 Section(entry.exercise.name) {
                     if entry.sets.isEmpty {

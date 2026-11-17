@@ -32,6 +32,9 @@ struct WorkoutView: View {
     @State private var drafts: [Int64: SetDraft] = [:]
     @State private var confirmingDiscard = false
     @State private var addingExercise = false
+    /// What is typed in the notes field. Saved when the field loses focus and
+    /// again before the workout is finished.
+    @State private var notes = ""
     /// The exercise waiting for a yes before it is removed with its sets.
     @State private var removing: ExerciseEntry?
     @FocusState private var focus: Field?
@@ -40,6 +43,9 @@ struct WorkoutView: View {
         let entryId: Int64
         let name: String
     }
+
+    /// Entry ids from the server are positive, so zero cannot clash with one.
+    private static let notesField = Field(entryId: 0, name: "notes")
 
     var body: some View {
         if let session = model.activeSession {
@@ -111,12 +117,26 @@ struct WorkoutView: View {
                     Text("Added for this workout only. Your plan stays as it is.")
                 }
 
+                Section("Notes") {
+                    TextField("How it went, what to change next time", text: $notes, axis: .vertical)
+                        .lineLimit(2...6)
+                        .focused($focus, equals: Self.notesField)
+                        .accessibilityIdentifier("notes")
+                    FieldError(field: "notes")
+                }
+
                 ErrorSection()
 
                 Section {
                     Button {
                         focus = nil
-                        Task { await model.finishWorkout() }
+                        Task {
+                            // Notes that cannot be saved keep the workout open, so
+                            // they are not lost with the screen.
+                            if await model.saveNotes(notes) {
+                                await model.finishWorkout()
+                            }
+                        }
                     } label: {
                         HStack {
                             Text("Finish Workout")
@@ -142,6 +162,14 @@ struct WorkoutView: View {
             .keyboardDoneBar(isShown: focus != nil) { focus = nil }
             // A message about the last attempt is stale once the user edits a set.
             .onChange(of: drafts) { model.clearErrors() }
+            .onChange(of: notes) { model.clearErrors() }
+            .onChange(of: focus) { old, new in
+                if old == Self.notesField, new != Self.notesField {
+                    Task { _ = await model.saveNotes(notes) }
+                }
+            }
+            // A workout picked up after a relaunch brings its notes with it.
+            .task(id: session.id) { notes = session.notes ?? "" }
             .confirmationDialog(
                 "Discard this workout?",
                 isPresented: $confirmingDiscard,

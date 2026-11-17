@@ -7,6 +7,7 @@ import com.fitt.workouts.dto.ExerciseEntryResponse;
 import com.fitt.workouts.dto.ExerciseResponse;
 import com.fitt.workouts.dto.LogSetRequest;
 import com.fitt.workouts.dto.SetEntryResponse;
+import com.fitt.workouts.dto.UpdateSessionNotesRequest;
 import com.fitt.workouts.dto.WorkoutSessionResponse;
 import com.fitt.workouts.persistence.entity.ExerciseEntryEntity;
 import com.fitt.workouts.persistence.entity.ExerciseEntity;
@@ -89,6 +90,19 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         if (session.getFinishedAt() == null) {
             session.setFinishedAt(Instant.now());
         }
+
+        return toResponse(sessionRepository.save(session));
+    }
+
+    @Override
+    @Transactional
+    public WorkoutSessionResponse updateNotes(Long ownerUserId, Long sessionId, UpdateSessionNotesRequest request) {
+        WorkoutSessionEntity session = loadAndVerify(ownerUserId, sessionId);
+
+        // Blank text is stored as no notes, so a cleared field and a field that
+        // was never filled in read back the same way.
+        String notes = request.notes() == null ? null : request.notes().strip();
+        session.setNotes(notes == null || notes.isEmpty() ? null : notes);
 
         return toResponse(sessionRepository.save(session));
     }

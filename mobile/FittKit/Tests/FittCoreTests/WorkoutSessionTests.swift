@@ -67,6 +67,36 @@ struct WorkoutSessionTests {
         #expect(session.orderedEntries.map(\.id) == [31, 32, 40])
     }
 
+    @Test("notes are read when the server sends them and nil when it sends null")
+    func decodesNotes() throws {
+        let withNotes = sessionJSON.replacingOccurrences(of: #""notes":null"#, with: #""notes":"Left shoulder felt tight""#)
+
+        #expect(try JSONDecoder().decode(WorkoutSession.self, from: Data(withNotes.utf8)).notes == "Left shoulder felt tight")
+        #expect(try session().notes == nil)
+    }
+
+    @Test("typed notes are trimmed, and blank text becomes nil")
+    func buildsNotes() throws {
+        #expect(try SessionNotes(text: "  Felt strong\n").notes == "Felt strong")
+        #expect(try SessionNotes(text: " \n ").notes == nil)
+        #expect(try SessionNotes(text: String(repeating: "a", count: 5000)).notes?.count == 5000)
+    }
+
+    @Test("notes longer than the server allows are reported under the notes field")
+    func rejectsLongNotes() {
+        #expect(throws: ValidationFailure(fields: ["notes": "Notes must be 5000 characters or fewer"])) {
+            try SessionNotes(text: String(repeating: "a", count: 5001))
+        }
+    }
+
+    @Test("cleared notes are sent as an explicit null")
+    func encodesNotes() throws {
+        let encoder = JSONEncoder()
+
+        #expect(String(decoding: try encoder.encode(SessionNotes(text: "Felt strong")), as: UTF8.self) == #"{"notes":"Felt strong"}"#)
+        #expect(String(decoding: try encoder.encode(SessionNotes(text: "")), as: UTF8.self) == #"{"notes":null}"#)
+    }
+
     @Test("entries and sets are ordered by their index and set number")
     func orders() throws {
         let session = try session()
