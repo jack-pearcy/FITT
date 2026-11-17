@@ -592,6 +592,12 @@ Completed this phase (as of 2026-11-16):
   sets were logged. The simulator run found a backend defect: a new entry was numbered by the count of
   entries, so after a removal two entries shared an order index. The app breaks the tie by entry id, and
   the route itself was fixed in PR #90.
+- The exercise library shipped (PR #92): the Plans tab opens the whole library, grouped and searchable,
+  and a custom exercise can be deleted there. The server refuses one that a plan or a logged workout
+  uses, and the app shows its reason. A custom exercise still cannot be renamed; the API has no route.
+- Workout notes shipped (PR #93): a Notes field on the workout screen, saved when it loses focus and
+  before the workout is finished, and shown in History. The API took notes only when a session was
+  created, which is before anything can be typed, so the pull request adds a route to update them.
 
 The loop a lifter needs now works end to end on the phone: account, onboarding, plan, workout, next day.
 Each piece was run on the simulator against a local backend before it merged, and three defects were found
@@ -605,11 +611,9 @@ has no refresh tokens and the app falls back to a one hour session.
 
 Remaining in this phase:
 - Settings: units preference, delete account. Both need API work first (see the gaps below).
-- An exercise library screen, with delete for a custom exercise.
 - Reordering the days and exercises of a plan.
-- During a workout: notes.
 - Make the mobile-test job a required check in the branch ruleset (a repository setting), and add a CI
-  build of the app target. The job runs the package tests only (263 at PR #89).
+  build of the app target. The job runs the package tests only (274 at PR #93).
 - Exercise how-to videos: a how-to icon beside an exercise that plays a short generated 3D clip of the
   movement, with the clips served from the existing Hetzner server. Noted 2026-11-15; not started.
 
