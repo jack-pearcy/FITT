@@ -592,6 +592,11 @@ struct BackendTests {
 
         try await backend.deleteSession(12, userId: 10)
         #expect(try sent(server).line == "DELETE /api/users/10/workout-sessions/12")
+
+        let updated = try await backend.updateNotes(SessionNotes(text: "Felt strong"), sessionId: 12, userId: 10)
+        #expect(try sent(server).line == "PUT /api/users/10/workout-sessions/12/notes")
+        #expect(String(decoding: server.requests.last?.body ?? Data(), as: UTF8.self) == #"{"notes":"Felt strong"}"#)
+        #expect(updated.id == 12)
     }
 
     // MARK: Progression
