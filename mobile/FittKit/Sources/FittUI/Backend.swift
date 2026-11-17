@@ -103,6 +103,12 @@ public struct Backend: Sendable {
         try await get("/api/users/\(userId)/exercises")
     }
 
+    /// Creates an exercise only this user can see. The server answers with the
+    /// exercise as stored, `custom` set to true.
+    public func createExercise(_ exercise: NewExercise, userId: Int64) async throws -> Exercise {
+        try await send("POST", "/api/users/\(userId)/exercises", body: exercise, authenticated: true)
+    }
+
     /// Creates a plan. The server stores it as not active.
     public func createPlan(_ plan: NewWorkoutPlan, userId: Int64) async throws -> WorkoutPlan {
         try await send("POST", "/api/users/\(userId)/workout-plans", body: plan, authenticated: true)
