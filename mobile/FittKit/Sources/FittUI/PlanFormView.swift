@@ -149,8 +149,9 @@ private struct SlotRow: View {
     }
 }
 
-/// The exercise library, searchable and grouped by muscle group.
-private struct ExercisePickerView: View {
+/// The exercise library, searchable and grouped by muscle group. Used by the
+/// plan form and by the workout screen.
+struct ExercisePickerView: View {
     @Environment(AppModel.self) private var model
     @State private var query = ""
     @State private var creating = false
@@ -199,7 +200,7 @@ private struct ExercisePickerView: View {
             }
         }
         .sheet(isPresented: $creating) {
-            // A new exercise is made to be used, so it goes straight into the day.
+            // A new exercise is made to be used, so it is chosen straight away.
             NewExerciseView { exercise in choose(exercise) }
         }
         .task {
