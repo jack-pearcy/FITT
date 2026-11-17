@@ -102,6 +102,7 @@ struct SignInView: View {
                         model.clearErrors()
                     }
                     .accessibilityIdentifier("switchMode")
+                    .secondaryAction()
                 }
             }
             .canvas()

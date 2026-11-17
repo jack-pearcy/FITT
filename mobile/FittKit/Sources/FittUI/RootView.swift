@@ -57,6 +57,7 @@ private struct SignedInView: View {
                             Task { await model.signOut() }
                         }
                         .accessibilityIdentifier("signOut")
+                        .secondaryAction()
                     }
                 }
             }

@@ -102,6 +102,7 @@ struct BiometricsStepView: View {
                     }
                 }
                 .accessibilityIdentifier("activity")
+                .quietValue()
                 FieldError(field: "activityLevel")
             } footer: {
                 Text("Used to estimate the calories you burn each day.")

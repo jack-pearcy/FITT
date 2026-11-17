@@ -44,6 +44,7 @@ struct PlanFormView: View {
                         }
                     }
                     .accessibilityIdentifier("split")
+                    .quietValue()
 
                     Stepper("Days a week: \(draft.daysPerWeek)", value: $draft.daysPerWeek, in: PlanDraft.daysPerWeek)
                         .accessibilityIdentifier("daysPerWeek")
@@ -117,6 +118,7 @@ struct PlanFormView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .secondaryAction()
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }

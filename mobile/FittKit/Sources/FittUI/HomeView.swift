@@ -370,6 +370,7 @@ private struct AccountView: View {
                         }
                         .disabled(model.isWorking)
                         .accessibilityIdentifier("progressionModel")
+                        .quietValue()
                     } header: {
                         Text("Progression").sectionLabel()
                     } footer: {
