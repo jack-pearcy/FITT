@@ -108,6 +108,20 @@ public struct Backend: Sendable {
         try await send("POST", "/api/users/\(userId)/workout-plans", body: plan, authenticated: true)
     }
 
+    /// Replaces the whole plan: the server drops its days and rebuilds them from
+    /// `plan`. Whether the plan is active does not change.
+    ///
+    /// The response body is not read. The server answers before the rebuilt days
+    /// have ids, so they come back as null; the caller reads the plan again instead.
+    public func updatePlan(_ plan: NewWorkoutPlan, planId: Int64, userId: Int64) async throws {
+        _ = try await perform("PUT", "/api/users/\(userId)/workout-plans/\(planId)", body: plan, authenticated: true)
+    }
+
+    /// Sessions logged with the plan are kept.
+    public func deletePlan(_ planId: Int64, userId: Int64) async throws {
+        _ = try await perform("DELETE", "/api/users/\(userId)/workout-plans/\(planId)", body: nil as NoBody?, authenticated: true)
+    }
+
     // MARK: Sessions
 
     /// Every session of this user, newest first. The API has no route for just

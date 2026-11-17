@@ -185,6 +185,51 @@ public final class AppModel {
         await loadNextLift()
     }
 
+    /// Replaces a saved plan with `draft`. Returns true when it was saved, so the
+    /// form knows to close. Today is reloaded too: the edit can change the day
+    /// that comes next.
+    public func updatePlan(_ planId: Int64, with draft: PlanDraft) async -> Bool {
+        guard case .signedIn = phase else { return false }
+        clearErrors()
+        let request: NewWorkoutPlan
+        do {
+            request = try draft.plan()
+        } catch {
+            fieldErrors = error.fields
+            return false
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+        var saved = false
+        await load { userId in
+            try await self.backend.updatePlan(request, planId: planId, userId: userId)
+            saved = true
+        }
+        guard saved else { return false }
+        await loadPlans()
+        await loadNextLift()
+        return true
+    }
+
+    /// Deletes a plan. Returns true when it is gone, so the detail screen knows
+    /// to close. Deleting the active plan leaves no plan active.
+    public func deletePlan(_ planId: Int64) async -> Bool {
+        guard case .signedIn = phase else { return false }
+        clearErrors()
+        isWorking = true
+        defer { isWorking = false }
+        var deleted = false
+        await load { userId in
+            try await self.backend.deletePlan(planId, userId: userId)
+            deleted = true
+        }
+        guard deleted else { return false }
+        await loadPlans()
+        await loadNextLift()
+        return true
+    }
+
     public func loadExercises() async {
         await load { userId in self.exercises = try await self.backend.exercises(userId: userId) }
     }

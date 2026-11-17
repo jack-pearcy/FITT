@@ -197,7 +197,7 @@ struct PlansView: View {
                 }
             }
             .sheet(isPresented: $isCreating) {
-                NewPlanView()
+                PlanFormView()
             }
             // The detail screen looks the plan up by id each time it draws, so it
             // shows the reloaded plan after an activation instead of a stale copy.
@@ -211,6 +211,9 @@ struct PlansView: View {
 
 private struct PlanDetailView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var isEditing = false
+    @State private var isConfirmingDelete = false
     let planId: Int64
 
     var body: some View {
@@ -255,8 +258,37 @@ private struct PlanDetailView: View {
                         }
                     }
                 }
+
+                Section {
+                    Button("Delete Plan", role: .destructive) { isConfirmingDelete = true }
+                        .disabled(model.isWorking)
+                        .accessibilityIdentifier("deletePlan")
+                }
             }
             .navigationTitle(plan.name)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Edit") { isEditing = true }
+                        .disabled(model.isWorking)
+                        .accessibilityIdentifier("editPlan")
+                }
+            }
+            .sheet(isPresented: $isEditing) {
+                PlanFormView(editing: plan)
+            }
+            .confirmationDialog("Delete \(plan.name)?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
+                Button("Delete Plan", role: .destructive) {
+                    Task {
+                        if await model.deletePlan(plan.id) {
+                            dismiss()
+                        }
+                    }
+                }
+            } message: {
+                Text(plan.active
+                    ? "This is your active plan, so Today will have nothing to train until you make another plan active. Workouts you logged with it are kept."
+                    : "Workouts you logged with it are kept.")
+            }
         } else {
             ContentUnavailableView("Plan not found", systemImage: "questionmark.folder")
         }

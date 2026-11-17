@@ -431,6 +431,39 @@ struct BackendTests {
         #expect(server.requests.first?.path == "/api/users/10/exercises")
     }
 
+    @Test("updating a plan puts the whole plan to its own path, and accepts the server's answer with null ids")
+    func updatesPlan() async throws {
+        let server = StubServer()
+        // What the server really sends: the rebuilt day has no id yet.
+        server.respond { _ in
+            .json(200, #"{"id":9,"ownerUserId":10,"name":"Renamed","daysPerWeek":3,"splitType":"FULL_BODY","active":true,"days":[{"id":null,"orderIndex":0,"dayLabel":"Full Body","exercises":[]}]}"#)
+        }
+        var draft = PlanDraft(splitType: .fullBody)
+        draft.name = "Renamed"
+
+        try await server.backend(tokenStore: InMemoryTokenStore(token: "stored")).updatePlan(draft.plan(), planId: 9, userId: 10)
+
+        let request = try #require(server.requests.first)
+        #expect(request.method == "PUT")
+        #expect(request.path == "/api/users/10/workout-plans/9")
+        #expect(request.headers["Authorization"] == "Bearer stored")
+        let body = try #require(try JSONSerialization.jsonObject(with: request.body) as? [String: Any])
+        #expect(body["name"] as? String == "Renamed")
+    }
+
+    @Test("deleting a plan sends DELETE to its path and accepts a 204")
+    func deletesPlan() async throws {
+        let server = StubServer()
+        server.respond { _ in StubResponse(status: 204) }
+
+        try await server.backend(tokenStore: InMemoryTokenStore(token: "stored")).deletePlan(9, userId: 10)
+
+        let request = try #require(server.requests.first)
+        #expect(request.method == "DELETE")
+        #expect(request.path == "/api/users/10/workout-plans/9")
+        #expect(request.headers["Authorization"] == "Bearer stored")
+    }
+
     @Test("creating a plan posts the plan and accepts a 201 with the created plan")
     func createsPlan() async throws {
         let server = StubServer()
