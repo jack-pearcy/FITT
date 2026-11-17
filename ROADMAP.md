@@ -602,6 +602,11 @@ Completed this phase (as of 2026-11-16):
   one place at a time with two buttons in its header. No server change was needed, because the plan
   update route replaces the whole plan and takes order from position. Moving days in a plan that already
   has sessions changes which day comes next, since the server counts finished sessions.
+- Dark theme shipped (PR #97): one file of color tokens (a dark canvas, two card tones, two text tones,
+  one lime accent), applied to every screen through list and form wrappers. Section headers are small
+  uppercase labels, a logged set is a tile with no divider line, and the app is always dark. Styling
+  only. Left out because they change behavior: a custom tab bar, a mini player for the active workout,
+  bottom sheets in place of pushed screens, and haptics. Only four screens were checked by eye.
 
 The loop a lifter needs now works end to end on the phone: account, onboarding, plan, workout, next day.
 Each piece was run on the simulator against a local backend before it merged, and three defects were found
