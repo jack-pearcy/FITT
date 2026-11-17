@@ -51,13 +51,16 @@ public struct WorkoutSession: Decodable, Equatable, Identifiable, Sendable {
     public let startedAt: Date
     /// Nil while the session is in progress.
     public let finishedAt: Date?
+    /// Nil when nothing was written. The server never stores blank text.
+    public let notes: String?
     public let exerciseEntries: [ExerciseEntry]
 
-    public init(id: Int64, planId: Int64?, startedAt: Date, finishedAt: Date?, exerciseEntries: [ExerciseEntry]) {
+    public init(id: Int64, planId: Int64?, startedAt: Date, finishedAt: Date?, notes: String? = nil, exerciseEntries: [ExerciseEntry]) {
         self.id = id
         self.planId = planId
         self.startedAt = startedAt
         self.finishedAt = finishedAt
+        self.notes = notes
         self.exerciseEntries = exerciseEntries
     }
 
@@ -82,13 +85,14 @@ public struct WorkoutSession: Decodable, Equatable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, planId, startedAt, finishedAt, exerciseEntries
+        case id, planId, startedAt, finishedAt, notes, exerciseEntries
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(Int64.self, forKey: .id)
         planId = try container.decodeIfPresent(Int64.self, forKey: .planId)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
         exerciseEntries = try container.decode([ExerciseEntry].self, forKey: .exerciseEntries)
 
         let started = try container.decode(String.self, forKey: .startedAt)
@@ -127,6 +131,32 @@ public struct NewWorkoutSession: Encodable, Equatable, Sendable {
     public init(startedAt: Date, planId: Int64?) {
         self.startedAt = ServerInstant.format(startedAt)
         self.planId = planId
+    }
+}
+
+/// The body of `PUT .../notes`. Built from what was typed: the text is trimmed,
+/// and blank text becomes nil, which clears the notes on the server.
+public struct SessionNotes: Encodable, Equatable, Sendable {
+    public static let maxLength = 5000
+
+    public let notes: String?
+
+    public init(text: String) throws(ValidationFailure) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.count > Self.maxLength {
+            throw ValidationFailure(fields: ["notes": "Notes must be \(Self.maxLength) characters or fewer"])
+        }
+        notes = trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Nil is sent as an explicit null, so the body always names the field.
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(notes, forKey: .notes)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case notes
     }
 }
 

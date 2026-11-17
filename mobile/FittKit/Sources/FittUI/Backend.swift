@@ -163,6 +163,11 @@ public struct Backend: Sendable {
         try await send("POST", "/api/users/\(userId)/workout-sessions/\(sessionId)/finish", body: nil as NoBody?, authenticated: true)
     }
 
+    /// Replaces the notes of a session. The server answers with the session as stored.
+    public func updateNotes(_ notes: SessionNotes, sessionId: Int64, userId: Int64) async throws -> WorkoutSession {
+        try await send("PUT", "/api/users/\(userId)/workout-sessions/\(sessionId)/notes", body: notes, authenticated: true)
+    }
+
     public func deleteSession(_ sessionId: Int64, userId: Int64) async throws {
         _ = try await perform("DELETE", "/api/users/\(userId)/workout-sessions/\(sessionId)", body: nil as NoBody?, authenticated: true)
     }
