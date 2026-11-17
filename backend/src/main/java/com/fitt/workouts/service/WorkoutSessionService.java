@@ -3,6 +3,7 @@ package com.fitt.workouts.service;
 import com.fitt.workouts.dto.AddExerciseEntryRequest;
 import com.fitt.workouts.dto.CreateWorkoutSessionRequest;
 import com.fitt.workouts.dto.LogSetRequest;
+import com.fitt.workouts.dto.UpdateSessionNotesRequest;
 import com.fitt.workouts.dto.WorkoutSessionResponse;
 import java.util.List;
 
@@ -15,6 +16,8 @@ public interface WorkoutSessionService {
     WorkoutSessionResponse getSession(Long ownerUserId, Long sessionId);
 
     WorkoutSessionResponse finishSession(Long ownerUserId, Long sessionId);
+
+    WorkoutSessionResponse updateNotes(Long ownerUserId, Long sessionId, UpdateSessionNotesRequest request);
 
     void deleteSession(Long ownerUserId, Long sessionId);
 
