@@ -37,7 +37,7 @@ struct SignInView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            ThemedForm {
                 Section {
                     TextField("Email", text: $email)
                         .textContentType(.username)
@@ -66,7 +66,7 @@ struct SignInView: View {
                         if !confirmation.isEmpty && !passwordsMatch {
                             Text("Passwords do not match")
                                 .font(.footnote)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(Theme.negative)
                         }
                     }
                 } footer: {
@@ -78,7 +78,7 @@ struct SignInView: View {
                 if let message = model.errorMessage {
                     Section {
                         Text(message)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Theme.negative)
                             .accessibilityIdentifier("error")
                     }
                 }
@@ -104,6 +104,7 @@ struct SignInView: View {
                     .accessibilityIdentifier("switchMode")
                 }
             }
+            .canvas()
             .navigationTitle("FITT")
             // A message about the last attempt is stale once the user edits a field.
             .onChange(of: email) { model.clearErrors() }
@@ -116,7 +117,7 @@ struct SignInView: View {
         if let message = model.fieldErrors[field] {
             Text(message)
                 .font(.footnote)
-                .foregroundStyle(.red)
+                .foregroundStyle(Theme.negative)
         }
     }
 

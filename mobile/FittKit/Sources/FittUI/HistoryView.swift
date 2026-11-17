@@ -41,11 +41,13 @@ struct HistoryView: View {
                                         .compactMap { $0 }
                                         .joined(separator: " · "))
                                         .font(.footnote)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(Theme.textSecondary)
                                 }
                             }
                             .accessibilityIdentifier("session.\(session.id)")
+                            .listRowBackground(Theme.card)
                         }
+                        .themedScroll()
                         .refreshable { await load() }
                     }
                 } else if let message = model.errorMessage {
@@ -54,6 +56,7 @@ struct HistoryView: View {
                     ProgressView()
                 }
             }
+            .canvas()
             .navigationTitle("History")
         }
         .task { await load() }
@@ -84,7 +87,7 @@ private struct SessionDetailView: View {
     let planName: String?
 
     var body: some View {
-        List {
+        ThemedList {
             Section {
                 LabeledContent("Started", value: session.startedAt.formatted(date: .abbreviated, time: .shortened))
                 if let durationText = session.durationText {
@@ -96,17 +99,17 @@ private struct SessionDetailView: View {
             }
 
             if let notes = session.notes {
-                Section("Notes") {
+                LabeledSection("Notes") {
                     Text(notes)
                         .accessibilityIdentifier("sessionNotes")
                 }
             }
 
             ForEach(session.orderedEntries) { entry in
-                Section(entry.exercise.name) {
+                LabeledSection(entry.exercise.name) {
                     if entry.sets.isEmpty {
                         Text("No sets logged")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.textSecondary)
                     }
                     ForEach(entry.orderedSets) { set in
                         LabeledContent("Set \(set.setNumber)") {
@@ -119,6 +122,7 @@ private struct SessionDetailView: View {
                                 }
                             }
                         }
+                        .setTile()
                     }
                 }
             }
@@ -130,11 +134,12 @@ private struct SessionDetailView: View {
             } footer: {
                 if let message = model.errorMessage {
                     Text(message)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Theme.negative)
                         .accessibilityIdentifier("error")
                 }
             }
         }
+        .canvas()
         .navigationTitle(session.startedAt.formatted(date: .abbreviated, time: .omitted))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

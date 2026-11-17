@@ -39,7 +39,7 @@ struct BiometricsStepView: View {
     }
 
     var body: some View {
-        Form {
+        ThemedForm {
             Section {
                 Picker("Units", selection: $draft.units) {
                     Text("Metric").tag(UnitsPreference.metric)
@@ -114,6 +114,7 @@ struct BiometricsStepView: View {
             }
         }
         .scrollDismissesKeyboard(.interactively)
+        .canvas()
         .navigationTitle("About You")
         .toolbar { KeyboardDoneButton { focus = nil } }
         // A message about the last attempt is stale once the user edits the form.
@@ -130,6 +131,7 @@ struct GoalsStepView: View {
         GoalsForm(draft: $draft, submitTitle: "Finish") {
             Task { await model.saveGoals(draft) }
         }
+        .canvas()
         .navigationTitle("Your Goal")
     }
 }

@@ -75,6 +75,7 @@ struct TodayView: View {
                     ProgressView()
                 }
             }
+            .canvas()
             .navigationTitle(model.activeSession == nil ? "Today" : "Workout")
         }
         .task { await load() }
@@ -95,7 +96,7 @@ struct TodayView: View {
                 description: Text("Choose a plan in the Plans tab to see what to train.")
             )
         } else if let day = next.day {
-            List {
+            ThemedList {
                 Section {
                     LabeledContent("Plan", value: next.planName ?? "")
                     LabeledContent("Day", value: "\(next.dayNumber) of \(next.daysInRotation)")
@@ -107,10 +108,10 @@ struct TodayView: View {
                     }
                 }
 
-                Section(day.dayLabel) {
+                LabeledSection(day.dayLabel) {
                     if day.exercises.isEmpty {
                         Text("This day has no exercises yet.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.textSecondary)
                     }
                     ForEach(day.orderedExercises) { item in
                         ExerciseRow(item: item)
@@ -134,7 +135,7 @@ struct TodayView: View {
                 } footer: {
                     if let message = model.errorMessage {
                         Text(message)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Theme.negative)
                             .accessibilityIdentifier("error")
                     }
                 }
@@ -182,7 +183,9 @@ struct PlansView: View {
                                 }
                             }
                             .accessibilityIdentifier("plan.\(plan.id)")
+                            .listRowBackground(Theme.card)
                         }
+                        .themedScroll()
                         .refreshable { await model.loadPlans() }
                     }
                 } else if let message = model.errorMessage {
@@ -191,6 +194,7 @@ struct PlansView: View {
                     ProgressView()
                 }
             }
+            .canvas()
             .navigationTitle("Plans")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -236,7 +240,7 @@ private struct PlanDetailView: View {
 
     var body: some View {
         if let plan = model.plans?.first(where: { $0.id == planId }) {
-            List {
+            ThemedList {
                 Section {
                     LabeledContent("Split", value: plan.splitType.label)
                     LabeledContent("Days a week", value: "\(plan.daysPerWeek)")
@@ -260,16 +264,16 @@ private struct PlanDetailView: View {
                 } footer: {
                     if let message = model.errorMessage {
                         Text(message)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Theme.negative)
                             .accessibilityIdentifier("error")
                     }
                 }
 
                 ForEach(plan.orderedDays) { day in
-                    Section(day.dayLabel) {
+                    LabeledSection(day.dayLabel) {
                         if day.exercises.isEmpty {
                             Text("No exercises yet.")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.textSecondary)
                         }
                         ForEach(day.orderedExercises) { item in
                             ExerciseRow(item: item)
@@ -283,6 +287,7 @@ private struct PlanDetailView: View {
                         .accessibilityIdentifier("deletePlan")
                 }
             }
+            .canvas()
             .navigationTitle(plan.name)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -318,7 +323,7 @@ private struct AccountView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            ThemedList {
                 Section {
                     if let goals = model.goals {
                         LabeledContent("Goal", value: goals.goalDirection.label)
@@ -342,7 +347,7 @@ private struct AccountView: View {
                         .accessibilityIdentifier("changeGoals")
                     } else if let message = model.errorMessage {
                         Text(message)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Theme.negative)
                         Button("Try Again") {
                             Task { await model.loadGoals() }
                         }
@@ -350,7 +355,7 @@ private struct AccountView: View {
                         ProgressView()
                     }
                 } header: {
-                    Text("Goals")
+                    Text("Goals").sectionLabel()
                 }
 
                 if let progressionModel = model.progressionModel {
@@ -366,13 +371,13 @@ private struct AccountView: View {
                         .disabled(model.isWorking)
                         .accessibilityIdentifier("progressionModel")
                     } header: {
-                        Text("Progression")
+                        Text("Progression").sectionLabel()
                     } footer: {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(progressionModel.summary)
                             if model.goals != nil, let message = model.errorMessage {
                                 Text(message)
-                                    .foregroundStyle(.red)
+                                    .foregroundStyle(Theme.negative)
                                     .accessibilityIdentifier("error")
                             }
                         }
@@ -386,6 +391,7 @@ private struct AccountView: View {
                     .accessibilityIdentifier("signOut")
                 }
             }
+            .canvas()
             .navigationTitle("Account")
         }
         .task {
@@ -429,6 +435,7 @@ private struct EditGoalsView: View {
                 }
             }
         }
+        .canvas()
         .navigationTitle("Change Goals")
         .onAppear {
             draft = GoalsDraft(goals: goals, units: model.units)

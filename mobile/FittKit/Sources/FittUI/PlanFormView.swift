@@ -30,7 +30,7 @@ struct PlanFormView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            ThemedForm {
                 Section {
                     TextField("Name", text: $draft.name)
                         .focused($focus, equals: .name)
@@ -80,16 +80,16 @@ struct PlanFormView: View {
                         }
                     } header: {
                         HStack {
-                            Text("Day \(index + 1)")
+                            Text("Day \(index + 1)").sectionLabel()
                             Spacer()
                             // A section cannot be dragged, so a day moves one place at a time.
                             Button("Move Day Earlier", systemImage: "chevron.up") {
-                                withAnimation { draft.moveDay(day.id, by: -1) }
+                                withAnimation(Theme.spring) { draft.moveDay(day.id, by: -1) }
                             }
                             .disabled(!draft.canMoveDay(day.id, by: -1))
                             .accessibilityIdentifier("moveDayEarlier.\(index)")
                             Button("Move Day Later", systemImage: "chevron.down") {
-                                withAnimation { draft.moveDay(day.id, by: 1) }
+                                withAnimation(Theme.spring) { draft.moveDay(day.id, by: 1) }
                             }
                             .disabled(!draft.canMoveDay(day.id, by: 1))
                             .accessibilityIdentifier("moveDayLater.\(index)")
@@ -109,6 +109,7 @@ struct PlanFormView: View {
                 ErrorSection()
             }
             .scrollDismissesKeyboard(.interactively)
+            .canvas()
             .navigationTitle(editingPlanId == nil ? "New Plan" : "Edit Plan")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -181,12 +182,14 @@ struct ExercisePickerView: View {
                 if groups.isEmpty {
                     ContentUnavailableView.search(text: query)
                 } else {
-                    List(groups) { group in
-                        Section(group.muscleGroup.label) {
-                            ForEach(group.exercises) { exercise in
-                                Button(exercise.name) { choose(exercise) }
-                                    .foregroundStyle(.primary)
-                                    .accessibilityIdentifier("exercise.\(exercise.id)")
+                    ThemedList {
+                        ForEach(groups) { group in
+                            LabeledSection(group.muscleGroup.label) {
+                                ForEach(group.exercises) { exercise in
+                                    Button(exercise.name) { choose(exercise) }
+                                        .foregroundStyle(Theme.textPrimary)
+                                        .accessibilityIdentifier("exercise.\(exercise.id)")
+                                }
                             }
                         }
                     }
@@ -205,6 +208,7 @@ struct ExercisePickerView: View {
                 ProgressView()
             }
         }
+        .canvas()
         .navigationTitle("Add Exercise")
         .searchable(text: $query, prompt: "Search exercises")
         .toolbar {

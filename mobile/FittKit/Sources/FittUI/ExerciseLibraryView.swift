@@ -13,10 +13,10 @@ struct ExerciseLibraryView: View {
         Group {
             if let exercises = model.exercises {
                 let groups = ExerciseCatalog.groups(exercises, matching: query)
-                List {
+                ThemedList {
                     ErrorSection()
                     ForEach(groups) { group in
-                        Section(group.muscleGroup.label) {
+                        LabeledSection(group.muscleGroup.label) {
                             ForEach(group.exercises) { exercise in
                                 row(exercise)
                             }
@@ -35,6 +35,7 @@ struct ExerciseLibraryView: View {
                 ProgressView()
             }
         }
+        .canvas()
         .navigationTitle("Exercises")
         .searchable(text: $query, prompt: "Search exercises")
         .toolbar {

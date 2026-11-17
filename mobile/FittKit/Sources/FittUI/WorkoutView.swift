@@ -49,7 +49,7 @@ struct WorkoutView: View {
 
     var body: some View {
         if let session = model.activeSession {
-            List {
+            ThemedList {
                 ForEach(session.orderedEntries) { entry in
                     Section {
                         ForEach(entry.orderedSets) { set in
@@ -63,6 +63,7 @@ struct WorkoutView: View {
                                     }
                                 }
                             }
+                            .setTile()
                             .swipeActions {
                                 Button("Delete", role: .destructive) {
                                     Task { await model.deleteSet(set.id, entryId: entry.id) }
@@ -72,7 +73,7 @@ struct WorkoutView: View {
                         setForm(for: entry)
                     } header: {
                         HStack {
-                            Text(entry.exercise.name)
+                            Text(entry.exercise.name).sectionLabel()
                             Spacer()
                             Menu {
                                 Button("Remove Exercise", role: .destructive) { remove(entry) }
@@ -102,7 +103,7 @@ struct WorkoutView: View {
                 if session.exerciseEntries.isEmpty {
                     Section {
                         Text("This workout has no exercises.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.textSecondary)
                     }
                 }
 
@@ -117,7 +118,7 @@ struct WorkoutView: View {
                     Text("Added for this workout only. Your plan stays as it is.")
                 }
 
-                Section("Notes") {
+                LabeledSection("Notes") {
                     TextField("How it went, what to change next time", text: $notes, axis: .vertical)
                         .lineLimit(2...6)
                         .focused($focus, equals: Self.notesField)

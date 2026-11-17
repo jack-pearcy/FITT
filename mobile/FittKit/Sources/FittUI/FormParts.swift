@@ -54,7 +54,7 @@ struct FieldError: View {
         if let message = model.fieldErrors[field] {
             Text(message)
                 .font(.footnote)
-                .foregroundStyle(.red)
+                .foregroundStyle(Theme.negative)
                 .accessibilityIdentifier("error.\(field)")
         }
     }
@@ -68,7 +68,7 @@ struct ErrorSection: View {
         if let message = model.errorMessage {
             Section {
                 Text(message)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Theme.negative)
                     .accessibilityIdentifier("error")
             }
         }
@@ -148,7 +148,7 @@ extension View {
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 10)
-                .background(.bar)
+                .glassBar()
             }
         }
     }

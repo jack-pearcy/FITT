@@ -13,7 +13,7 @@ struct GoalsForm: View {
     private enum Field { case targetWeight, timelineWeeks, calories }
 
     var body: some View {
-        Form {
+        ThemedForm {
             Section {
                 Picker("Goal", selection: $draft.direction) {
                     ForEach(GoalDirection.allCases, id: \.self) { direction in
@@ -42,7 +42,7 @@ struct GoalsForm: View {
                 }
                 FieldError(field: "timelineWeeks")
             } header: {
-                Text("Optional")
+                Text("Optional").sectionLabel()
             } footer: {
                 Text(model.units == .metric ? "Target weight is in kilograms." : "Target weight is in pounds.")
             }
@@ -65,7 +65,7 @@ struct GoalsForm: View {
                     FieldError(field: "calorieGoal")
                 }
             } header: {
-                Text("Daily calorie goal")
+                Text("Daily calorie goal").sectionLabel()
             } footer: {
                 if let maintenance = model.maintenanceCalories {
                     Text("Your maintenance is about \(maintenance) calories a day. Automatic sets the goal from that and your goal above.")

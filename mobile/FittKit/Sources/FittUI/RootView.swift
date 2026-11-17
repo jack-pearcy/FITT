@@ -25,6 +25,7 @@ public struct RootView: View {
             }
         }
         .environment(model)
+        .fittTheme()
         .task { await model.start() }
     }
 }
