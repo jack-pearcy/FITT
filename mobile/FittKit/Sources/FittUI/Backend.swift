@@ -109,6 +109,12 @@ public struct Backend: Sendable {
         try await send("POST", "/api/users/\(userId)/exercises", body: exercise, authenticated: true)
     }
 
+    /// Deletes a custom exercise. The server answers 409 when a plan or a logged
+    /// session still uses it.
+    public func deleteExercise(_ exerciseId: Int64, userId: Int64) async throws {
+        _ = try await perform("DELETE", "/api/users/\(userId)/exercises/\(exerciseId)", body: nil as NoBody?, authenticated: true)
+    }
+
     /// Creates a plan. The server stores it as not active.
     public func createPlan(_ plan: NewWorkoutPlan, userId: Int64) async throws -> WorkoutPlan {
         try await send("POST", "/api/users/\(userId)/workout-plans", body: plan, authenticated: true)

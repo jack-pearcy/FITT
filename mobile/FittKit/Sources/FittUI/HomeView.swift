@@ -197,6 +197,14 @@ struct PlansView: View {
                     Button("New Plan", systemImage: "plus") { isCreating = true }
                         .accessibilityIdentifier("newPlan")
                 }
+                ToolbarItem(placement: Self.libraryPlacement) {
+                    NavigationLink {
+                        ExerciseLibraryView()
+                    } label: {
+                        Label("Exercises", systemImage: "dumbbell")
+                    }
+                    .accessibilityIdentifier("exerciseLibrary")
+                }
             }
             .sheet(isPresented: $isCreating) {
                 PlanFormView()
@@ -208,6 +216,14 @@ struct PlansView: View {
             }
         }
         .task { await model.loadPlans() }
+    }
+
+    private static var libraryPlacement: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarLeading
+        #else
+        .automatic
+        #endif
     }
 }
 

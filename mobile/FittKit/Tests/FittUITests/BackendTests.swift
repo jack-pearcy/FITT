@@ -487,6 +487,19 @@ struct BackendTests {
         #expect((body["days"] as? [[String: Any]])?.first?["dayLabel"] as? String == "Full Body")
     }
 
+    @Test("deleting an exercise sends DELETE with no body and accepts a 204")
+    func deletesExercise() async throws {
+        let server = StubServer()
+        server.respond { _ in StubResponse(status: 204) }
+
+        try await server.backend().deleteExercise(71, userId: 10)
+
+        let sent = try #require(server.requests.first)
+        #expect(sent.method == "DELETE")
+        #expect(sent.path == "/api/users/10/exercises/71")
+        #expect(sent.body.isEmpty)
+    }
+
     @Test("creating an exercise posts the name and muscle group and accepts a 201 with the exercise")
     func createsExercise() async throws {
         let server = StubServer()
