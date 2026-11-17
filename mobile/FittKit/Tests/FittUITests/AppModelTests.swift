@@ -1084,6 +1084,128 @@ struct AppModelTests {
         #expect(calls(server, after: before) == ["POST /api/users/7/workout-sessions/12/finish", "GET /api/users/7/next-lift"])
     }
 
+    // MARK: History
+
+    private func historyJSON(id: Int, startedAt: String, finished: Bool = true) -> String {
+        sessionJSON(finished: finished)
+            .replacingOccurrences(of: #""id":12"#, with: #""id":\#(id)"#)
+            .replacingOccurrences(of: "2026-11-16T05:20:32Z", with: startedAt)
+    }
+
+    @Test("one load fills the history, newest first, and the workout in progress")
+    func loadsHistory() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let older = historyJSON(id: 10, startedAt: "2026-11-10T05:00:00Z")
+        let newer = historyJSON(id: 11, startedAt: "2026-11-14T05:00:00Z")
+        let open = historyJSON(id: 12, startedAt: "2026-11-16T05:20:32Z", finished: false)
+        server.respond { _ in .json(200, "[\(older),\(open),\(newer)]") }
+
+        await model.loadSessions()
+
+        #expect(model.history?.map(\.id) == [11, 10])
+        #expect(model.activeSession?.id == 12)
+        #expect(server.requests.suffix(1).map { "\($0.method) \($0.path)" } == ["GET /api/users/7/workout-sessions"])
+    }
+
+    @Test("with no sessions the history is loaded and empty")
+    func emptyHistory() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in .json(200, "[]") }
+
+        await model.loadSessions()
+
+        #expect(model.history == [])
+    }
+
+    @Test("a history that cannot load stays unloaded and says why")
+    func historyOffline() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond(nil)
+
+        await model.loadSessions()
+
+        #expect(model.history == nil)
+        #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+    }
+
+    @Test("a finished workout goes to the top of a loaded history")
+    func finishAddsToHistory() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let older = historyJSON(id: 10, startedAt: "2026-11-10T05:00:00Z")
+        let open = sessionJSON()
+        server.respond { _ in .json(200, "[\(older),\(open)]") }
+        await model.loadSessions()
+        let finished = sessionJSON(finished: true)
+        let next = nextLiftWithDay
+        server.respond { request in
+            request.path.hasSuffix("/finish") ? .json(200, finished) : .json(200, next)
+        }
+
+        await model.finishWorkout()
+
+        #expect(model.activeSession == nil)
+        #expect(model.history?.map(\.id) == [12, 10])
+        #expect(model.history?.first?.isFinished == true)
+    }
+
+    @Test("deleting a workout removes it from the history and reads the next day again")
+    func deleteFromHistory() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let older = historyJSON(id: 10, startedAt: "2026-11-10T05:00:00Z")
+        let newer = historyJSON(id: 11, startedAt: "2026-11-14T05:00:00Z")
+        server.respond { _ in .json(200, "[\(newer),\(older)]") }
+        await model.loadSessions()
+        let before = server.requests.count
+        let next = nextLiftWithDay
+        server.respond { request in
+            request.method == "DELETE" ? StubResponse(status: 204) : .json(200, next)
+        }
+
+        let deleted = await model.deleteFromHistory(11)
+
+        #expect(deleted)
+        #expect(model.history?.map(\.id) == [10])
+        #expect(model.nextLift?.planId == 5)
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == ["DELETE /api/users/7/workout-sessions/11", "GET /api/users/7/next-lift"])
+    }
+
+    @Test("a delete the server refuses keeps the workout in the history")
+    func deleteFromHistoryRejected() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let only = historyJSON(id: 10, startedAt: "2026-11-10T05:00:00Z")
+        server.respond { _ in .json(200, "[\(only)]") }
+        await model.loadSessions()
+        let before = server.requests.count
+        server.respond { _ in .json(404, #"{"status":404,"detail":"Workout session not found"}"#) }
+
+        let deleted = await model.deleteFromHistory(10)
+
+        #expect(!deleted)
+        #expect(model.history?.map(\.id) == [10])
+        #expect(model.errorMessage == "Workout session not found")
+        #expect(calls(server, after: before) == ["DELETE /api/users/7/workout-sessions/10"])
+    }
+
+    @Test("signing out forgets the history")
+    func signOutClearsHistory() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let only = historyJSON(id: 10, startedAt: "2026-11-10T05:00:00Z")
+        server.respond { _ in .json(200, "[\(only)]") }
+        await model.loadSessions()
+
+        await model.signOut()
+
+        #expect(model.history == nil)
+    }
+
     @Test("a finish that cannot reach the server keeps the workout open")
     func finishWorkoutOffline() async {
         let server = StubServer()
