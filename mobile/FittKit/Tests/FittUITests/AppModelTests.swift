@@ -1407,6 +1407,137 @@ struct AppModelTests {
         #expect(model.weightAverage == nil)
     }
 
+    // MARK: Progression
+
+    private func suggestionJSON(exerciseId: Int, weight: String = "102.50") -> String {
+        #"{"exerciseId":\#(exerciseId),"modelUsed":"DOUBLE_PROGRESSION","suggestedWeight":"\#(weight)","suggestedReps":8,"suggestedSets":3,"reasoning":"Increase weight."}"#
+    }
+
+    /// A model with a workout in progress that has bench (id 1) then squat (id 38).
+    private func twoExerciseWorkout(_ server: StubServer) async -> AppModel {
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let session = sessionJSON(entries: [entryJSON(id: 30, order: 0, exercise: bench), entryJSON(id: 31, order: 1, exercise: squat)].joined(separator: ","))
+        server.respond { _ in .json(200, "[\(session)]") }
+        await model.loadSessions()
+        return model
+    }
+
+    @Test("the progression model loads")
+    func loadsProgressionModel() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in .json(200, #""DOUBLE_PROGRESSION""#) }
+
+        await model.loadProgressionModel()
+
+        #expect(model.progressionModel == .doubleProgression)
+    }
+
+    @Test("changing the model writes it, reads it back, and drops the old suggestions")
+    func setProgressionModel() async {
+        let server = StubServer()
+        let model = await twoExerciseWorkout(server)
+        let bench = suggestionJSON(exerciseId: 1)
+        server.respond { _ in .json(200, bench) }
+        await model.loadSuggestions()
+        let before = server.requests.count
+        server.respond { request in
+            request.method == "PUT" ? StubResponse(status: 204) : .json(200, #""RPE_AUTOREGULATION""#)
+        }
+
+        await model.setProgressionModel(.rpeAutoregulation)
+
+        #expect(model.progressionModel == .rpeAutoregulation)
+        #expect(model.suggestions.isEmpty)
+        #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == ["PUT /api/users/7/progression/preference", "GET /api/users/7/progression/preference"])
+    }
+
+    @Test("a model change the server cannot take keeps the old model and says why")
+    func setProgressionModelOffline() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in .json(200, #""DOUBLE_PROGRESSION""#) }
+        await model.loadProgressionModel()
+        server.respond(nil)
+
+        await model.setProgressionModel(.linearPeriodization)
+
+        #expect(model.progressionModel == .doubleProgression)
+        #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+    }
+
+    @Test("a suggestion loads for each exercise of the workout, once")
+    func loadsSuggestions() async {
+        let server = StubServer()
+        let model = await twoExerciseWorkout(server)
+        let before = server.requests.count
+        let bench = suggestionJSON(exerciseId: 1)
+        let squat = suggestionJSON(exerciseId: 38, weight: "0")
+        server.respond { request in .json(200, request.query == "exerciseId=1" ? bench : squat) }
+
+        await model.loadSuggestions()
+        await model.loadSuggestions()
+
+        #expect(model.suggestions[1]?.suggestedWeight == Decimal(string: "102.5"))
+        #expect(model.suggestions[38]?.hasTarget == false)
+        #expect(server.requests.dropFirst(before).map(\.query) == ["exerciseId=1", "exerciseId=38"])
+    }
+
+    @Test("a suggestion that fails is left out without an error, and asked for again next time")
+    func suggestionFailureIsSilent() async {
+        let server = StubServer()
+        let model = await twoExerciseWorkout(server)
+        let squat = suggestionJSON(exerciseId: 38)
+        server.respond { request in
+            request.query == "exerciseId=1" ? .json(500, #"{"status":500,"detail":"Unexpected error"}"#) : .json(200, squat)
+        }
+
+        await model.loadSuggestions()
+
+        #expect(model.suggestions.keys.sorted() == [38])
+        #expect(model.errorMessage == nil)
+        #expect(model.activeSession != nil)
+
+        let bench = suggestionJSON(exerciseId: 1)
+        let before = server.requests.count
+        server.respond { _ in .json(200, bench) }
+        await model.loadSuggestions()
+
+        #expect(model.suggestions.keys.sorted() == [1, 38])
+        #expect(server.requests.dropFirst(before).map(\.query) == ["exerciseId=1"])
+    }
+
+    @Test("with no workout in progress no suggestion is asked for")
+    func noSuggestionsWithoutWorkout() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let before = server.requests.count
+
+        await model.loadSuggestions()
+
+        #expect(server.requests.count == before)
+    }
+
+    @Test("finishing a workout drops its suggestions, since the next ones depend on it")
+    func finishClearsSuggestions() async {
+        let server = StubServer()
+        let model = await twoExerciseWorkout(server)
+        let bench = suggestionJSON(exerciseId: 1)
+        server.respond { _ in .json(200, bench) }
+        await model.loadSuggestions()
+        let finished = sessionJSON(finished: true)
+        let next = nextLiftWithDay
+        server.respond { request in
+            request.path.hasSuffix("/finish") ? .json(200, finished) : .json(200, next)
+        }
+
+        await model.finishWorkout()
+
+        #expect(model.suggestions.isEmpty)
+    }
+
     // MARK: Goals after onboarding
 
     private func goalsJSON(direction: String, calories: Int) -> String {

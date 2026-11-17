@@ -40,6 +40,11 @@ public final class AppModel {
     public private(set) var activeSession: WorkoutSession?
     /// Finished workouts, newest first. Nil until loaded.
     public private(set) var history: [WorkoutSession]?
+    /// The model the server uses for suggestions. Nil until loaded.
+    public private(set) var progressionModel: ProgressionModel?
+    /// What to do next for an exercise, by exercise id. An exercise is missing
+    /// until its suggestion has loaded, and stays missing if that load fails.
+    public private(set) var suggestions: [Int64: ProgressionSuggestion] = [:]
     /// The exercise library. Nil until loaded.
     public private(set) var exercises: [Exercise]?
 
@@ -104,6 +109,8 @@ public final class AppModel {
         exercises = nil
         activeSession = nil
         history = nil
+        progressionModel = nil
+        suggestions = [:]
         weightEntries = nil
         weightAverage = nil
         goals = nil
@@ -415,8 +422,45 @@ public final class AppModel {
         }
         guard deleted else { return false }
         history?.removeAll { $0.id == sessionId }
+        // Suggestions are worked out from the finished sessions.
+        suggestions = [:]
         await loadNextLift()
         return true
+    }
+
+    // MARK: Progression
+
+    public func loadProgressionModel() async {
+        await load { userId in
+            self.progressionModel = try await self.backend.progressionModel(userId: userId)
+        }
+    }
+
+    /// Changes the model, then reads it back so the screen shows what the
+    /// server stored. Suggestions made by the old model are dropped.
+    public func setProgressionModel(_ model: ProgressionModel) async {
+        guard case .signedIn = phase, !isWorking else { return }
+        isWorking = true
+        defer { isWorking = false }
+        await load { userId in
+            try await self.backend.setProgressionModel(model, userId: userId)
+            self.suggestions = [:]
+            self.progressionModel = try await self.backend.progressionModel(userId: userId)
+        }
+    }
+
+    /// Loads a suggestion for every exercise of the workout in progress that
+    /// does not have one yet. A suggestion is help, not a step of the workout,
+    /// so a failure here is silent: the exercise is shown without one, and no
+    /// error message replaces what the user is doing.
+    public func loadSuggestions() async {
+        guard case .signedIn(let userId) = phase, let session = activeSession else { return }
+        for entry in session.orderedEntries where suggestions[entry.exercise.id] == nil {
+            guard let suggestion = try? await backend.suggestion(exerciseId: entry.exercise.id, userId: userId) else { continue }
+            // The answer is dropped if the user signed out while it was on its way.
+            guard case .signedIn(userId) = phase else { return }
+            suggestions[entry.exercise.id] = suggestion
+        }
     }
 
     /// Starts a session for the day the server says is next, then adds that
@@ -479,6 +523,8 @@ public final class AppModel {
         }
         guard let finished else { return }
         activeSession = nil
+        // The next suggestion depends on the workout that was just finished.
+        suggestions = [:]
         // The server's answer is the finished session, so it goes into a loaded
         // history as it is.
         if let history {

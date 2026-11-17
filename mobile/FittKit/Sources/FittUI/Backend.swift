@@ -162,6 +162,23 @@ public struct Backend: Sendable {
         _ = try await perform("DELETE", "/api/users/\(userId)/workout-sessions/\(sessionId)", body: nil as NoBody?, authenticated: true)
     }
 
+    // MARK: Progression
+
+    /// What to do next for one exercise, worked out by the user's chosen model.
+    public func suggestion(exerciseId: Int64, userId: Int64) async throws -> ProgressionSuggestion {
+        try await get("/api/users/\(userId)/progression/suggestions", query: [URLQueryItem(name: "exerciseId", value: String(exerciseId))])
+    }
+
+    /// The chosen model. The server answers with double progression for a user
+    /// who has never chosen one. The body is a bare JSON string, not an object.
+    public func progressionModel(userId: Int64) async throws -> ProgressionModel {
+        try await get("/api/users/\(userId)/progression/preference")
+    }
+
+    public func setProgressionModel(_ model: ProgressionModel, userId: Int64) async throws {
+        _ = try await perform("PUT", "/api/users/\(userId)/progression/preference", body: ProgressionPreference(progressionModel: model), authenticated: true)
+    }
+
     // MARK: Body weight
 
     /// Entries from the last `days` days (1 to 365), newest first.

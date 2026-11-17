@@ -27,6 +27,25 @@ extension SplitType {
 }
 
 /// A red footnote under a field, shown when the model holds a message for it.
+extension ProgressionModel {
+    var label: String {
+        switch self {
+        case .doubleProgression: "Double progression"
+        case .rpeAutoregulation: "RPE autoregulation"
+        case .linearPeriodization: "Linear periodization"
+        }
+    }
+
+    /// One line on how the server uses the model, shown under the picker.
+    var summary: String {
+        switch self {
+        case .doubleProgression: "Add reps at the same weight up to 12, then add weight and start again at 8."
+        case .rpeAutoregulation: "Weight goes up or down to keep your logged RPE between 7 and 8.5."
+        case .linearPeriodization: "Weight goes up each rotation of your plan, with a lighter fourth one."
+        }
+    }
+}
+
 struct FieldError: View {
     @Environment(AppModel.self) private var model
     let field: String
