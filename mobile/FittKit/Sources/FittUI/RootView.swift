@@ -51,6 +51,8 @@ private struct SignedInView: View {
                         OnboardingUnknownView()
                     }
                 }
+                // The loading and failed states have no title of their own to hang this on.
+                .canvas()
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Sign Out") {

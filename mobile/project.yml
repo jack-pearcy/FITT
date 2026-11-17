@@ -18,6 +18,9 @@ targets:
       properties:
         CFBundleDisplayName: FITT
         UILaunchScreen: {}
+        # The app is always dark, so the launch screen is too. Without this it is
+        # white on a phone in light mode, and flashes before the first screen.
+        UIUserInterfaceStyle: Dark
         # Lets the simulator reach a backend on this Mac over plain http.
         # Remote hosts still require https.
         NSAppTransportSecurity:
