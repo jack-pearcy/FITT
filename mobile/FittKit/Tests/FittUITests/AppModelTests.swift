@@ -763,6 +763,40 @@ struct AppModelTests {
         #expect(model.fieldErrors == ["name": "Exercise name is required"])
     }
 
+    /// A signed-in model whose library holds one shared and one custom exercise.
+    private func libraryModel(_ server: StubServer) async -> AppModel {
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let custom = customExercise
+        server.respond { _ in .json(200, #"[{"id":38,"name":"Back Squat","muscleGroup":"LEGS","custom":false},\#(custom)]"#) }
+        await model.loadExercises()
+        return model
+    }
+
+    @Test("deleting a custom exercise removes it from the loaded library")
+    func deletesExercise() async {
+        let server = StubServer()
+        let model = await libraryModel(server)
+        server.respond { _ in StubResponse(status: 204) }
+
+        await model.deleteExercise(71)
+
+        #expect(model.exercises?.map(\.id) == [38])
+        #expect(model.errorMessage == nil)
+        #expect(server.requests.suffix(1).map { "\($0.method) \($0.path)" } == ["DELETE /api/users/7/exercises/71"])
+    }
+
+    @Test("an exercise the server says is in use stays in the library, with the server's reason shown")
+    func deleteExerciseInUse() async {
+        let server = StubServer()
+        let model = await libraryModel(server)
+        server.respond { _ in .json(409, #"{"status":409,"title":"Exercise In Use","detail":"This exercise is used in a plan or a logged session and cannot be deleted"}"#) }
+
+        await model.deleteExercise(71)
+
+        #expect(model.exercises?.map(\.id) == [38, 71])
+        #expect(model.errorMessage == "This exercise is used in a plan or a logged session and cannot be deleted")
+    }
+
     @Test("an exercise that cannot reach the server is not added")
     func createExerciseOffline() async {
         let server = StubServer()

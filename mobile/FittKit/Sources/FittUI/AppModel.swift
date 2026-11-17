@@ -270,6 +270,16 @@ public final class AppModel {
         return created
     }
 
+    /// Deletes a custom exercise and takes it out of the loaded library. The
+    /// server refuses one that a plan or a logged workout uses, and its
+    /// sentence saying so becomes the error message.
+    public func deleteExercise(_ exerciseId: Int64) async {
+        await load { userId in
+            try await self.backend.deleteExercise(exerciseId, userId: userId)
+            self.exercises?.removeAll { $0.id == exerciseId }
+        }
+    }
+
     /// Creates the plan in `draft`. Returns true when it was saved, so the form
     /// knows to close. A plan becomes the active one when no other plan is:
     /// a first plan should show up under Today without a second step.
