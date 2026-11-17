@@ -1,7 +1,7 @@
 import FittCore
 import SwiftUI
 
-private extension SetEntry {
+extension SetEntry {
     /// "100 × 8" with a weight, "8 reps" without one.
     var summary: String {
         let repsText = reps.map(String.init) ?? "0"
