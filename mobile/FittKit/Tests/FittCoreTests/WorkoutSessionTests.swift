@@ -91,6 +91,45 @@ struct WorkoutSessionTests {
 
     // MARK: Set draft
 
+    private func session(id: Int64, started: TimeInterval, finished: TimeInterval?) -> WorkoutSession {
+        WorkoutSession(
+            id: id, planId: nil,
+            startedAt: Date(timeIntervalSince1970: started),
+            finishedAt: finished.map(Date.init(timeIntervalSince1970:)),
+            exerciseEntries: [])
+    }
+
+    @Test("a finished session's length is the time from start to finish")
+    func duration() {
+        #expect(session(id: 1, started: 1_000, finished: 3_700).duration == 2_700)
+    }
+
+    @Test("a session in progress, or one whose times are out of order, has no length")
+    func noDuration() {
+        #expect(session(id: 1, started: 1_000, finished: nil).duration == nil)
+        #expect(session(id: 1, started: 1_000, finished: 900).duration == nil)
+    }
+
+    @Test("history is the finished sessions, newest first, whatever order they arrive in")
+    func historyOrder() {
+        let sessions = [
+            session(id: 1, started: 1_000, finished: 2_000),
+            session(id: 4, started: 9_000, finished: nil),
+            session(id: 3, started: 5_000, finished: 6_000),
+            session(id: 2, started: 3_000, finished: 4_000),
+        ]
+
+        #expect(SessionHistory.finished(sessions).map(\.id) == [3, 2, 1])
+    }
+
+    @Test("sessions that started at the same moment keep a fixed order, newest id first")
+    func historyTieBreak() {
+        let sessions = [session(id: 1, started: 1_000, finished: 2_000), session(id: 2, started: 1_000, finished: 2_000)]
+
+        #expect(SessionHistory.finished(sessions).map(\.id) == [2, 1])
+        #expect(SessionHistory.finished(sessions.reversed()).map(\.id) == [2, 1])
+    }
+
     @Test("a full draft becomes the set to log")
     func fullDraft() throws {
         #expect(try SetDraft(weight: "102.5", reps: "8", rpe: "8.5").loggedSet()

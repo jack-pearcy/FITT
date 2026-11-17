@@ -38,6 +38,8 @@ public final class AppModel {
     public private(set) var weightAverage: Decimal?
     /// The workout in progress, if there is one.
     public private(set) var activeSession: WorkoutSession?
+    /// Finished workouts, newest first. Nil until loaded.
+    public private(set) var history: [WorkoutSession]?
     /// The exercise library. Nil until loaded.
     public private(set) var exercises: [Exercise]?
 
@@ -101,6 +103,7 @@ public final class AppModel {
         plans = nil
         exercises = nil
         activeSession = nil
+        history = nil
         weightEntries = nil
         weightAverage = nil
         goals = nil
@@ -384,10 +387,36 @@ public final class AppModel {
 
     /// Finds a session left unfinished, such as one the app was closed in the middle of.
     public func loadActiveSession() async {
+        await loadSessions()
+    }
+
+    /// Reads every session once and splits it: the unfinished one is the workout
+    /// in progress and the finished ones are the history. The API has one list
+    /// route for both, so one request serves the Today tab and the History tab.
+    public func loadSessions() async {
         await load { userId in
             let sessions = try await self.backend.sessions(userId: userId)
             self.activeSession = sessions.first { !$0.isFinished }
+            self.history = SessionHistory.finished(sessions)
         }
+    }
+
+    /// Deletes a finished workout. Returns true when it is gone, so the screen
+    /// showing it knows to close. The plan's next day is read again because the
+    /// server works it out from the finished sessions.
+    public func deleteFromHistory(_ sessionId: Int64) async -> Bool {
+        guard case .signedIn = phase, !isWorking else { return false }
+        isWorking = true
+        defer { isWorking = false }
+        var deleted = false
+        await load { userId in
+            try await self.backend.deleteSession(sessionId, userId: userId)
+            deleted = true
+        }
+        guard deleted else { return false }
+        history?.removeAll { $0.id == sessionId }
+        await loadNextLift()
+        return true
     }
 
     /// Starts a session for the day the server says is next, then adds that
@@ -444,13 +473,17 @@ public final class AppModel {
         guard let session = activeSession, !isWorking else { return }
         isWorking = true
         defer { isWorking = false }
-        var finished = false
+        var finished: WorkoutSession?
         await load { userId in
-            _ = try await self.backend.finishSession(session.id, userId: userId)
-            finished = true
+            finished = try await self.backend.finishSession(session.id, userId: userId)
         }
-        guard finished else { return }
+        guard let finished else { return }
         activeSession = nil
+        // The server's answer is the finished session, so it goes into a loaded
+        // history as it is.
+        if let history {
+            self.history = SessionHistory.finished(history.filter { $0.id != finished.id } + [finished])
+        }
         await loadNextLift()
     }
 

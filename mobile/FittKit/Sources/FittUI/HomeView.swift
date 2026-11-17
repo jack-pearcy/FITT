@@ -11,6 +11,8 @@ struct HomeView: View {
                 .tabItem { Label("Plans", systemImage: "list.bullet.clipboard") }
             WeightView()
                 .tabItem { Label("Weight", systemImage: "scalemass") }
+            HistoryView()
+                .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
             AccountView()
                 .tabItem { Label("Account", systemImage: "person.crop.circle") }
         }

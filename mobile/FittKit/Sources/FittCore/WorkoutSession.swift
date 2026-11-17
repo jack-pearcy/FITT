@@ -71,6 +71,13 @@ public struct WorkoutSession: Decodable, Equatable, Identifiable, Sendable {
         exerciseEntries.reduce(0) { $0 + $1.sets.count }
     }
 
+    /// How long the workout took. Nil while it is in progress, and nil when the
+    /// stored times are out of order, which would otherwise show a negative length.
+    public var duration: TimeInterval? {
+        guard let finishedAt, finishedAt >= startedAt else { return nil }
+        return finishedAt.timeIntervalSince(startedAt)
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id, planId, startedAt, finishedAt, exerciseEntries
     }
@@ -95,6 +102,17 @@ public struct WorkoutSession: Decodable, Equatable, Identifiable, Sendable {
         } else {
             finishedAt = nil
         }
+    }
+}
+
+/// The session list arranged for the history screen.
+public enum SessionHistory {
+    /// The finished sessions, newest first. The one in progress is left out
+    /// because it is shown as the current workout.
+    public static func finished(_ sessions: [WorkoutSession]) -> [WorkoutSession] {
+        sessions
+            .filter(\.isFinished)
+            .sorted { ($0.startedAt, $0.id) > ($1.startedAt, $1.id) }
     }
 }
 
