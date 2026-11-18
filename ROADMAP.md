@@ -617,6 +617,15 @@ Completed this phase (as of 2026-11-16):
   device. Flyway V6 keeps two decimal places of body weight. Rows stored before this change were not
   converted. For a user working in pounds the reason beside a progression suggestion is hidden,
   because the server writes it with kilogram numbers.
+- Three data fixes from a review of the whole codebase shipped (PR #104, PR #105, PR #106). Two requests
+  arriving together could give two sets the same number, so the session row is now locked while a set
+  or an exercise is added or removed, and Flyway V7 adds a unique key on each numbering. The next plan
+  day was worked out from a count of finished sessions, which went wrong once a plan's days were added,
+  removed or moved; Flyway V8 stores the day on each session and the next day follows the last one
+  trained. Sessions stored before V8 fall back to the count, and the week in the cycle still comes
+  from the count. A decimal with more places than its column keeps was rounded on save while the
+  response showed what was sent; the server now refuses it with a 400, and the app rounds metric
+  height, weight and target weight to two places before sending.
 
 The loop a lifter needs now works end to end on the phone: account, onboarding, plan, workout, next day.
 Each piece was run on the simulator against a local backend before it merged, and three defects were found
@@ -627,13 +636,14 @@ changes during a workout.
 
 Not yet deployed: production still runs the build from before PR #69. Until it is deployed the live API
 has no refresh tokens and the app falls back to a one hour session, and it does not return the units
-preference, so the app shows kilograms to every user.
+preference, so the app shows kilograms to every user. Four migrations (V5 to V8) will run on the next
+deploy.
 
 Remaining in this phase:
 - Settings: change the units preference after onboarding, delete account. Delete account needs API
   work first (see the gaps below).
 - Make the mobile-test job a required check in the branch ruleset (a repository setting), and add a CI
-  build of the app target. The job runs the package tests only (293 at PR #102).
+  build of the app target. The job runs the package tests only (295 at PR #106).
 - Exercise how-to videos: a how-to icon beside an exercise that plays a short generated 3D clip of the
   movement, with the clips served from the existing Hetzner server. Noted 2026-11-15; not started.
 
