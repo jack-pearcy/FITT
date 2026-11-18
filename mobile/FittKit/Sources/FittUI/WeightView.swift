@@ -111,8 +111,9 @@ private struct LogWeightView: View {
                         .accessibilityIdentifier("weightDate")
                     FieldError(field: "loggedAt")
 
-                    LabeledContent("Weight") {
-                        TextField(model.units.weightLabel, text: $draft.weight)
+                    // The unit is in the label, so it stays visible once a number is typed.
+                    LabeledContent("Weight (\(model.units.weightLabel))") {
+                        TextField("0.0", text: $draft.weight)
                             .numberEntry(decimal: true)
                             .focused($weightFocused)
                             .accessibilityIdentifier("weightValue")
