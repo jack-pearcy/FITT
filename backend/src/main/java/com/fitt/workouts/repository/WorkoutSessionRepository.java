@@ -2,7 +2,9 @@ package com.fitt.workouts.repository;
 
 import com.fitt.workouts.persistence.entity.WorkoutSessionEntity;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -24,6 +26,14 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSessionEn
     // Ownership-safe single session fetch. Returns empty if the session exists
     // but belongs to a different user, prevents cross-user data access.
     Optional<WorkoutSessionEntity> findByIdAndOwnerUserId(Long id, Long ownerUserId);
+
+    // One session, locked for update. Every change to a session's entries and sets
+    // reads it this way first, so two requests for the same session queue up and the
+    // second numbers its new row after the first has committed. Without the lock
+    // both read the same highest number and both insert the next one.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM WorkoutSessionEntity s WHERE s.id = :id")
+    Optional<WorkoutSessionEntity> findByIdForUpdate(@Param("id") Long id);
 
     // Cheaper ownership check when we only need to verify access, not load the entity.
     boolean existsByIdAndOwnerUserId(Long id, Long ownerUserId);

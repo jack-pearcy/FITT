@@ -116,7 +116,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     @Override
     @Transactional
     public WorkoutSessionResponse addExerciseEntry(Long ownerUserId, Long sessionId, AddExerciseEntryRequest request) {
-        WorkoutSessionEntity session = loadAndVerify(ownerUserId, sessionId);
+        WorkoutSessionEntity session = loadForUpdate(ownerUserId, sessionId);
 
         ExerciseEntity exercise = exerciseRepository
                 .findAccessibleById(request.exerciseId(), ownerUserId)
@@ -141,7 +141,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     @Override
     @Transactional
     public WorkoutSessionResponse removeExerciseEntry(Long ownerUserId, Long sessionId, Long entryId) {
-        WorkoutSessionEntity session = loadAndVerify(ownerUserId, sessionId);
+        WorkoutSessionEntity session = loadForUpdate(ownerUserId, sessionId);
 
         ExerciseEntryEntity target = session.getExerciseEntries().stream()
                 .filter(e -> e.getId().equals(entryId))
@@ -157,7 +157,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     @Override
     @Transactional
     public WorkoutSessionResponse logSet(Long ownerUserId, Long sessionId, Long entryId, LogSetRequest request) {
-        WorkoutSessionEntity session = loadAndVerify(ownerUserId, sessionId);
+        WorkoutSessionEntity session = loadForUpdate(ownerUserId, sessionId);
 
         ExerciseEntryEntity entry = session.getExerciseEntries().stream()
                 .filter(e -> e.getId().equals(entryId))
@@ -185,7 +185,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     @Override
     @Transactional
     public WorkoutSessionResponse deleteSet(Long ownerUserId, Long sessionId, Long entryId, Long setId) {
-        WorkoutSessionEntity session = loadAndVerify(ownerUserId, sessionId);
+        WorkoutSessionEntity session = loadForUpdate(ownerUserId, sessionId);
 
         ExerciseEntryEntity entry = session.getExerciseEntries().stream()
                 .filter(e -> e.getId().equals(entryId))
@@ -203,13 +203,21 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     }
 
     private WorkoutSessionEntity loadAndVerify(Long ownerUserId, Long sessionId) {
-        WorkoutSessionEntity session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new WorkoutSessionNotFoundException(sessionId));
+        return verifyOwner(ownerUserId, sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new WorkoutSessionNotFoundException(sessionId)));
+    }
 
+    // For a change to the session's entries or sets. Holds the session row until the
+    // transaction ends, so the next number is read after any earlier change is saved.
+    private WorkoutSessionEntity loadForUpdate(Long ownerUserId, Long sessionId) {
+        return verifyOwner(ownerUserId, sessionRepository.findByIdForUpdate(sessionId)
+                .orElseThrow(() -> new WorkoutSessionNotFoundException(sessionId)));
+    }
+
+    private WorkoutSessionEntity verifyOwner(Long ownerUserId, WorkoutSessionEntity session) {
         if (!ownerUserId.equals(session.getOwnerUserId())) {
             throw new AccessDeniedException("You do not own this session");
         }
-
         return session;
     }
 

@@ -11,13 +11,16 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 @Entity
-@Table(name = "exercise_entries")
+// See SetEntryEntity: the same guard for the position of an exercise in a session.
+@Table(name = "exercise_entries", uniqueConstraints = @UniqueConstraint(
+        name = "uk_exercise_entries_session_order", columnNames = {"workout_session_id", "order_index"}))
 public class ExerciseEntryEntity {
 
     @Id

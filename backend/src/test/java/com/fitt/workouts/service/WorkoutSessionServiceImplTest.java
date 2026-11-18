@@ -212,7 +212,7 @@ class WorkoutSessionServiceImplTest {
         session.addExerciseEntry(new ExerciseEntryEntity(existingExercise, 0));
 
         ExerciseEntity newExercise = exerciseWithId(EXERCISE_ID);
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
         when(exerciseRepository.findAccessibleById(EXERCISE_ID, OWNER_USER_ID)).thenReturn(Optional.of(newExercise));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -234,7 +234,7 @@ class WorkoutSessionServiceImplTest {
         session.addExerciseEntry(new ExerciseEntryEntity(exerciseWithId(EXERCISE_ID + 1), 1));
         session.addExerciseEntry(new ExerciseEntryEntity(exerciseWithId(EXERCISE_ID + 2), 2));
 
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
         when(exerciseRepository.findAccessibleById(EXERCISE_ID, OWNER_USER_ID))
                 .thenReturn(Optional.of(exerciseWithId(EXERCISE_ID)));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
@@ -248,7 +248,7 @@ class WorkoutSessionServiceImplTest {
     @Test
     void addExerciseEntry_firstEntryOfSession_startsAtZero() {
         WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
         when(exerciseRepository.findAccessibleById(EXERCISE_ID, OWNER_USER_ID))
                 .thenReturn(Optional.of(exerciseWithId(EXERCISE_ID)));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
@@ -262,7 +262,7 @@ class WorkoutSessionServiceImplTest {
     @Test
     void addExerciseEntry_exerciseNotInLibrary_throwsExerciseNotFoundException() {
         WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
         when(exerciseRepository.findAccessibleById(EXERCISE_ID, OWNER_USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() ->
@@ -282,7 +282,7 @@ class WorkoutSessionServiceImplTest {
         ReflectionTestUtils.setField(entry, "id", ENTRY_ID);
         session.addExerciseEntry(entry);
 
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -324,7 +324,7 @@ class WorkoutSessionServiceImplTest {
         entry.addSetEntry(new SetEntryEntity(3, new BigDecimal("100"), 8, null));
         session.addExerciseEntry(entry);
 
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -344,7 +344,7 @@ class WorkoutSessionServiceImplTest {
         entry.addSetEntry(new SetEntryEntity(1, new BigDecimal("100"), 10, null));
         session.addExerciseEntry(entry);
 
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -373,7 +373,7 @@ class WorkoutSessionServiceImplTest {
         entry.addSetEntry(set);
         session.addExerciseEntry(entry);
 
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
