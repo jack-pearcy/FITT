@@ -9,11 +9,15 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "set_entries")
+// The unique key is the last line of defence against two requests giving two sets
+// the same number. The service takes a row lock first, so it should never fire.
+@Table(name = "set_entries", uniqueConstraints = @UniqueConstraint(
+        name = "uk_set_entries_entry_number", columnNames = {"exercise_entry_id", "set_number"}))
 public class SetEntryEntity {
 
     @Id
