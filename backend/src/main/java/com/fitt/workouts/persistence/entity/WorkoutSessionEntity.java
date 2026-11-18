@@ -32,6 +32,13 @@ public class WorkoutSessionEntity {
     @Column(name = "plan_id")
     private Long planId;
 
+    // Which day of the plan this session trained, as that day's position in the
+    // plan (0 for the first). Null for a session with no plan, and for sessions
+    // saved before this column existed. A position, not a day id, because editing
+    // a plan replaces its day rows and their ids.
+    @Column(name = "plan_day_index")
+    private Integer planDayIndex;
+
     // Instant is timezone-safe. Always stored as UTC in MySQL DATETIME(6).
     @Column(name = "started_at", nullable = false)
     private Instant startedAt;
@@ -73,6 +80,7 @@ public class WorkoutSessionEntity {
     public Instant getFinishedAt() { return finishedAt; }
     public String getNotes() { return notes; }
     public Long getPlanId() { return planId; }
+    public Integer getPlanDayIndex() { return planDayIndex; }
 
     public List<ExerciseEntryEntity> getExerciseEntries() {
         return Collections.unmodifiableList(exerciseEntries);
@@ -81,4 +89,5 @@ public class WorkoutSessionEntity {
     public void setFinishedAt(Instant finishedAt) { this.finishedAt = finishedAt; }
     public void setNotes(String notes) { this.notes = notes; }
     public void setPlanId(Long planId) { this.planId = planId; }
+    public void setPlanDayIndex(Integer planDayIndex) { this.planDayIndex = planDayIndex; }
 }

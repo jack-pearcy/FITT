@@ -50,15 +50,22 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     public WorkoutSessionResponse createSession(Long ownerUserId, CreateWorkoutSessionRequest request) {
         // A session may only point at one of the caller's own plans. Reading as not
         // found, not forbidden, so another user's plan ids are not confirmable.
-        if (request.planId() != null
-                && !planRepository.existsByIdAndOwnerUserId(request.planId(), ownerUserId)) {
-            throw new WorkoutPlanNotFoundException(request.planId());
+        Integer planDayIndex = null;
+        if (request.planId() != null) {
+            int dayCount = planRepository.findByIdAndOwnerUserId(request.planId(), ownerUserId)
+                    .orElseThrow(() -> new WorkoutPlanNotFoundException(request.planId()))
+                    .getDays().size();
+            // Record which day this session trains: the day the rotation points at now.
+            if (dayCount > 0) {
+                planDayIndex = PlanRotation.nextDayIndex(sessionRepository, ownerUserId, request.planId(), dayCount);
+            }
         }
 
         // entity constructor requires ownerUserId and startedAt
         WorkoutSessionEntity session = new WorkoutSessionEntity(ownerUserId, request.startedAt());
         session.setNotes(request.notes());
         session.setPlanId(request.planId());
+        session.setPlanDayIndex(planDayIndex);
         return toResponse(sessionRepository.save(session));
     }
 

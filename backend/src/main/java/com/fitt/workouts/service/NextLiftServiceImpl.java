@@ -59,8 +59,7 @@ public class NextLiftServiceImpl implements NextLiftService {
         long completedSessions =
                 sessionRepository.countByOwnerUserIdAndPlanIdAndFinishedAtIsNotNull(ownerUserId, plan.id());
 
-        // Which day is next = completed sessions wrapped by the rotation length.
-        int dayIndex = (int) (completedSessions % daysInRotation);
+        int dayIndex = PlanRotation.nextDayIndex(sessionRepository, ownerUserId, plan.id(), daysInRotation);
         WorkoutPlanDayResponse nextDay = days.get(dayIndex);
 
         // Where in the cycle = one full rotation is one week, wrapped by the cycle length.
