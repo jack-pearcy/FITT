@@ -1829,4 +1829,72 @@ struct AppModelTests {
 
         #expect(model.goals == nil)
     }
+
+    // MARK: Units
+
+    /// A signed-in, onboarded model whose saved units are imperial.
+    private func imperialModel(_ server: StubServer) async -> AppModel {
+        server.respond { _ in
+            .json(200, #"{"biometricsComplete":true,"goalsComplete":true,"onboardingComplete":true,"unitsPreference":"IMPERIAL"}"#)
+        }
+        let store = InMemoryTokenStore(token: makeToken(userId: 7, expiresAt: now.addingTimeInterval(600)))
+        let model = model(server, store: store)
+        await model.start()
+        return model
+    }
+
+    @Test("the units saved on the server are in force after a relaunch")
+    func unitsComeFromStatus() async {
+        let model = await imperialModel(StubServer())
+
+        #expect(model.units == .imperial)
+    }
+
+    @Test("a set typed in pounds is sent in kilograms")
+    func logsSetInPounds() async throws {
+        let server = StubServer()
+        let model = await imperialModel(server)
+        let session = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+        server.respond { _ in .json(200, "[\(session)]") }
+        await model.loadActiveSession()
+        let before = server.requests.count
+        server.respond { _ in .json(200, session) }
+
+        let saved = await model.logSet(SetDraft(weight: "225", reps: "5"), entryId: 30)
+
+        #expect(saved)
+        let request = try #require(server.requests.dropFirst(before).first)
+        let body = try #require(try JSONSerialization.jsonObject(with: request.body) as? [String: Any])
+        #expect(body["weight"] as? Double == 102.06)
+    }
+
+    @Test("a body weight typed in pounds is sent in kilograms")
+    func logsWeightInPounds() async throws {
+        let server = StubServer()
+        let model = await imperialModel(server)
+        let before = server.requests.count
+        serveWeights(server, entries: [weightJSON(id: 3, date: "2027-01-15", weight: "81.83")], average: "81.83")
+
+        let saved = await model.logWeight(BodyWeightDraft(date: CalendarDate(now), weight: "180.4"))
+
+        #expect(saved)
+        let request = try #require(server.requests.dropFirst(before).first)
+        let body = try #require(try JSONSerialization.jsonObject(with: request.body) as? [String: Any])
+        #expect(body["weight"] as? Double == 81.83)
+    }
+
+    @Test("a logged set and a suggestion are shown in the user's unit, with the unit named")
+    func weightsShownInUnits() {
+        let set = SetEntry(id: 1, setNumber: 1, reps: 5, weight: Decimal(string: "102.06")!, rpe: nil, completed: true)
+        #expect(set.summary(units: .metric) == "102.06 kg × 5")
+        #expect(set.summary(units: .imperial) == "225 lb × 5")
+        #expect(SetEntry(id: 2, setNumber: 1, reps: 12, weight: nil, rpe: nil, completed: true).summary(units: .imperial) == "12 reps")
+
+        let suggestion = ProgressionSuggestion(
+            exerciseId: 1, modelUsed: .doubleProgression, suggestedWeight: Decimal(string: "102.06")!,
+            suggestedReps: 8, suggestedSets: 3, reasoning: ""
+        )
+        #expect(suggestion.targetText(units: .metric) == "102.06 kg × 8, 3 sets")
+        #expect(suggestion.targetText(units: .imperial) == "225 lb × 8, 3 sets")
+    }
 }

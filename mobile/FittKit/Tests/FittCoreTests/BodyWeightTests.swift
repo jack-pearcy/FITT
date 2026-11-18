@@ -74,4 +74,26 @@ struct BodyWeightTests {
         #expect(BodyWeightDraft(date: today).replaced(in: entries)?.id == 2)
         #expect(BodyWeightDraft(date: CalendarDate(year: 2026, month: 11, day: 14)).replaced(in: entries) == nil)
     }
+
+    @Test("a weight typed in pounds becomes kilograms to two places")
+    func imperialRequest() throws {
+        let entry = try BodyWeightDraft(date: today, weight: "180.4").entry(today: today, units: .imperial)
+
+        #expect(entry == NewBodyWeight(loggedAt: today, weight: Decimal(string: "81.83")!))
+    }
+
+    @Test("the limits for pounds are the server's limits in kilograms", arguments: [
+        ("0.2", false), ("0.3", true), ("1543", true), ("1544", false),
+    ])
+    func imperialLimits(text: String, accepted: Bool) {
+        let entry = try? BodyWeightDraft(date: today, weight: text).entry(today: today, units: .imperial)
+        #expect((entry != nil) == accepted)
+    }
+
+    @Test("the message for a bad weight names the limits in the user's unit")
+    func imperialMessage() {
+        #expect(throws: ValidationFailure(fields: ["weight": "Enter a weight from 0.3 to 1543"])) {
+            try BodyWeightDraft(date: today, weight: "0").entry(today: today, units: .imperial)
+        }
+    }
 }

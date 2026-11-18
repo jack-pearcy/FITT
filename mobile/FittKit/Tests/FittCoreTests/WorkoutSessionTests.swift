@@ -215,4 +215,16 @@ struct WorkoutSessionTests {
 
         #expect(json == #"{"reps":12}"#)
     }
+
+    @Test("a set typed in pounds is sent in kilograms")
+    func imperialSet() throws {
+        let set = try SetDraft(weight: "225", reps: "5").loggedSet(units: .imperial)
+
+        #expect(set == LoggedSet(reps: 5, weight: Decimal(string: "102.06")!))
+    }
+
+    @Test("a bodyweight set stays without a weight in either unit", arguments: [UnitsPreference.metric, .imperial])
+    func bodyweightSet(units: UnitsPreference) throws {
+        #expect(try SetDraft(reps: "12").loggedSet(units: units) == LoggedSet(reps: 12))
+    }
 }
