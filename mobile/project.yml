@@ -21,6 +21,15 @@ targets:
         # The app is always dark, so the launch screen is too. Without this it is
         # white on a phone in light mode, and flashes before the first screen.
         UIUserInterfaceStyle: Dark
+        # XcodeGen writes 1.0 and 1 here unless told otherwise, which ignores the
+        # two version settings below and makes every upload the same build.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # The app's only encryption is HTTPS and the Keychain, both from the system.
+        # Without this key every upload waits on a compliance question.
+        ITSAppUsesNonExemptEncryption: false
+        # The screens are laid out for portrait and have not been tried in landscape.
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         # Lets the simulator reach a backend on this Mac over plain http.
         # Remote hosts still require https.
         NSAppTransportSecurity:
@@ -37,3 +46,9 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
         TARGETED_DEVICE_FAMILY: "1"
+        # Signing for a device or an archive. The team id comes from the environment
+        # so it is not kept in the repository:
+        #   FITT_DEVELOPMENT_TEAM=ABCDE12345 xcodegen
+        # Without it the value is empty, which is enough for the simulator.
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ${FITT_DEVELOPMENT_TEAM}
