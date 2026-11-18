@@ -31,7 +31,7 @@ public class BodyWeightEntryEntity {
     private LocalDate loggedAt;
 
     // BigDecimal not double because weight values need exact decimal representation
-    @Column(nullable = false, precision = 5, scale = 1)
+    @Column(nullable = false, precision = 6, scale = 2)
     private BigDecimal weight;
 
     @CreationTimestamp

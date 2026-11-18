@@ -1,5 +1,6 @@
 package com.fitt.identity.controller;
 
+import com.fitt.identity.domain.UnitsPreference;
 import com.fitt.identity.dto.OnboardingStatusResponse;
 import com.fitt.identity.dto.TdeeResponse;
 import com.fitt.identity.service.OnboardingService;
@@ -102,14 +103,15 @@ class OnboardingControllerTest {
     @Test
     void getStatus_validOwnership_returns200WithStatusBody() throws Exception {
         when(onboardingService.getStatus(USER_ID))
-                .thenReturn(new OnboardingStatusResponse(true, true, true));
+                .thenReturn(new OnboardingStatusResponse(true, true, true, UnitsPreference.IMPERIAL));
 
         mockMvc.perform(get("/api/users/{userId}/identity/onboarding/status", USER_ID)
                         .with(jwt().jwt(token -> token.claim("uid", USER_ID))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.biometricsComplete").value(true))
                 .andExpect(jsonPath("$.goalsComplete").value(true))
-                .andExpect(jsonPath("$.onboardingComplete").value(true));
+                .andExpect(jsonPath("$.onboardingComplete").value(true))
+                .andExpect(jsonPath("$.unitsPreference").value("IMPERIAL"));
     }
 
     @Test

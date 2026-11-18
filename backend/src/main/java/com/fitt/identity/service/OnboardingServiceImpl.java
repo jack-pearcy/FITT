@@ -7,6 +7,8 @@ import com.fitt.identity.service.exception.BiometricsNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+
 @Service
 @Transactional(readOnly = true)
 public class OnboardingServiceImpl implements OnboardingService {
@@ -52,13 +54,15 @@ public class OnboardingServiceImpl implements OnboardingService {
 
     @Override
     public OnboardingStatusResponse getStatus(Long userId) {
-        boolean biometricsComplete = biometricsRepository.existsByOwnerUserId(userId);
+        Optional<UserBiometricsEntity> biometrics = biometricsRepository.findByOwnerUserId(userId);
+        boolean biometricsComplete = biometrics.isPresent();
         // Goals live in GoalService now, so ask it instead of reaching into the goal table.
         boolean goalsComplete = goalService.hasGoals(userId);
         return new OnboardingStatusResponse(
                 biometricsComplete,
                 goalsComplete,
-                biometricsComplete && goalsComplete
+                biometricsComplete && goalsComplete,
+                biometrics.map(UserBiometricsEntity::getUnitsPreference).orElse(null)
         );
     }
 

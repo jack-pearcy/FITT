@@ -42,4 +42,31 @@ struct MeasurementTests {
             #expect(UnitConversion.pounds(kilograms: kilograms) == Decimal(pounds), "\(pounds) lb")
         }
     }
+
+    @Test("a metric user sees and sends kilograms unchanged")
+    func metricWeights() {
+        let units = UnitsPreference.metric
+        #expect(units.weightLabel == "kg")
+        #expect(units.shown(kilograms: Decimal(string: "102.5")!) == Decimal(string: "102.5"))
+        #expect(units.kilograms(typed: Decimal(string: "102.5")!) == Decimal(string: "102.5"))
+        #expect(units.bodyWeightText(kilograms: Decimal(string: "82.44")!) == "82.4 kg")
+    }
+
+    @Test("an imperial user sees pounds and sends kilograms")
+    func imperialWeights() {
+        let units = UnitsPreference.imperial
+        #expect(units.weightLabel == "lb")
+        #expect(units.shown(kilograms: Decimal(string: "102.06")!) == 225)
+        #expect(units.kilograms(typed: 225) == Decimal(string: "102.06"))
+        #expect(units.bodyWeightText(kilograms: Decimal(string: "81.83")!) == "180.4 lb")
+    }
+
+    @Test("every tenth of a pound survives the trip to kilograms and back")
+    func tenthsOfPoundsRoundTrip() {
+        let units = UnitsPreference.imperial
+        for tenths in 3...15430 {
+            let pounds = Decimal(tenths) / 10
+            #expect(units.shown(kilograms: units.kilograms(typed: pounds)) == pounds, "\(pounds) lb")
+        }
+    }
 }

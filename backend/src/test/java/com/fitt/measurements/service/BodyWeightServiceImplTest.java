@@ -125,8 +125,8 @@ class BodyWeightServiceImplTest {
     }
 
     @Test
-    void getSevenDayAverage_threeEntries_returnsAverageRoundedHalfUpToOneDecimal() {
-        // 80.0 + 81.5 + 82.6 = 244.1, divided by 3 = 81.3666..., HALF_UP to 1 decimal = 81.4
+    void getSevenDayAverage_threeEntries_returnsAverageRoundedHalfUpToTwoDecimals() {
+        // 80.0 + 81.5 + 82.6 = 244.1, divided by 3 = 81.3666..., HALF_UP to 2 decimals = 81.37
         BodyWeightEntryEntity e1 = new BodyWeightEntryEntity(
                 USER_ID, LocalDate.of(2026, 5, 25), new BigDecimal("80.0"));
         BodyWeightEntryEntity e2 = new BodyWeightEntryEntity(
@@ -139,7 +139,7 @@ class BodyWeightServiceImplTest {
 
         BigDecimal result = service.getSevenDayAverage(USER_ID);
 
-        assertThat(result).isEqualByComparingTo("81.4");
+        assertThat(result).isEqualByComparingTo("81.37");
     }
 
     @Test

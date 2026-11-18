@@ -58,4 +58,18 @@ struct AuthModelsTests {
     func emptyStoredData() {
         #expect(SessionTokens(storedData: Data()) == nil)
     }
+
+    @Test("the onboarding status carries the units once biometrics are saved")
+    func statusWithUnits() throws {
+        let json = #"{"biometricsComplete":true,"goalsComplete":false,"onboardingComplete":false,"unitsPreference":"IMPERIAL"}"#
+        #expect(try JSONDecoder().decode(OnboardingStatus.self, from: Data(json.utf8)).unitsPreference == .imperial)
+    }
+
+    @Test("a status with no units, or from a server that does not send them, still decodes", arguments: [
+        #"{"biometricsComplete":false,"goalsComplete":false,"onboardingComplete":false,"unitsPreference":null}"#,
+        #"{"biometricsComplete":true,"goalsComplete":true,"onboardingComplete":true}"#,
+    ])
+    func statusWithoutUnits(json: String) throws {
+        #expect(try JSONDecoder().decode(OnboardingStatus.self, from: Data(json.utf8)).unitsPreference == nil)
+    }
 }

@@ -183,7 +183,7 @@ public struct LoggedSet: Encodable, Equatable, Sendable {
 }
 
 /// One set as typed. Reps are required; weight is empty for a bodyweight set,
-/// and RPE is optional.
+/// and RPE is optional. The weight is in the unit the user works in.
 public struct SetDraft: Equatable, Sendable {
     public static let reps = 1...1000
     public static let weight: ClosedRange<Decimal> = 0...Decimal(string: "9999.99")!
@@ -199,7 +199,8 @@ public struct SetDraft: Equatable, Sendable {
         self.rpe = rpe
     }
 
-    public func loggedSet() throws(ValidationFailure) -> LoggedSet {
+    /// The set to send. The weight is converted to kilograms, the unit the server stores.
+    public func loggedSet(units: UnitsPreference = .metric) throws(ValidationFailure) -> LoggedSet {
         var problems: [String: String] = [:]
 
         let repsValue = Int(reps.trimmingCharacters(in: .whitespaces))
@@ -210,8 +211,10 @@ public struct SetDraft: Equatable, Sendable {
         // Rounded to the scale the server stores: two places for weight, one for RPE.
         var weightValue: Decimal?
         if !weight.trimmingCharacters(in: .whitespaces).isEmpty {
-            weightValue = DecimalInput.parse(weight)?.rounded(scale: 2)
-            if weightValue == nil || !Self.weight.contains(weightValue!) {
+            // The limit is checked on the number as typed, so the message matches it.
+            if let typed = DecimalInput.parse(weight)?.rounded(scale: 2), Self.weight.contains(typed) {
+                weightValue = units.kilograms(typed: typed).rounded(scale: 2)
+            } else {
                 problems["weight"] = "Enter a weight up to 9999.99"
             }
         }

@@ -73,11 +73,15 @@ public struct OnboardingStatus: Decodable, Equatable, Sendable {
     public let biometricsComplete: Bool
     public let goalsComplete: Bool
     public let onboardingComplete: Bool
+    /// The units saved with the biometrics. Nil before they are saved, and from
+    /// a server that does not send the field yet.
+    public let unitsPreference: UnitsPreference?
 
-    public init(biometricsComplete: Bool, goalsComplete: Bool, onboardingComplete: Bool) {
+    public init(biometricsComplete: Bool, goalsComplete: Bool, onboardingComplete: Bool, unitsPreference: UnitsPreference? = nil) {
         self.biometricsComplete = biometricsComplete
         self.goalsComplete = goalsComplete
         self.onboardingComplete = onboardingComplete
+        self.unitsPreference = unitsPreference
     }
 }
 

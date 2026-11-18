@@ -114,7 +114,7 @@ private struct SessionDetailView: View {
                     ForEach(entry.orderedSets) { set in
                         LabeledContent("Set \(set.setNumber)") {
                             VStack(alignment: .trailing) {
-                                Text(set.summary)
+                                Text(set.summary(units: model.units))
                                     .monospacedDigit()
                                 if let rpe = set.rpe {
                                     Text("RPE \(rpe.formatted())")
