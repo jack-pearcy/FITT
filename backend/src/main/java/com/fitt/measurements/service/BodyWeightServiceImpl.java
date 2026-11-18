@@ -70,7 +70,7 @@ public class BodyWeightServiceImpl implements BodyWeightService {
                 .map(BodyWeightEntryEntity::getWeight)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        return sum.divide(BigDecimal.valueOf(entries.size()), 1, RoundingMode.HALF_UP);
+        return sum.divide(BigDecimal.valueOf(entries.size()), 2, RoundingMode.HALF_UP);
     }
 
     @Override
