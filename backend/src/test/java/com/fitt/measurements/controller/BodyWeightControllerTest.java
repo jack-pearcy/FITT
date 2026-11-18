@@ -105,6 +105,22 @@ class BodyWeightControllerTest {
     }
 
     @Test
+    void logWeight_threeDecimalPlaces_returns400AndSavesNothing() throws Exception {
+        mockMvc.perform(post("/api/users/{userId}/measurements/weight", USER_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "loggedAt": "2026-05-25",
+                                  "weight": 81.828
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(bodyWeightService);
+    }
+
+    @Test
     void logWeight_missingWeight_returns400() throws Exception {
         mockMvc.perform(post("/api/users/{userId}/measurements/weight", USER_ID)
                         .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
