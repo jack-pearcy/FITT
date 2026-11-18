@@ -1057,6 +1057,23 @@ struct AppModelTests {
         #expect(calls(server, after: before) == ["POST /api/users/7/workout-sessions/12/entries/30/sets"])
     }
 
+    @Test("a second tap on Log while the first is being saved sends nothing")
+    func logSetIgnoresSecondTap() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        let before = server.requests.count
+        let updated = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench, sets: #"{"id":101,"setNumber":1,"reps":8,"weight":100.00,"rpe":null,"completed":true}"#))
+        server.respond { _ in .json(200, updated) }
+
+        async let first = model.logSet(SetDraft(weight: "100", reps: "8"), entryId: 30)
+        async let second = model.logSet(SetDraft(weight: "100", reps: "8"), entryId: 30)
+        let results = await [first, second]
+
+        #expect(results.filter { $0 }.count == 1)
+        #expect(calls(server, after: before) == ["POST /api/users/7/workout-sessions/12/entries/30/sets"])
+        #expect(!model.isWorking)
+    }
+
     @Test("a set with no reps is stopped on the device, with the message filed under its exercise")
     func logSetValidatesFirst() async {
         let server = StubServer()
