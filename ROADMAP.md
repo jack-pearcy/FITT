@@ -607,6 +607,16 @@ Completed this phase (as of 2026-11-16):
   uppercase labels, a logged set is a tile with no divider line, and the app is always dark. Styling
   only. Left out because they change behavior: a custom tab bar, a mini player for the active workout,
   bottom sheets in place of pushed screens, and haptics. Only four screens were checked by eye.
+- App icon and release build settings shipped (PR #100, PR #101): the icon is an outline traced from a
+  photo, and the project now carries the version, build number, export compliance answer, portrait
+  orientation and automatic signing a TestFlight upload needs. A second tap on Log no longer records
+  a set twice.
+- Weights in kilograms shipped (PR #102): the app converts a set weight or body weight typed in pounds
+  before it sends it, and shows stored weights in the user's unit with the unit named. The onboarding
+  status route now returns the units preference, so the choice holds after a relaunch and on a second
+  device. Flyway V6 keeps two decimal places of body weight. Rows stored before this change were not
+  converted. For a user working in pounds the reason beside a progression suggestion is hidden,
+  because the server writes it with kilogram numbers.
 
 The loop a lifter needs now works end to end on the phone: account, onboarding, plan, workout, next day.
 Each piece was run on the simulator against a local backend before it merged, and three defects were found
@@ -616,19 +626,22 @@ the backend, was found the same way while building plan editing, and a fifth whi
 changes during a workout.
 
 Not yet deployed: production still runs the build from before PR #69. Until it is deployed the live API
-has no refresh tokens and the app falls back to a one hour session.
+has no refresh tokens and the app falls back to a one hour session, and it does not return the units
+preference, so the app shows kilograms to every user.
 
 Remaining in this phase:
-- Settings: units preference, delete account. Both need API work first (see the gaps below).
+- Settings: change the units preference after onboarding, delete account. Delete account needs API
+  work first (see the gaps below).
 - Make the mobile-test job a required check in the branch ruleset (a repository setting), and add a CI
-  build of the app target. The job runs the package tests only (278 at PR #95).
+  build of the app target. The job runs the package tests only (293 at PR #102).
 - Exercise how-to videos: a how-to icon beside an exercise that plays a short generated 3D clip of the
   movement, with the clips served from the existing Hetzner server. Noted 2026-11-15; not started.
 
 API gaps found while building the client:
-- No route to read biometrics back, so the units preference cannot be shown after a relaunch, and a set's
-  weight and a body weight are displayed without a unit. For the same reason an imperial user sees and
-  edits the target weight in kilograms after a relaunch.
+- No route to read biometrics back. The units preference is now read from the onboarding status
+  (PR #102); height, weight and the other biometrics still cannot be shown or edited after onboarding.
+- The reason text of a progression suggestion has kilogram numbers written into it, so a client cannot
+  show it to a user working in pounds.
 - No route for the unfinished workout session, and no paging on the session list. The client reads the
   whole list to resume and to show history, which will slow down as history grows.
 - No update route for a custom exercise, no delete account, no streak, and no profile or notification
