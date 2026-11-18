@@ -245,6 +245,7 @@ struct WorkoutView: View {
             }
             // Without this, a button in a list row makes the whole row one tap target.
             .buttonStyle(.borderless)
+            .disabled(model.isWorking)
             .accessibilityIdentifier("logSet.\(entry.orderIndex)")
         }
         ForEach(["weight", "reps", "rpe"], id: \.self) { field in

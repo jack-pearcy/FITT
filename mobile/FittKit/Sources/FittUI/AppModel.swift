@@ -518,7 +518,8 @@ public final class AppModel {
 
     /// Logs one set. Returns true when it was saved.
     public func logSet(_ draft: SetDraft, entryId: Int64) async -> Bool {
-        guard let session = activeSession else { return false }
+        // A second tap while the first is on its way would log the set twice.
+        guard let session = activeSession, !isWorking else { return false }
         clearErrors()
         let set: LoggedSet
         do {
@@ -527,6 +528,8 @@ public final class AppModel {
             fieldErrors = Self.keyed(error.fields, entryId: entryId)
             return false
         }
+        isWorking = true
+        defer { isWorking = false }
         var saved = false
         await load { userId in
             self.activeSession = try await self.backend.logSet(set, entryId: entryId, sessionId: session.id, userId: userId)
