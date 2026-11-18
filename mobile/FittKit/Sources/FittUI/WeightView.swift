@@ -35,7 +35,7 @@ struct WeightView: View {
                                 Section {
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text("7 day average").sectionLabel()
-                                        Text(average.formatted()).heroMetric()
+                                        Text(model.units.bodyWeightText(kilograms: average)).heroMetric()
                                     }
                                     .accessibilityElement(children: .combine)
                                     .accessibilityIdentifier("weightAverage")
@@ -44,7 +44,7 @@ struct WeightView: View {
                             Section {
                                 ForEach(entries) { entry in
                                     LabeledContent(entry.loggedAt.display) {
-                                        Text(entry.weight.formatted())
+                                        Text(model.units.bodyWeightText(kilograms: entry.weight))
                                             .monospacedDigit()
                                     }
                                     .swipeActions {
@@ -112,7 +112,7 @@ private struct LogWeightView: View {
                     FieldError(field: "loggedAt")
 
                     LabeledContent("Weight") {
-                        TextField("0.0", text: $draft.weight)
+                        TextField(model.units.weightLabel, text: $draft.weight)
                             .numberEntry(decimal: true)
                             .focused($weightFocused)
                             .accessibilityIdentifier("weightValue")
@@ -120,7 +120,7 @@ private struct LogWeightView: View {
                     FieldError(field: "weight")
                 } footer: {
                     if let existing = draft.replaced(in: model.weightEntries ?? []) {
-                        Text("This replaces the \(existing.weight.formatted()) already logged for this day.")
+                        Text("This replaces the \(model.units.bodyWeightText(kilograms: existing.weight)) already logged for this day.")
                             .accessibilityIdentifier("replacesNote")
                     }
                 }

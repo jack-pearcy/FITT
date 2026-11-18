@@ -2,19 +2,19 @@ import FittCore
 import SwiftUI
 
 extension SetEntry {
-    /// "100 × 8" with a weight, "8 reps" without one.
-    var summary: String {
+    /// "100 kg × 8" with a weight, "8 reps" without one.
+    func summary(units: UnitsPreference) -> String {
         let repsText = reps.map(String.init) ?? "0"
         guard let weight else { return "\(repsText) reps" }
-        return "\(weight.formatted()) × \(repsText)"
+        return "\(units.shown(kilograms: weight).formatted()) \(units.weightLabel) × \(repsText)"
     }
 }
 
 extension ProgressionSuggestion {
-    /// "102.5 × 8, 3 sets". Nil when the server had no weight to suggest.
-    var targetText: String? {
+    /// "102.5 kg × 8, 3 sets". Nil when the server had no weight to suggest.
+    func targetText(units: UnitsPreference) -> String? {
         guard hasTarget else { return nil }
-        var text = suggestedWeight.formatted()
+        var text = "\(units.shown(kilograms: suggestedWeight).formatted()) \(units.weightLabel)"
         if let suggestedReps {
             text += " × \(suggestedReps)"
         }
@@ -55,7 +55,7 @@ struct WorkoutView: View {
                         ForEach(entry.orderedSets) { set in
                             LabeledContent("Set \(set.setNumber)") {
                                 VStack(alignment: .trailing) {
-                                    Text(set.summary)
+                                    Text(set.summary(units: model.units))
                                         .monospacedDigit()
                                     if let rpe = set.rpe {
                                         Text("RPE \(rpe.formatted())")
@@ -90,11 +90,15 @@ struct WorkoutView: View {
                                 Text("Plan: \(target.sets) × \(target.reps)")
                             }
                             if let suggestion = model.suggestions[entry.exercise.id] {
-                                if let targetText = suggestion.targetText {
+                                if let targetText = suggestion.targetText(units: model.units) {
                                     Text("Suggested: \(targetText)")
                                         .accessibilityIdentifier("suggestion.\(entry.exercise.id)")
                                 }
-                                Text(suggestion.reasoning)
+                                // The server writes the reason with weights in kilograms, so it
+                                // is left out for a user who works in pounds and has a target.
+                                if model.units == .metric || !suggestion.hasTarget {
+                                    Text(suggestion.reasoning)
+                                }
                             }
                         }
                     }
@@ -224,7 +228,7 @@ struct WorkoutView: View {
             set: { drafts[entry.id] = $0 }
         )
         HStack {
-            TextField("Weight", text: draft.weight)
+            TextField(model.units.weightLabel, text: draft.weight)
                 .numberEntry(decimal: true)
                 .focused($focus, equals: Field(entryId: entry.id, name: "weight"))
                 .accessibilityIdentifier("weight.\(entry.orderIndex)")

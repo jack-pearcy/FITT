@@ -36,6 +36,42 @@ public enum UnitConversion {
     }
 }
 
+/// Weights cross the API in kilograms. These turn a stored weight into what the
+/// user sees, and a typed weight into what is stored.
+extension UnitsPreference {
+    /// "kg" or "lb".
+    public var weightLabel: String {
+        switch self {
+        case .metric: "kg"
+        case .imperial: "lb"
+        }
+    }
+
+    /// A stored weight in the unit the user works in. Pounds are shown to one
+    /// decimal place.
+    public func shown(kilograms: Decimal) -> Decimal {
+        switch self {
+        case .metric: kilograms
+        case .imperial: UnitConversion.pounds(kilograms: kilograms)
+        }
+    }
+
+    /// A body weight for display, to one decimal place with its unit: "180.4 lb".
+    public func bodyWeightText(kilograms: Decimal) -> String {
+        "\(shown(kilograms: kilograms).rounded(scale: 1).formatted()) \(weightLabel)"
+    }
+
+    /// A typed weight in kilograms. Pounds become kilograms to two decimal
+    /// places, which is fine enough that a weight typed to a tenth of a pound
+    /// comes back as the same number.
+    public func kilograms(typed: Decimal) -> Decimal {
+        switch self {
+        case .metric: typed
+        case .imperial: UnitConversion.kilograms(pounds: typed)
+        }
+    }
+}
+
 extension Decimal {
     /// Rounds half away from zero to `scale` decimal places.
     func rounded(scale: Int) -> Decimal {

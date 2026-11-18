@@ -17,8 +17,8 @@ public final class AppModel {
     public private(set) var onboarding: OnboardingStatus?
     /// Maintenance calories per day, once biometrics are saved and the server has been asked.
     public private(set) var maintenanceCalories: Int?
-    /// The units chosen on the biometrics step. The API has no route to read them
-    /// back, so after a relaunch this falls back to metric.
+    /// The units the user works in. They come from the onboarding status, so they
+    /// are right after a relaunch and on a second device. Metric until that loads.
     public private(set) var units = UnitsPreference.metric
     public private(set) var isWorking = false
     public private(set) var errorMessage: String?
@@ -367,7 +367,7 @@ public final class AppModel {
         clearErrors()
         let entry: NewBodyWeight
         do {
-            entry = try draft.entry(today: CalendarDate(now()))
+            entry = try draft.entry(today: CalendarDate(now()), units: units)
         } catch {
             fieldErrors = error.fields
             return false
@@ -523,7 +523,7 @@ public final class AppModel {
         clearErrors()
         let set: LoggedSet
         do {
-            set = try draft.loggedSet()
+            set = try draft.loggedSet(units: units)
         } catch {
             fieldErrors = Self.keyed(error.fields, entryId: entryId)
             return false
@@ -666,7 +666,11 @@ public final class AppModel {
 
     private func loadOnboardingStatus(userId: Int64) async {
         do {
-            onboarding = try await backend.onboardingStatus(userId: userId)
+            let status = try await backend.onboardingStatus(userId: userId)
+            onboarding = status
+            if let saved = status.unitsPreference {
+                units = saved
+            }
         } catch let error as BackendError {
             show(error, duringSignIn: false)
         } catch {
