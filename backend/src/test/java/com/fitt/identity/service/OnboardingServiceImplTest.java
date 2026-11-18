@@ -94,7 +94,7 @@ class OnboardingServiceImplTest {
 
     @Test
     void getStatus_bothBiometricsAndGoalsExist_returnsAllComplete() {
-        when(biometricsRepository.existsByOwnerUserId(USER_ID)).thenReturn(true);
+        when(biometricsRepository.findByOwnerUserId(USER_ID)).thenReturn(Optional.of(imperialBiometrics()));
         when(goalService.hasGoals(USER_ID)).thenReturn(true);
 
         OnboardingStatusResponse status = service.getStatus(USER_ID);
@@ -102,11 +102,30 @@ class OnboardingServiceImplTest {
         assertThat(status.biometricsComplete()).isTrue();
         assertThat(status.goalsComplete()).isTrue();
         assertThat(status.onboardingComplete()).isTrue();
+        assertThat(status.unitsPreference()).isEqualTo(UnitsPreference.IMPERIAL);
+    }
+
+    @Test
+    void getStatus_noBiometrics_returnsNoUnitsPreference() {
+        when(biometricsRepository.findByOwnerUserId(USER_ID)).thenReturn(Optional.empty());
+        when(goalService.hasGoals(USER_ID)).thenReturn(false);
+
+        OnboardingStatusResponse status = service.getStatus(USER_ID);
+
+        assertThat(status.biometricsComplete()).isFalse();
+        assertThat(status.unitsPreference()).isNull();
+    }
+
+    private static UserBiometricsEntity imperialBiometrics() {
+        return new UserBiometricsEntity(
+                USER_ID, new BigDecimal("180"), new BigDecimal("81.65"),
+                LocalDate.of(1994, 3, 7),
+                BiologicalSex.MALE, ActivityLevel.LIGHTLY_ACTIVE, UnitsPreference.IMPERIAL);
     }
 
     @Test
     void getStatus_onlyBiometricsExists_returnsOnboardingNotComplete() {
-        when(biometricsRepository.existsByOwnerUserId(USER_ID)).thenReturn(true);
+        when(biometricsRepository.findByOwnerUserId(USER_ID)).thenReturn(Optional.of(imperialBiometrics()));
         when(goalService.hasGoals(USER_ID)).thenReturn(false);
 
         OnboardingStatusResponse status = service.getStatus(USER_ID);
