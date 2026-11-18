@@ -110,4 +110,16 @@ struct BiometricsTests {
 
         #expect(json == #"{"activityLevel":"LIGHTLY_ACTIVE","biologicalSex":"MALE","dateOfBirth":"1994-03-07","heightCm":180,"unitsPreference":"METRIC","weightKg":82.5}"#)
     }
+
+    @Test("metric height and weight are rounded to the two places the server accepts")
+    func metricRounding() throws {
+        var draft = validDraft()
+        draft.height = "180.456"
+        draft.weight = "82.455"
+
+        let biometrics = try draft.biometrics(today: today)
+
+        #expect(biometrics.heightCm == Decimal(string: "180.46"))
+        #expect(biometrics.weightKg == Decimal(string: "82.46"))
+    }
 }

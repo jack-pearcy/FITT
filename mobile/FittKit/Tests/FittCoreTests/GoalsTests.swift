@@ -126,4 +126,13 @@ struct GoalsTests {
 
         #expect(try GoalsDraft(goals: saved, units: units).goals(units: units) == saved)
     }
+
+    @Test("a target weight in kilograms is rounded to the two places the server accepts")
+    func metricTargetRounding() throws {
+        var draft = GoalsDraft()
+        draft.direction = .cut
+        draft.targetWeight = "79.996"
+
+        #expect(try draft.goals(units: .metric).targetWeightKg == 80)
+    }
 }

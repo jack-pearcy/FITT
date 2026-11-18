@@ -79,7 +79,8 @@ public struct GoalsDraft: Equatable, Sendable {
         var targetWeightKg: Decimal?
         if !targetWeight.trimmingCharacters(in: .whitespaces).isEmpty {
             let typed = DecimalInput.parse(targetWeight)
-            targetWeightKg = units == .metric ? typed : typed.map(UnitConversion.kilograms(pounds:))
+            // Two places either way, the scale the server stores and the most it accepts.
+            targetWeightKg = units == .metric ? typed?.rounded(scale: 2) : typed.map(UnitConversion.kilograms(pounds:))
             if targetWeightKg == nil || !BodyLimits.weightKg.contains(targetWeightKg!) {
                 problems["targetWeightKg"] = units == .metric
                     ? "Enter a weight between 20 and 700 kg"

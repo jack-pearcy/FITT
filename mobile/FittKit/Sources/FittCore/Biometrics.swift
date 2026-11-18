@@ -118,7 +118,8 @@ public struct BiometricsDraft: Equatable, Sendable {
     private var heightInCentimeters: Decimal? {
         switch units {
         case .metric:
-            return DecimalInput.parse(height)
+            // Two places, the scale the server stores and the most it accepts.
+            return DecimalInput.parse(height)?.rounded(scale: 2)
         case .imperial:
             // Inches may be left empty ("6 ft"), but must stay below a foot.
             guard let feet = Int(feet.trimmingCharacters(in: .whitespaces)), feet >= 0 else { return nil }
@@ -130,6 +131,6 @@ public struct BiometricsDraft: Equatable, Sendable {
 
     private var weightInKilograms: Decimal? {
         guard let value = DecimalInput.parse(weight) else { return nil }
-        return units == .metric ? value : UnitConversion.kilograms(pounds: value)
+        return units == .metric ? value.rounded(scale: 2) : UnitConversion.kilograms(pounds: value)
     }
 }
