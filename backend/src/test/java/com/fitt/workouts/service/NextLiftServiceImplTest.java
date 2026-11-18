@@ -4,6 +4,7 @@ import com.fitt.workouts.domain.SplitType;
 import com.fitt.workouts.dto.NextLiftResponse;
 import com.fitt.workouts.dto.WorkoutPlanDayResponse;
 import com.fitt.workouts.dto.WorkoutPlanResponse;
+import com.fitt.workouts.persistence.entity.WorkoutSessionEntity;
 import com.fitt.workouts.repository.WorkoutSessionRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -141,6 +142,45 @@ class NextLiftServiceImplTest {
         assertThat(response.hasActivePlan()).isTrue();
         assertThat(response.day()).isNull();
         assertThat(response.daysInRotation()).isEqualTo(0);
+    }
+
+    @Test
+    void getNextLift_lastSessionRecordedItsDay_returnsTheDayAfterIt() {
+        stubPlanAndTrainedToday(threeDayPlan(), false);
+        stubLastFinishedDay(0);
+        // Four sessions were finished and one was deleted, so three remain. The
+        // count alone would point at day 1 again; the recorded day points at day 2.
+        when(sessionRepository.countByOwnerUserIdAndPlanIdAndFinishedAtIsNotNull(USER_ID, PLAN_ID))
+                .thenReturn(3L);
+
+        NextLiftResponse response = service.getNextLift(USER_ID);
+
+        assertThat(response.dayNumber()).isEqualTo(2);
+        assertThat(response.day().dayLabel()).isEqualTo("Pull");
+    }
+
+    @Test
+    void getNextLift_lastSessionWasTheLastDay_wrapsToTheFirstDay() {
+        stubPlanAndTrainedToday(threeDayPlan(), false);
+        stubLastFinishedDay(2);
+
+        assertThat(service.getNextLift(USER_ID).day().dayLabel()).isEqualTo("Push");
+    }
+
+    @Test
+    void getNextLift_planLostDaysSinceTheLastSession_staysInsideThePlan() {
+        stubPlanAndTrainedToday(threeDayPlan(), false);
+        // The plan had six days when this session was saved, and has three now.
+        stubLastFinishedDay(5);
+
+        assertThat(service.getNextLift(USER_ID).day().dayLabel()).isEqualTo("Push");
+    }
+
+    private void stubLastFinishedDay(int dayIndex) {
+        WorkoutSessionEntity last = new WorkoutSessionEntity(USER_ID, Instant.parse("2026-05-25T18:00:00Z"));
+        last.setPlanDayIndex(dayIndex);
+        when(sessionRepository.findFirstByOwnerUserIdAndPlanIdAndFinishedAtIsNotNullOrderByFinishedAtDesc(
+                USER_ID, PLAN_ID)).thenReturn(Optional.of(last));
     }
 
     private void stubPlanAndTrainedToday(WorkoutPlanResponse plan, boolean trainedToday) {

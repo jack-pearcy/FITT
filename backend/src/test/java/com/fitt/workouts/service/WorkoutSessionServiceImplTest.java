@@ -8,6 +8,8 @@ import com.fitt.workouts.dto.WorkoutSessionResponse;
 import com.fitt.workouts.persistence.entity.ExerciseEntity;
 import com.fitt.workouts.persistence.entity.ExerciseEntryEntity;
 import com.fitt.workouts.persistence.entity.SetEntryEntity;
+import com.fitt.workouts.persistence.entity.WorkoutPlanDayEntity;
+import com.fitt.workouts.persistence.entity.WorkoutPlanEntity;
 import com.fitt.workouts.persistence.entity.WorkoutSessionEntity;
 import com.fitt.workouts.repository.ExerciseRepository;
 import com.fitt.workouts.repository.WorkoutPlanRepository;
@@ -76,7 +78,7 @@ class WorkoutSessionServiceImplTest {
         // correctly. ownerUserId and startedAt come from constructor args,
         // planId and notes are setter calls that the service makes after.
         ArgumentCaptor<WorkoutSessionEntity> captor = ArgumentCaptor.forClass(WorkoutSessionEntity.class);
-        when(planRepository.existsByIdAndOwnerUserId(PLAN_ID, OWNER_USER_ID)).thenReturn(true);
+        when(planRepository.findByIdAndOwnerUserId(PLAN_ID, OWNER_USER_ID)).thenReturn(Optional.of(threeDayPlan()));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -88,6 +90,8 @@ class WorkoutSessionServiceImplTest {
         assertThat(saved.getStartedAt()).isEqualTo(startedAt);
         assertThat(saved.getPlanId()).isEqualTo(PLAN_ID);
         assertThat(saved.getNotes()).isEqualTo("leg day");
+        // Nothing finished yet, so the session trains the first day of the plan.
+        assertThat(saved.getPlanDayIndex()).isEqualTo(0);
         // New session has no entries yet. toResponse maps an empty list.
         assertThat(response.exerciseEntries()).isEmpty();
     }
@@ -295,7 +299,7 @@ class WorkoutSessionServiceImplTest {
     void createSession_planNotOwnedByCaller_throwsPlanNotFoundAndSavesNothing() {
         CreateWorkoutSessionRequest request =
                 new CreateWorkoutSessionRequest(Instant.parse("2026-05-26T18:00:00Z"), PLAN_ID, null);
-        when(planRepository.existsByIdAndOwnerUserId(PLAN_ID, OWNER_USER_ID)).thenReturn(false);
+        when(planRepository.findByIdAndOwnerUserId(PLAN_ID, OWNER_USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.createSession(OWNER_USER_ID, request))
                 .isInstanceOf(WorkoutPlanNotFoundException.class);
@@ -311,7 +315,48 @@ class WorkoutSessionServiceImplTest {
 
         service.createSession(OWNER_USER_ID, request);
 
-        verify(planRepository, never()).existsByIdAndOwnerUserId(any(), any());
+        verify(planRepository, never()).findByIdAndOwnerUserId(any(), any());
+    }
+
+    @Test
+    void createSession_recordsTheDayAfterTheLastOneFinished() {
+        WorkoutSessionEntity last = new WorkoutSessionEntity(OWNER_USER_ID, Instant.parse("2026-05-25T18:00:00Z"));
+        last.setPlanDayIndex(1);
+        when(planRepository.findByIdAndOwnerUserId(PLAN_ID, OWNER_USER_ID)).thenReturn(Optional.of(threeDayPlan()));
+        when(sessionRepository.findFirstByOwnerUserIdAndPlanIdAndFinishedAtIsNotNullOrderByFinishedAtDesc(
+                OWNER_USER_ID, PLAN_ID)).thenReturn(Optional.of(last));
+        ArgumentCaptor<WorkoutSessionEntity> captor = ArgumentCaptor.forClass(WorkoutSessionEntity.class);
+        when(sessionRepository.save(any(WorkoutSessionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.createSession(OWNER_USER_ID,
+                new CreateWorkoutSessionRequest(Instant.parse("2026-05-26T18:00:00Z"), PLAN_ID, null));
+
+        verify(sessionRepository).save(captor.capture());
+        assertThat(captor.getValue().getPlanDayIndex()).isEqualTo(2);
+    }
+
+    @Test
+    void createSession_planWithNoDays_recordsNoDay() {
+        WorkoutPlanEntity empty = new WorkoutPlanEntity(OWNER_USER_ID, "Empty", 3, "CUSTOM");
+        when(planRepository.findByIdAndOwnerUserId(PLAN_ID, OWNER_USER_ID)).thenReturn(Optional.of(empty));
+        ArgumentCaptor<WorkoutSessionEntity> captor = ArgumentCaptor.forClass(WorkoutSessionEntity.class);
+        when(sessionRepository.save(any(WorkoutSessionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.createSession(OWNER_USER_ID,
+                new CreateWorkoutSessionRequest(Instant.parse("2026-05-26T18:00:00Z"), PLAN_ID, null));
+
+        verify(sessionRepository).save(captor.capture());
+        assertThat(captor.getValue().getPlanDayIndex()).isNull();
+    }
+
+    private static WorkoutPlanEntity threeDayPlan() {
+        WorkoutPlanEntity plan = new WorkoutPlanEntity(OWNER_USER_ID, "PPL", 3, "PPL");
+        plan.addDay(new WorkoutPlanDayEntity("Push", 0));
+        plan.addDay(new WorkoutPlanDayEntity("Pull", 1));
+        plan.addDay(new WorkoutPlanDayEntity("Legs", 2));
+        return plan;
     }
 
     @Test
