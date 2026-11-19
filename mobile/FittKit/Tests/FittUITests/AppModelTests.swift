@@ -458,6 +458,153 @@ struct AppModelTests {
         #expect(store.read() == nil)
     }
 
+    // MARK: Delete account
+
+    /// A signed-in model for user 10 whose onboarding has loaded.
+    private func signedIn(_ server: StubServer, store: InMemoryTokenStore) async -> AppModel {
+        let model = model(server, store: store)
+        await model.start()
+        return model
+    }
+
+    private func liveStore() -> InMemoryTokenStore {
+        InMemoryTokenStore(token: makeToken(userId: 10, expiresAt: now.addingTimeInterval(3600)), refreshToken: "refresh-1")
+    }
+
+    @Test("deleting the account sends the password, then forgets the session and says so")
+    func deleteAccountSucceeds() async throws {
+        let server = StubServer()
+        let onboardingDone = onboardingDone
+        server.respond { request in
+            request.path.hasSuffix("/account/delete") ? StubResponse(status: 204) : .json(200, onboardingDone)
+        }
+        let store = liveStore()
+        let model = await signedIn(server, store: store)
+
+        let deleted = await model.deleteAccount(password: "a-long-test-password")
+
+        #expect(deleted)
+        #expect(model.phase == .signedOut)
+        #expect(model.notice == "Your account was deleted.")
+        #expect(model.errorMessage == nil)
+        #expect(model.onboarding == nil)
+        #expect(store.read() == nil)
+        #expect(!model.isWorking)
+        let request = try #require(server.requests.last)
+        #expect(request.method == "POST")
+        #expect(request.path == "/api/users/10/identity/account/delete")
+        #expect(try JSONSerialization.jsonObject(with: request.body) as? [String: String] == ["password": "a-long-test-password"])
+        // The server has already ended every login of the account, so no logout call follows.
+        #expect(!server.requests.contains { $0.path.hasSuffix("/logout") })
+    }
+
+    @Test("a wrong password is shown under the field and the user stays signed in")
+    func deleteAccountWrongPassword() async {
+        let server = StubServer()
+        let onboardingDone = onboardingDone
+        server.respond { request in
+            request.path.hasSuffix("/account/delete")
+                ? .json(400, #"{"status":400,"detail":"Validation failed","properties":{"errors":{"password":"Password is incorrect"}}}"#)
+                : .json(200, onboardingDone)
+        }
+        let store = liveStore()
+        let model = await signedIn(server, store: store)
+
+        let deleted = await model.deleteAccount(password: "not-the-password")
+
+        #expect(!deleted)
+        #expect(model.phase == .signedIn(userId: 10))
+        #expect(model.fieldErrors == ["password": "Password is incorrect"])
+        #expect(model.errorMessage == nil)
+        #expect(model.notice == nil)
+        #expect(store.read() != nil)
+        #expect(!model.isWorking)
+    }
+
+    @Test("an empty password is caught on the device and nothing is sent")
+    func deleteAccountEmptyPassword() async {
+        let server = StubServer()
+        let onboardingDone = onboardingDone
+        server.respond { _ in .json(200, onboardingDone) }
+        let model = await signedIn(server, store: liveStore())
+        let before = server.requests.count
+
+        let deleted = await model.deleteAccount(password: "")
+
+        #expect(!deleted)
+        #expect(model.fieldErrors == ["password": "Enter your password"])
+        #expect(server.requests.count == before)
+    }
+
+    @Test("when the server cannot be reached the account and the session are kept")
+    func deleteAccountOffline() async {
+        let server = StubServer()
+        let onboardingDone = onboardingDone
+        server.respond { _ in .json(200, onboardingDone) }
+        let store = liveStore()
+        let model = await signedIn(server, store: store)
+        server.respond(nil)
+
+        let deleted = await model.deleteAccount(password: "a-long-test-password")
+
+        #expect(!deleted)
+        #expect(model.phase == .signedIn(userId: 10))
+        #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+        #expect(store.read() != nil)
+    }
+
+    @Test("too many attempts shows the wait and keeps the session")
+    func deleteAccountRateLimited() async {
+        let server = StubServer()
+        let onboardingDone = onboardingDone
+        server.respond { request in
+            request.path.hasSuffix("/account/delete")
+                ? StubResponse(status: 429, headers: ["Retry-After": "30"])
+                : .json(200, onboardingDone)
+        }
+        let model = await signedIn(server, store: liveStore())
+
+        let deleted = await model.deleteAccount(password: "not-the-password")
+
+        #expect(!deleted)
+        #expect(model.phase == .signedIn(userId: 10))
+        #expect(model.errorMessage == "Too many attempts. Try again in 30 seconds.")
+    }
+
+    @Test("clearing errors leaves the deletion notice, since screens clear errors all the time")
+    func deleteAccountNoticeSurvivesClearErrors() async {
+        let server = StubServer()
+        let onboardingDone = onboardingDone
+        server.respond { request in
+            request.path.hasSuffix("/account/delete") ? StubResponse(status: 204) : .json(200, onboardingDone)
+        }
+        let model = await signedIn(server, store: liveStore())
+        _ = await model.deleteAccount(password: "a-long-test-password")
+
+        model.clearErrors()
+
+        #expect(model.notice == "Your account was deleted.")
+    }
+
+    @Test("the deletion notice is gone once the next sign in starts")
+    func deleteAccountNoticeClears() async {
+        let server = StubServer()
+        let onboardingDone = onboardingDone
+        server.respond { request in
+            if request.path.hasSuffix("/account/delete") { return StubResponse(status: 204) }
+            if request.path.hasSuffix("/login") { return .json(401, #"{"status":401}"#) }
+            return .json(200, onboardingDone)
+        }
+        let model = await signedIn(server, store: liveStore())
+        _ = await model.deleteAccount(password: "a-long-test-password")
+        #expect(model.notice != nil)
+
+        await model.signIn(email: "lifter@example.com", password: "a-long-test-password")
+
+        #expect(model.notice == nil)
+        #expect(model.errorMessage == "Email or password is incorrect.")
+    }
+
     @Test("sign out with no refresh token makes no request")
     func signOutWithoutRefreshToken() async {
         let server = StubServer()

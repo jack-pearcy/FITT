@@ -372,6 +372,37 @@ struct BackendTests {
         #expect(try JSONSerialization.jsonObject(with: request.body) as? [String: String] == ["refreshToken": "refresh-1"])
     }
 
+    @Test("delete account posts the password with the access token")
+    func deleteAccountPostsPassword() async throws {
+        let server = StubServer()
+        server.respond { _ in StubResponse(status: 204) }
+
+        try await server.backend(tokenStore: InMemoryTokenStore(token: "access-1"))
+            .deleteAccount(AccountDeletion(password: "a-long-test-password"), userId: 10)
+
+        let request = try #require(server.requests.first)
+        #expect(request.method == "POST")
+        #expect(request.path == "/api/users/10/identity/account/delete")
+        #expect(request.headers["Authorization"] == "Bearer access-1")
+        #expect(try JSONSerialization.jsonObject(with: request.body) as? [String: String] == ["password": "a-long-test-password"])
+    }
+
+    @Test("a wrong password on delete account is a problem with a field error, not a 401")
+    func deleteAccountWrongPasswordIsAProblem() async {
+        let server = StubServer()
+        server.respond { _ in
+            .json(400, #"{"status":400,"properties":{"errors":{"password":"Password is incorrect"}}}"#)
+        }
+
+        await #expect {
+            try await server.backend(tokenStore: InMemoryTokenStore(token: "access-1"))
+                .deleteAccount(AccountDeletion(password: "wrong"), userId: 10)
+        } throws: { error in
+            guard case .problem(400, let problem) = error as? BackendError else { return false }
+            return problem.fieldErrors == ["password": "Password is incorrect"]
+        }
+    }
+
     // MARK: Workouts
 
     private let planBody = #"{"id":3,"ownerUserId":10,"name":"Full Body","daysPerWeek":3,"splitType":"FULL_BODY","active":true,"days":[]}"#
