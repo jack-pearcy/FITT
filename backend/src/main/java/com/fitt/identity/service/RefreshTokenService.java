@@ -97,6 +97,12 @@ public class RefreshTokenService {
                 .ifPresent(token -> repository.revokeFamily(token.getFamilyId(), clock.instant()));
     }
 
+    // Ends every login of the user, on every device. For a password change.
+    @Transactional
+    public void endAllLogins(Long userId) {
+        repository.deleteAllForUser(userId);
+    }
+
     private String store(Long userId, String familyId, Instant now) {
         byte[] bytes = new byte[TOKEN_BYTES];
         random.nextBytes(bytes);

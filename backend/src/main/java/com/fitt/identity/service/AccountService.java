@@ -57,7 +57,7 @@ public class AccountService {
 
         UserEntity user = found.get();
         if (!passwordEncoder.matches(password, user.getPassword())) {
-            throw new IncorrectPasswordException();
+            throw new IncorrectPasswordException("password");
         }
 
         // The other contexts first, then identity's own rows, then the user row last

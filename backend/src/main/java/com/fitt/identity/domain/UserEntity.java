@@ -28,6 +28,11 @@ public class UserEntity implements UserDetails {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
+    // Carried by every access token as the "ver" claim. A token is refused when
+    // its version is not this one, so adding one ends every session at once.
+    @Column(name = "token_version", nullable = false)
+    private int tokenVersion;
+
     // JPA needs this to rebuild objects from query results.
     // Protected so nothing in application code calls it directly.
     protected UserEntity() {}
@@ -39,6 +44,17 @@ public class UserEntity implements UserDetails {
 
     public Long getId() {
         return id;
+    }
+
+    public int getTokenVersion() {
+        return tokenVersion;
+    }
+
+    // The new hash and the new token version go together: a changed password
+    // that left the old sessions alive would not lock anyone out.
+    public void changePassword(String newPasswordHash) {
+        this.passwordHash = newPasswordHash;
+        this.tokenVersion++;
     }
 
     // Email is the login identifier for FITT so this returns email.
