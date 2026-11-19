@@ -626,6 +626,21 @@ Completed this phase (as of 2026-11-16):
   from the count. A decimal with more places than its column keeps was rounded on save while the
   response showed what was sent; the server now refuses it with a 400, and the app rounds metric
   height, weight and target weight to two places before sending.
+- Delete account and change password shipped, server and app (PR #108, PR #109, PR #110, PR #111). Both
+  are on the Account tab and both ask for the current password again.
+  - Deleting removes the user and every row stored for them in one transaction. No table has a foreign
+    key to users, so each context that stores user data has an eraser behind one shared interface, and
+    a test reads the owned tables from the schema so a table added later fails until it is erased too.
+  - Changing the password ends every earlier session. Flyway V9 adds a token version to the user, every
+    access token carries it, and a token whose version is not the account's is refused. The device
+    that made the change gets a new token pair back and stays signed in.
+  - The token check now reads the user on every signed in request, one primary key lookup. That is
+    what makes a deleted account's token and a superseded token stop working at once.
+  - Both routes are behind the same rate limit as login.
+  - Not built: a reset for a forgotten password. It needs email, which the project does not send yet.
+  - Three more defects were found on the simulator while building the delete screen: a confirmation
+    that covered the title, a button pushed under the keyboard, and a success message that a screen
+    cleared before it was shown.
 
 The loop a lifter needs now works end to end on the phone: account, onboarding, plan, workout, next day.
 Each piece was run on the simulator against a local backend before it merged, and three defects were found
@@ -636,14 +651,14 @@ changes during a workout.
 
 Not yet deployed: production still runs the build from before PR #69. Until it is deployed the live API
 has no refresh tokens and the app falls back to a one hour session, and it does not return the units
-preference, so the app shows kilograms to every user. Four migrations (V5 to V8) will run on the next
-deploy.
+preference, so the app shows kilograms to every user. It also has no delete account or change password
+route, so those two screens fail against it. Five migrations (V5 to V9) will run on the next deploy.
 
 Remaining in this phase:
-- Settings: change the units preference after onboarding, delete account. Delete account needs API
-  work first (see the gaps below).
+- Settings: change the units preference after onboarding. It needs a route to read biometrics back
+  first (see the gaps below).
 - Make the mobile-test job a required check in the branch ruleset (a repository setting), and add a CI
-  build of the app target. The job runs the package tests only (295 at PR #106).
+  build of the app target. The job runs the package tests only (311 at PR #111).
 - Exercise how-to videos: a how-to icon beside an exercise that plays a short generated 3D clip of the
   movement, with the clips served from the existing Hetzner server. Noted 2026-11-15; not started.
 
@@ -654,7 +669,7 @@ API gaps found while building the client:
   show it to a user working in pounds.
 - No route for the unfinished workout session, and no paging on the session list. The client reads the
   whole list to resume and to show history, which will slow down as history grows.
-- No update route for a custom exercise, no delete account, no streak, and no profile or notification
+- No update route for a custom exercise, no password reset, no streak, and no profile or notification
   endpoints. These were known before the phase began and are still open.
 
 Outcome: a native mobile client that demonstrates full-stack and mobile engineering capability.
