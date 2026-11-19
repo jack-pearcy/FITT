@@ -44,6 +44,17 @@ public struct AccountDeletion: Encodable, Equatable, Sendable {
     }
 }
 
+/// The body of `POST /api/users/{id}/identity/account/password`.
+public struct PasswordChange: Encodable, Equatable, Sendable {
+    public let currentPassword: String
+    public let newPassword: String
+
+    public init(currentPassword: String, newPassword: String) {
+        self.currentPassword = currentPassword
+        self.newPassword = newPassword
+    }
+}
+
 /// What the app keeps for a signed-in user: the access token sent with every
 /// request, and the refresh token that buys the next pair when it expires.
 public struct SessionTokens: Codable, Equatable, Sendable {
