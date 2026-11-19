@@ -54,6 +54,13 @@ public struct Backend: Sendable {
         _ = try await perform("POST", "/api/identity/auth/logout", body: RefreshRequest(refreshToken: refreshToken), authenticated: false)
     }
 
+    /// Deletes the account and everything stored for it. The server answers 400
+    /// with a message for `password` when the password is wrong. After a 204 every
+    /// token of the account is dead, so the caller must forget the session.
+    public func deleteAccount(_ deletion: AccountDeletion, userId: Int64) async throws {
+        try await post("/api/users/\(userId)/identity/account/delete", body: deletion)
+    }
+
     // MARK: Onboarding
 
     public func onboardingStatus(userId: Int64) async throws -> OnboardingStatus {

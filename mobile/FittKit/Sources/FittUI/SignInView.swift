@@ -83,6 +83,13 @@ struct SignInView: View {
                     }
                 }
 
+                if let notice = model.notice {
+                    Section {
+                        Text(notice)
+                            .accessibilityIdentifier("notice")
+                    }
+                }
+
                 Section {
                     Button(action: submit) {
                         HStack {
