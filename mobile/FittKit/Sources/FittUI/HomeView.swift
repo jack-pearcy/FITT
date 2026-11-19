@@ -386,6 +386,10 @@ private struct AccountView: View {
                 }
 
                 Section {
+                    NavigationLink("Change Password") {
+                        ChangePasswordView()
+                    }
+                    .accessibilityIdentifier("changePassword")
                     Button("Sign Out", role: .destructive) {
                         Task { await model.signOut() }
                     }
@@ -418,6 +422,107 @@ private struct AccountView: View {
         switch model.units {
         case .metric: "\(kilograms.formatted()) kg"
         case .imperial: "\(UnitConversion.pounds(kilograms: kilograms).formatted()) lb"
+        }
+    }
+}
+
+/// Changing the password. The current one is asked for again, and the new one is
+/// typed twice, since nothing on screen shows what was typed.
+private struct ChangePasswordView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+
+    private enum Field { case current, new, confirmation }
+
+    @State private var current = ""
+    @State private var new = ""
+    @State private var confirmation = ""
+    @State private var isDone = false
+    @FocusState private var focus: Field?
+
+    private var passwordsMatch: Bool { new == confirmation }
+
+    private var canSubmit: Bool {
+        !current.isEmpty && !new.isEmpty && passwordsMatch && !model.isWorking
+    }
+
+    var body: some View {
+        ThemedForm {
+            Section {
+                SecureField("Current password", text: $current)
+                    .textContentType(.password)
+                    .focused($focus, equals: .current)
+                    .submitLabel(.next)
+                    .onSubmit { focus = .new }
+                    .accessibilityIdentifier("currentPassword")
+                FieldError(field: "currentPassword")
+            }
+
+            Section {
+                SecureField("New password", text: $new)
+                    .textContentType(.newPassword)
+                    .focused($focus, equals: .new)
+                    .submitLabel(.next)
+                    .onSubmit { focus = .confirmation }
+                    .accessibilityIdentifier("newPassword")
+                FieldError(field: "newPassword")
+
+                SecureField("Confirm new password", text: $confirmation)
+                    .textContentType(.newPassword)
+                    .focused($focus, equals: .confirmation)
+                    .submitLabel(.go)
+                    .onSubmit(submit)
+                    .accessibilityIdentifier("confirmation")
+                if !confirmation.isEmpty && !passwordsMatch {
+                    Text("Passwords do not match")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.negative)
+                }
+            } footer: {
+                Text("At least 12 characters. Your other devices will be signed out.")
+            }
+
+            ErrorSection()
+
+            Section {
+                Button(action: submit) {
+                    HStack {
+                        Text("Change Password")
+                        if model.isWorking {
+                            Spacer()
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(!canSubmit)
+                .accessibilityIdentifier("submit")
+            }
+        }
+        .canvas()
+        .navigationTitle("Change Password")
+        .alert("Password changed", isPresented: $isDone) {
+            Button("OK") { dismiss() }
+        } message: {
+            Text("Your other devices have been signed out.")
+        }
+        .onAppear { model.clearErrors() }
+        // Only while signed in. When the session has ended this view disappears
+        // too, and the message for the sign-in screen has to survive that.
+        .onDisappear {
+            if case .signedIn = model.phase { model.clearErrors() }
+        }
+        .onChange(of: current) { model.clearErrors() }
+        .onChange(of: new) { model.clearErrors() }
+    }
+
+    private func submit() {
+        guard canSubmit else { return }
+        // The keyboard goes away first, so the answer is not hidden behind it.
+        focus = nil
+        Task {
+            if await model.changePassword(current: current, new: new) {
+                isDone = true
+            }
         }
     }
 }

@@ -131,6 +131,45 @@ public final class AppModel {
         return true
     }
 
+    /// Changes the password and keeps this device signed in with the pair the
+    /// server hands back. Every other device is signed out by the server.
+    /// Returns true when the password was changed and the new session is stored.
+    public func changePassword(current: String, new: String) async -> Bool {
+        guard case .signedIn = phase else { return false }
+        clearErrors()
+        var problems: [String: String] = [:]
+        if current.isEmpty {
+            problems["currentPassword"] = "Enter your current password"
+        }
+        if let problem = PasswordRule.problem(with: new) {
+            problems["newPassword"] = problem
+        } else if new == current {
+            problems["newPassword"] = "New password must be different from the current one"
+        }
+        guard problems.isEmpty else {
+            fieldErrors = problems
+            return false
+        }
+        isWorking = true
+        defer { isWorking = false }
+        var issued: SessionTokens?
+        await load { userId in
+            issued = try await self.backend.changePassword(
+                PasswordChange(currentPassword: current, newPassword: new), userId: userId)
+        }
+        guard let issued else { return false }
+        do {
+            try tokenStore.save(issued)
+        } catch {
+            // The password did change, and the tokens this device held died with
+            // the old one. Without the new pair there is no session to continue.
+            endSession()
+            errorMessage = "Password changed, but this device could not save the session. Sign in again."
+            return false
+        }
+        return true
+    }
+
     /// Forgets the session on this device and shows the sign-in screen.
     private func endSession() {
         try? tokenStore.clear()

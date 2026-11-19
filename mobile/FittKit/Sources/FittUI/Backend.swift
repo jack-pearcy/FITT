@@ -61,6 +61,14 @@ public struct Backend: Sendable {
         try await post("/api/users/\(userId)/identity/account/delete", body: deletion)
     }
 
+    /// Changes the password. The server ends every session of the account,
+    /// this one included, and answers with a new pair: the caller must store it,
+    /// because the tokens it holds stop working the moment this returns.
+    public func changePassword(_ change: PasswordChange, userId: Int64) async throws -> SessionTokens {
+        let response: TokenResponse = try await send("POST", "/api/users/\(userId)/identity/account/password", body: change, authenticated: true)
+        return SessionTokens(response)
+    }
+
     // MARK: Onboarding
 
     public func onboardingStatus(userId: Int64) async throws -> OnboardingStatus {
