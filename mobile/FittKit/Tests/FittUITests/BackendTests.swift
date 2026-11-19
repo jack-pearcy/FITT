@@ -403,6 +403,23 @@ struct BackendTests {
         }
     }
 
+    @Test("change password posts both passwords and returns the new pair")
+    func changePasswordReturnsNewPair() async throws {
+        let server = StubServer()
+        server.respond { _ in .json(200, #"{"token":"access-2","refreshToken":"refresh-2"}"#) }
+
+        let tokens = try await server.backend(tokenStore: InMemoryTokenStore(token: "access-1"))
+            .changePassword(PasswordChange(currentPassword: "old-one", newPassword: "new-one"), userId: 10)
+
+        #expect(tokens == SessionTokens(accessToken: "access-2", refreshToken: "refresh-2"))
+        let request = try #require(server.requests.first)
+        #expect(request.method == "POST")
+        #expect(request.path == "/api/users/10/identity/account/password")
+        #expect(request.headers["Authorization"] == "Bearer access-1")
+        #expect(try JSONSerialization.jsonObject(with: request.body) as? [String: String]
+            == ["currentPassword": "old-one", "newPassword": "new-one"])
+    }
+
     // MARK: Workouts
 
     private let planBody = #"{"id":3,"ownerUserId":10,"name":"Full Body","daysPerWeek":3,"splitType":"FULL_BODY","active":true,"days":[]}"#

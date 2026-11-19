@@ -605,6 +605,141 @@ struct AppModelTests {
         #expect(model.errorMessage == "Email or password is incorrect.")
     }
 
+    // MARK: Change password
+
+    @Test("changing the password sends both passwords and stores the new session")
+    func changePasswordSucceeds() async throws {
+        let server = StubServer()
+        let onboardingDone = onboardingDone
+        let newToken = makeToken(userId: 10, expiresAt: now.addingTimeInterval(7200))
+        server.respond { request in
+            request.path.hasSuffix("/account/password")
+                ? .json(200, #"{"token":"\#(newToken)","refreshToken":"refresh-2"}"#)
+                : .json(200, onboardingDone)
+        }
+        let store = liveStore()
+        let model = await signedIn(server, store: store)
+
+        let changed = await model.changePassword(current: "the-old-test-password", new: "the-new-test-password")
+
+        #expect(changed)
+        #expect(model.phase == .signedIn(userId: 10))
+        #expect(model.errorMessage == nil)
+        #expect(model.fieldErrors.isEmpty)
+        #expect(!model.isWorking)
+        // The pair the device held is dead on the server now; only the new one is any use.
+        #expect(store.read() == SessionTokens(accessToken: newToken, refreshToken: "refresh-2"))
+        let request = try #require(server.requests.last)
+        #expect(request.method == "POST")
+        #expect(request.path == "/api/users/10/identity/account/password")
+        #expect(try JSONSerialization.jsonObject(with: request.body) as? [String: String]
+            == ["currentPassword": "the-old-test-password", "newPassword": "the-new-test-password"])
+    }
+
+    @Test("a wrong current password is shown under that field and the old session is kept")
+    func changePasswordWrongCurrent() async {
+        let server = StubServer()
+        let onboardingDone = onboardingDone
+        server.respond { request in
+            request.path.hasSuffix("/account/password")
+                ? .json(400, #"{"status":400,"detail":"Validation failed","properties":{"errors":{"currentPassword":"Password is incorrect"}}}"#)
+                : .json(200, onboardingDone)
+        }
+        let store = liveStore()
+        let before = store.read()
+        let model = await signedIn(server, store: store)
+
+        let changed = await model.changePassword(current: "not-the-old-password", new: "the-new-test-password")
+
+        #expect(!changed)
+        #expect(model.phase == .signedIn(userId: 10))
+        #expect(model.fieldErrors == ["currentPassword": "Password is incorrect"])
+        #expect(store.read() == before)
+    }
+
+    @Test("a new password that breaks the rule is caught on the device and nothing is sent")
+    func changePasswordWeakNew() async {
+        let server = StubServer()
+        let onboardingDone = onboardingDone
+        server.respond { _ in .json(200, onboardingDone) }
+        let model = await signedIn(server, store: liveStore())
+        let before = server.requests.count
+
+        let changed = await model.changePassword(current: "the-old-test-password", new: "short")
+
+        #expect(!changed)
+        #expect(model.fieldErrors["newPassword"] == PasswordRule.problem(with: "short"))
+        #expect(model.fieldErrors["currentPassword"] == nil)
+        #expect(server.requests.count == before)
+    }
+
+    @Test("an empty current password and a new one equal to it are both caught on the device")
+    func changePasswordLocalChecks() async {
+        let server = StubServer()
+        let onboardingDone = onboardingDone
+        server.respond { _ in .json(200, onboardingDone) }
+        let model = await signedIn(server, store: liveStore())
+        let before = server.requests.count
+
+        let empty = await model.changePassword(current: "", new: "the-new-test-password")
+        #expect(!empty)
+        #expect(model.fieldErrors == ["currentPassword": "Enter your current password"])
+
+        let same = await model.changePassword(current: "the-old-test-password", new: "the-old-test-password")
+        #expect(!same)
+        #expect(model.fieldErrors == ["newPassword": "New password must be different from the current one"])
+        #expect(server.requests.count == before)
+    }
+
+    @Test("when the new session cannot be stored the user is signed out and told the password did change")
+    func changePasswordCannotStoreSession() async {
+        // Reads fine, so the model starts signed in, then refuses the write.
+        final class ReadOnlyStore: TokenStore, @unchecked Sendable {
+            let tokens: SessionTokens
+            init(tokens: SessionTokens) { self.tokens = tokens }
+            func read() throws -> SessionTokens? { tokens }
+            func save(_ tokens: SessionTokens) throws { throw KeychainError(status: -34018) }
+            func clear() throws {}
+        }
+        let server = StubServer()
+        let onboardingDone = onboardingDone
+        let newToken = makeToken(userId: 10, expiresAt: now.addingTimeInterval(7200))
+        server.respond { request in
+            request.path.hasSuffix("/account/password")
+                ? .json(200, #"{"token":"\#(newToken)","refreshToken":"refresh-2"}"#)
+                : .json(200, onboardingDone)
+        }
+        let store = ReadOnlyStore(tokens: SessionTokens(
+            accessToken: makeToken(userId: 10, expiresAt: now.addingTimeInterval(3600)), refreshToken: "refresh-1"))
+        let now = now
+        let model = AppModel(backend: server.backend(tokenStore: store), tokenStore: store, now: { now })
+        await model.start()
+
+        let changed = await model.changePassword(current: "the-old-test-password", new: "the-new-test-password")
+
+        #expect(!changed)
+        #expect(model.phase == .signedOut)
+        #expect(model.errorMessage == "Password changed, but this device could not save the session. Sign in again.")
+    }
+
+    @Test("when the server cannot be reached the password and the session are kept")
+    func changePasswordOffline() async {
+        let server = StubServer()
+        let onboardingDone = onboardingDone
+        server.respond { _ in .json(200, onboardingDone) }
+        let store = liveStore()
+        let before = store.read()
+        let model = await signedIn(server, store: store)
+        server.respond(nil)
+
+        let changed = await model.changePassword(current: "the-old-test-password", new: "the-new-test-password")
+
+        #expect(!changed)
+        #expect(model.phase == .signedIn(userId: 10))
+        #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+        #expect(store.read() == before)
+    }
+
     @Test("sign out with no refresh token makes no request")
     func signOutWithoutRefreshToken() async {
         let server = StubServer()
