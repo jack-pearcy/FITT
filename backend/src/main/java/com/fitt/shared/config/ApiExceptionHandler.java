@@ -25,6 +25,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import com.fitt.identity.service.exception.BiometricsNotFoundException;
 import com.fitt.identity.service.exception.GoalNotFoundException;
+import com.fitt.identity.service.exception.IncorrectPasswordException;
 import com.fitt.identity.service.exception.InvalidRefreshTokenException;
 import com.fitt.workouts.service.exception.ExerciseEntryNotFoundException;
 import com.fitt.workouts.service.exception.SetEntryNotFoundException;
@@ -172,6 +173,17 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
         problem.setTitle("Bad Credentials");
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problem);
+    }
+
+    // 400 with the message under the field, the same shape a validation failure has,
+    // so a client shows it beside the password box. Not 401: the caller is signed in,
+    // and a 401 would tell the client its session is over.
+    @ExceptionHandler(IncorrectPasswordException.class)
+    public ResponseEntity<ProblemDetail> handleIncorrectPassword(IncorrectPasswordException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation failed");
+        problem.setTitle("Bad Request");
+        problem.setProperty("errors", Map.of("password", ex.getMessage()));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
     }
 
     // 401 so the client knows the session is over and sends the user to sign in.

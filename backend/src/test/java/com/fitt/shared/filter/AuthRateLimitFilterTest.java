@@ -83,4 +83,19 @@ class AuthRateLimitFilterTest {
                     .isEqualTo(200);
         }
     }
+
+    @Test
+    void deleteAccount_isLimitedWhateverTheUserId_andOtherUserRoutesAreNot() throws Exception {
+        AuthRateLimitFilter filter = new AuthRateLimitFilter(1, 60, new MutableClock());
+
+        assertThat(call(filter, "POST", "/api/users/7/identity/account/delete", "1.1.1.1").getStatus())
+                .isEqualTo(200);
+        assertThat(call(filter, "POST", "/api/users/8/identity/account/delete", "1.1.1.1").getStatus())
+                .isEqualTo(429);
+
+        // A route that takes no password is left alone, however often it is called.
+        for (int i = 0; i < 3; i++) {
+            assertThat(call(filter, "POST", "/api/users/7/identity/goals", "2.2.2.2").getStatus()).isEqualTo(200);
+        }
+    }
 }

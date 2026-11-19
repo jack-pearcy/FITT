@@ -1,6 +1,8 @@
 package com.fitt.shared.config;
 
+import com.fitt.identity.repository.UserRepository;
 import com.fitt.shared.properties.JwtProperties;
+import com.fitt.shared.security.ExistingAccountValidator;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.OctetSequenceKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
@@ -46,13 +48,15 @@ public class JwtBeansConfig {
     // The decoder is used automatically by Spring Security's BearerTokenAuthenticationFilter.
     // On every protected request it checks the signature, verifies expiration, and now also
     // validates the issuer claim against the configured value, so a token signed by this key
-    // but minted for a different issuer is rejected.
+    // but minted for a different issuer is rejected. Last, it checks that the account the
+    // token names still exists, so a deleted account's token stops working at once.
     @Bean
-    public JwtDecoder jwtDecoder(SecretKey jwtSecretKey, JwtProperties props) {
+    public JwtDecoder jwtDecoder(SecretKey jwtSecretKey, JwtProperties props, UserRepository userRepository) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(jwtSecretKey).build();
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
                 JwtValidators.createDefault(),
-                new JwtIssuerValidator(props.getIssuer())));
+                new JwtIssuerValidator(props.getIssuer()),
+                new ExistingAccountValidator(userRepository)));
         return decoder;
     }
 
