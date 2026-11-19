@@ -5,7 +5,16 @@ package com.fitt.identity.service.exception;
 // login: it must not read as "your session is over".
 public class IncorrectPasswordException extends RuntimeException {
 
-    public IncorrectPasswordException() {
+    private final String field;
+
+    // The request field the password arrived in, so the client can show the
+    // message beside the right box.
+    public IncorrectPasswordException(String field) {
         super("Password is incorrect");
+        this.field = field;
+    }
+
+    public String getField() {
+        return field;
     }
 }

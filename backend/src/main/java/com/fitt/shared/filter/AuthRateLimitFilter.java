@@ -65,7 +65,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     // Signed in routes that take the password again. The user id is in the middle
     // of the path, so these are matched by their ending.
-    private static final Set<String> LIMITED_SUFFIXES = Set.of("/identity/account/delete");
+    private static final Set<String> LIMITED_SUFFIXES = Set.of("/identity/account/delete", "/identity/account/password");
 
     @Override
     protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {

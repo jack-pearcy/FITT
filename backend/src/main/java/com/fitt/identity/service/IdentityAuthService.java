@@ -3,8 +3,10 @@ package com.fitt.identity.service;
 import com.fitt.identity.domain.UserEntity;
 import com.fitt.identity.repository.UserRepository;
 import com.fitt.identity.service.exception.EmailAlreadyExistsException;
+import com.fitt.identity.service.exception.IncorrectPasswordException;
 import com.fitt.identity.service.exception.InvalidRefreshTokenException;
 import com.fitt.shared.properties.JwtProperties;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -55,11 +57,7 @@ public class IdentityAuthService {
     // One transaction, so a user row never exists without its first refresh token.
     @Transactional
     public AuthTokens register(String rawEmail, String password) {
-        // BCrypt only reads the first 72 bytes. The DTO limits characters, but a
-        // multibyte password can still exceed 72 bytes, so check bytes here.
-        if (password.getBytes(StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES) {
-            throw new IllegalArgumentException("Password must be 72 bytes or fewer");
-        }
+        requireWithinByteLimit(password);
 
         String email = normalizeEmail(rawEmail);
         if (userRepository.existsByEmail(email)) {
@@ -106,6 +104,40 @@ public class IdentityAuthService {
         refreshTokenService.revoke(refreshToken);
     }
 
+    // Replaces the password and ends every session of the account: the refresh
+    // tokens are removed, and the new token version makes every access token
+    // issued before this moment fail. The caller gets a fresh pair back, so the
+    // device that made the change stays signed in and every other one is out.
+    // One transaction, so the hash, the version and the tokens change together.
+    @Transactional
+    public AuthTokens changePassword(Long userId, String currentPassword, String newPassword) {
+        requireWithinByteLimit(newPassword);
+
+        // The token check has already seen this user, so a miss means the account
+        // was deleted between the two reads. The token is no longer good for anything.
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new AccessDeniedException("access denied"));
+
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new IncorrectPasswordException("currentPassword");
+        }
+        if (passwordEncoder.matches(newPassword, user.getPassword())) {
+            throw new IllegalArgumentException("New password must be different from the current one");
+        }
+
+        user.changePassword(passwordEncoder.encode(newPassword));
+        refreshTokenService.endAllLogins(userId);
+        return tokensFor(user);
+    }
+
+    // BCrypt only reads the first 72 bytes. The DTO limits characters, but a
+    // multibyte password can still exceed 72 bytes, so check bytes here.
+    private static void requireWithinByteLimit(String password) {
+        if (password.getBytes(StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES) {
+            throw new IllegalArgumentException("Password must be 72 bytes or fewer");
+        }
+    }
+
     private AuthTokens tokensFor(UserEntity user) {
         return new AuthTokens(buildToken(user), refreshTokenService.issue(user.getId()));
     }
@@ -126,6 +158,7 @@ public class IdentityAuthService {
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(jwtProperties.getTtlSeconds()))
                 .claim("uid", user.getId())
+                .claim("ver", user.getTokenVersion())
                 .build();
 
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();

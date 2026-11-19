@@ -182,7 +182,7 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     public ResponseEntity<ProblemDetail> handleIncorrectPassword(IncorrectPasswordException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation failed");
         problem.setTitle("Bad Request");
-        problem.setProperty("errors", Map.of("password", ex.getMessage()));
+        problem.setProperty("errors", Map.of(ex.getField(), ex.getMessage()));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
     }
 

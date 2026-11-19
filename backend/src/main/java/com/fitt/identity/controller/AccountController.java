@@ -1,7 +1,11 @@
 package com.fitt.identity.controller;
 
+import com.fitt.identity.dto.ChangePasswordRequest;
 import com.fitt.identity.dto.DeleteAccountRequest;
+import com.fitt.identity.dto.TokenResponse;
 import com.fitt.identity.service.AccountService;
+import com.fitt.identity.service.AuthTokens;
+import com.fitt.identity.service.IdentityAuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -20,9 +24,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AccountController {
 
     private final AccountService accountService;
+    private final IdentityAuthService identityAuthService;
 
-    public AccountController(AccountService accountService) {
+    public AccountController(AccountService accountService, IdentityAuthService identityAuthService) {
         this.accountService = accountService;
+        this.identityAuthService = identityAuthService;
     }
 
     // POST with a body, not DELETE: the password has to travel with the request,
@@ -38,5 +44,22 @@ public class AccountController {
         }
         accountService.deleteAccount(userId, request.password());
         return ResponseEntity.noContent().build();
+    }
+
+    // Answers with a new token pair. Every token issued before the change is dead,
+    // the caller's included, so without this the device that changed the password
+    // would be signed out along with the rest.
+    @PostMapping("/password")
+    public ResponseEntity<TokenResponse> changePassword(
+            @PathVariable Long userId,
+            @Valid @RequestBody ChangePasswordRequest request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        if (!userId.equals(((Number) jwt.getClaim("uid")).longValue())) {
+            throw new AccessDeniedException("access denied");
+        }
+        AuthTokens tokens = identityAuthService.changePassword(
+                userId, request.currentPassword(), request.newPassword());
+        return ResponseEntity.ok(new TokenResponse(tokens.accessToken(), tokens.refreshToken()));
     }
 }
