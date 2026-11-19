@@ -34,6 +34,16 @@ public struct RefreshRequest: Encodable, Equatable, Sendable {
     }
 }
 
+/// The body of `POST /api/users/{id}/identity/account/delete`: the current
+/// password, typed again, so a session alone is not enough to delete an account.
+public struct AccountDeletion: Encodable, Equatable, Sendable {
+    public let password: String
+
+    public init(password: String) {
+        self.password = password
+    }
+}
+
 /// What the app keeps for a signed-in user: the access token sent with every
 /// request, and the refresh token that buys the next pair when it expires.
 public struct SessionTokens: Codable, Equatable, Sendable {

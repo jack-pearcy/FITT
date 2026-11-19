@@ -391,6 +391,14 @@ private struct AccountView: View {
                     }
                     .accessibilityIdentifier("signOut")
                 }
+
+                Section {
+                    NavigationLink("Delete Account") {
+                        DeleteAccountView()
+                    }
+                    .foregroundStyle(Theme.negative)
+                    .accessibilityIdentifier("deleteAccount")
+                }
             }
             .canvas()
             .navigationTitle("Account")
@@ -411,6 +419,83 @@ private struct AccountView: View {
         case .metric: "\(kilograms.formatted()) kg"
         case .imperial: "\(UnitConversion.pounds(kilograms: kilograms).formatted()) lb"
         }
+    }
+}
+
+/// Deleting the account. The password is asked for again, and a second
+/// confirmation stands between the button and the request, because nothing
+/// brings the data back.
+private struct DeleteAccountView: View {
+    @Environment(AppModel.self) private var model
+    @State private var password = ""
+    @State private var isConfirming = false
+    @FocusState private var passwordFocused: Bool
+
+    var body: some View {
+        ThemedForm {
+            Section {
+                Text("This deletes your account and everything stored for it: workouts, plans, custom exercises, body weight entries, goals and measurements.")
+                Text("It happens at once and cannot be undone.")
+                    .foregroundStyle(Theme.negative)
+            }
+
+            Section {
+                SecureField("Password", text: $password)
+                    .textContentType(.password)
+                    .focused($passwordFocused)
+                    .submitLabel(.done)
+                    .onSubmit { passwordFocused = false }
+                    .accessibilityIdentifier("password")
+                FieldError(field: "password")
+            } footer: {
+                Text("Enter your password to confirm it is you.")
+            }
+
+            ErrorSection()
+
+            Section {
+                Button(role: .destructive) {
+                    // The keyboard goes away first, so the answer to this attempt
+                    // is not hidden behind it.
+                    passwordFocused = false
+                    isConfirming = true
+                } label: {
+                    HStack {
+                        Text("Delete Account")
+                        if model.isWorking {
+                            Spacer()
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(password.isEmpty || model.isWorking)
+                .accessibilityIdentifier("submit")
+                // On the button, not on the form: the system shows this as a
+                // popover pointing at the view it is attached to, and attached to
+                // the form it lands on top of the title.
+                .confirmationDialog("Delete your account?", isPresented: $isConfirming, titleVisibility: .visible) {
+                    Button("Delete Account", role: .destructive) {
+                        // On success the model signs out and the whole tab view goes
+                        // away, so there is nothing to dismiss here.
+                        Task { _ = await model.deleteAccount(password: password) }
+                    }
+                    .accessibilityIdentifier("confirmDelete")
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This cannot be undone.")
+                }
+            }
+        }
+        .canvas()
+        .navigationTitle("Delete Account")
+        .onAppear { model.clearErrors() }
+        // A message about a failed attempt must not follow the user back to the Account tab.
+        // Only while signed in. When the session has ended this view disappears
+        // too, and the message for the sign-in screen has to survive that.
+        .onDisappear {
+            if case .signedIn = model.phase { model.clearErrors() }
+        }
+        .onChange(of: password) { model.clearErrors() }
     }
 }
 

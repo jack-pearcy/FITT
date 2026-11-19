@@ -22,6 +22,12 @@ public final class AppModel {
     public private(set) var units = UnitsPreference.metric
     public private(set) var isWorking = false
     public private(set) var errorMessage: String?
+    /// Something that went right and is worth saying once, such as "Your account
+    /// was deleted." It is not an error and `clearErrors()` leaves it alone:
+    /// screens clear errors when they appear, disappear and on every keystroke,
+    /// and that would wipe it before it was read. It goes when the next sign in
+    /// or registration starts.
+    public private(set) var notice: String?
     /// Per-field messages from a 400, keyed by the request field name.
     public private(set) var fieldErrors: [String: String] = [:]
 
@@ -76,10 +82,12 @@ public final class AppModel {
     }
 
     public func signIn(email: String, password: String) async {
+        notice = nil
         await authenticate { try await self.backend.login(Credentials(email: email, password: password)) }
     }
 
     public func register(email: String, password: String) async {
+        notice = nil
         if let problem = PasswordRule.problem(with: password) {
             errorMessage = nil
             fieldErrors = ["password": problem]
@@ -97,6 +105,30 @@ public final class AppModel {
         if let refreshToken {
             try? await backend.logout(refreshToken: refreshToken)
         }
+    }
+
+    /// Deletes the account on the server, then forgets the session here. The order
+    /// is the reverse of sign out on purpose: the device keeps the session until
+    /// the server has confirmed, so the user is never told an account is gone
+    /// while it still exists. Returns true when the account was deleted.
+    public func deleteAccount(password: String) async -> Bool {
+        guard case .signedIn = phase else { return false }
+        clearErrors()
+        guard !password.isEmpty else {
+            fieldErrors = ["password": "Enter your password"]
+            return false
+        }
+        isWorking = true
+        defer { isWorking = false }
+        var deleted = false
+        await load { userId in
+            try await self.backend.deleteAccount(AccountDeletion(password: password), userId: userId)
+            deleted = true
+        }
+        guard deleted else { return false }
+        endSession()
+        notice = "Your account was deleted."
+        return true
     }
 
     /// Forgets the session on this device and shows the sign-in screen.
