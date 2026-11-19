@@ -93,6 +93,12 @@ class AuthRateLimitFilterTest {
         assertThat(call(filter, "POST", "/api/users/8/identity/account/delete", "1.1.1.1").getStatus())
                 .isEqualTo(429);
 
+        // Change password takes the password again too, and shares the same budget.
+        assertThat(call(filter, "POST", "/api/users/7/identity/account/password", "3.3.3.3").getStatus())
+                .isEqualTo(200);
+        assertThat(call(filter, "POST", "/api/users/7/identity/account/password", "3.3.3.3").getStatus())
+                .isEqualTo(429);
+
         // A route that takes no password is left alone, however often it is called.
         for (int i = 0; i < 3; i++) {
             assertThat(call(filter, "POST", "/api/users/7/identity/goals", "2.2.2.2").getStatus()).isEqualTo(200);
