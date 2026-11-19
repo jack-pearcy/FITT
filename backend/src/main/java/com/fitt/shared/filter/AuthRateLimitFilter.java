@@ -23,7 +23,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 // Slows down password guessing, account spam, and refresh token guessing on the
-// public auth endpoints.
+// public auth endpoints, and password guessing on the routes that ask a signed in
+// user for the password again.
 // A sliding window per client address: more than maxAttempts POSTs inside the
 // window gets a 429 with Retry-After until the oldest attempt ages out.
 //
@@ -62,9 +63,18 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         this.clock = clock;
     }
 
+    // Signed in routes that take the password again. The user id is in the middle
+    // of the path, so these are matched by their ending.
+    private static final Set<String> LIMITED_SUFFIXES = Set.of("/identity/account/delete");
+
     @Override
     protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
-        return !"POST".equals(request.getMethod()) || !LIMITED_PATHS.contains(request.getRequestURI());
+        return !"POST".equals(request.getMethod()) || !isLimited(request.getRequestURI());
+    }
+
+    private static boolean isLimited(String path) {
+        return LIMITED_PATHS.contains(path)
+                || (path.startsWith("/api/users/") && LIMITED_SUFFIXES.stream().anyMatch(path::endsWith));
     }
 
     @Override
