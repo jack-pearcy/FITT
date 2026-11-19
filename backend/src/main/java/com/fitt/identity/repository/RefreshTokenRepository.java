@@ -26,4 +26,9 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshTokenEntity
     @Modifying
     @Query("delete from RefreshTokenEntity t where t.ownerUserId = :ownerUserId and t.expiresAt < :now")
     int deleteExpired(@Param("ownerUserId") Long ownerUserId, @Param("now") Instant now);
+
+    // Account deletion. Every login on every device ends with it.
+    @Modifying
+    @Query("delete from RefreshTokenEntity t where t.ownerUserId = :ownerUserId")
+    int deleteAllForUser(@Param("ownerUserId") Long ownerUserId);
 }
