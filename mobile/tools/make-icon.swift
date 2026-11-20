@@ -6,11 +6,11 @@ import Vision
 
 // Draws the app icon from a photo of a person and writes it as a PNG.
 //
-//   swift mobile/tools/make-icon.swift <photo> mobile/App/Assets.xcassets/AppIcon.appiconset/icon-1024.png 1024 0 24
+//   swift mobile/tools/make-icon.swift <photo> mobile/App/Assets.xcassets/AppIcon.appiconset/icon-1024.png 1024 0 36
 //
 // Arguments after the output path: size in pixels, how far to grow the arms,
 // shoulders and lats, and how far to pull in the waist (both in photo pixels,
-// 0 for none). The shipped icon uses 1024, 0 and 24.
+// 0 for none). The shipped icon uses 1024, 0 and 36.
 //
 // The person is cut out with the system's person detector and filled with the
 // app's near-black on the accent color. The photo is the developer's own and is
