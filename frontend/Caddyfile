@@ -18,9 +18,19 @@
 		reverse_proxy backend:8080
 	}
 
-	# Everything else is the Angular single-page app.
+	# Everything else is static files: the public pages and the Angular
+	# single-page app.
 	handle {
 		root * /srv
+
+		# The public pages are plain HTML in /srv/site, with no scripts. The
+		# landing page owns the root address; the web app starts at /login.
+		@landing path /
+		rewrite @landing /site/index.html
+		@privacy path /privacy /privacy/
+		rewrite @privacy /site/privacy.html
+		@support path /support /support/
+		rewrite @support /site/support.html
 
 		# Client-side routing means deep links like /workouts have no
 		# matching file on disk. Serve the requested file when it exists,
