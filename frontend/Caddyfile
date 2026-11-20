@@ -7,6 +7,14 @@
 	# mapped under /api, so the prefix must reach the backend untouched.
 	# handle (not handle_path) passes the path through as-is.
 	handle /api/* {
+		# The API only takes small JSON bodies, the largest being a workout
+		# plan. Anything over 1 MB is refused with 413 here, before it
+		# reaches the backend. Caddy is the only way in, since the backend
+		# publishes no port.
+		request_body {
+			max_size 1MB
+		}
+
 		reverse_proxy backend:8080
 	}
 
