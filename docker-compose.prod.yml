@@ -4,10 +4,27 @@
 # so a deploy is an exact, repeatable thing. The IMAGE_OWNER and IMAGE_TAG
 # values come from the .env file on the server, which the deploy workflow
 # rewrites on every deploy.
+
+# Docker's json-file log driver never rotates unless told to, so one noisy
+# container could fill the disk and take MySQL down with it. Each container
+# keeps at most 5 files of 10 MB. `docker compose logs` still works.
+x-logging: &rotated-logs
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+# Memory limits are sized for the 4 GB server and add up to about 2 GB, which
+# leaves room for the operating system, Docker and a database dump. A
+# container that passes its limit is killed and restarted on its own instead
+# of pushing the whole server into swap or the kernel into killing MySQL.
 services:
   mysql:
     image: mysql:8.4
     restart: unless-stopped
+    logging: *rotated-logs
+    # About 440 MB when idle with the default 128 MB buffer pool.
+    mem_limit: 1g
     environment:
       MYSQL_DATABASE: ${FITT_DB_NAME}
       MYSQL_USER: ${FITT_DB_USERNAME}
@@ -28,8 +45,15 @@ services:
   backend:
     image: ghcr.io/${IMAGE_OWNER}/fitt-backend:${IMAGE_TAG}
     restart: unless-stopped
+    logging: *rotated-logs
+    mem_limit: 768m
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      # The JVM sizes its heap from the container limit and takes a quarter by
+      # default, which is too little here. Half leaves the other half for
+      # metaspace, threads and buffers. Exiting on OutOfMemoryError lets the
+      # restart policy bring up a clean process instead of a half-working one.
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=50 -XX:+ExitOnOutOfMemoryError
       FITT_DB_URL: jdbc:mysql://mysql:3306/${FITT_DB_NAME}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       FITT_DB_USERNAME: ${FITT_DB_USERNAME}
       FITT_DB_PASSWORD: ${FITT_DB_PASSWORD}
@@ -47,6 +71,8 @@ services:
   caddy:
     image: ghcr.io/${IMAGE_OWNER}/fitt-frontend:${IMAGE_TAG}
     restart: unless-stopped
+    logging: *rotated-logs
+    mem_limit: 256m
     ports:
       - "80:80"
       - "443:443"
