@@ -30,6 +30,9 @@ services:
       FITT_JWT_ISSUER: ${FITT_JWT_ISSUER}
       FITT_JWT_TTL_SECONDS: ${FITT_JWT_TTL_SECONDS}
       FITT_CORS_ALLOWED_ORIGINS: ${FITT_CORS_ALLOWED_ORIGINS}
+      # Optional. With no key in .env the AI coach is switched off.
+      FITT_COACH_API_KEY: ${FITT_COACH_API_KEY:-}
+      FITT_COACH_MODEL: ${FITT_COACH_MODEL:-claude-opus-5-5}
     ports:
       - "8080:8080"
     depends_on:

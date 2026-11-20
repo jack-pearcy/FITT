@@ -23,6 +23,9 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import com.fitt.coach.service.exception.CoachFailedException;
+import com.fitt.coach.service.exception.CoachLimitException;
+import com.fitt.coach.service.exception.CoachUnavailableException;
 import com.fitt.identity.service.exception.BiometricsNotFoundException;
 import com.fitt.identity.service.exception.GoalNotFoundException;
 import com.fitt.identity.service.exception.IncorrectPasswordException;
@@ -184,6 +187,32 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setTitle("Bad Request");
         problem.setProperty("errors", Map.of(ex.getField(), ex.getMessage()));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
+    }
+
+    // 503: the coach is switched off here, which is the server's state, not a
+    // mistake in the request.
+    @ExceptionHandler(CoachUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleCoachUnavailable(CoachUnavailableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        problem.setTitle("Coach Unavailable");
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problem);
+    }
+
+    // 502: this server worked, the model behind it did not give an answer.
+    @ExceptionHandler(CoachFailedException.class)
+    public ResponseEntity<ProblemDetail> handleCoachFailed(CoachFailedException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());
+        problem.setTitle("Coach Failed");
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(problem);
+    }
+
+    @ExceptionHandler(CoachLimitException.class)
+    public ResponseEntity<ProblemDetail> handleCoachLimit(CoachLimitException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+        problem.setTitle("Too Many Requests");
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+                .body(problem);
     }
 
     // 401 so the client knows the session is over and sends the user to sign in.
