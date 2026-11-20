@@ -192,4 +192,80 @@ class IdentityAuthControllerTest {
 
         verify(identityAuthService).logout(FAKE_REFRESH);
     }
+
+    // The upper bounds below are not password or email policy. They stop
+    // oversized input before any lookup or hashing happens.
+
+    @Test
+    void login_passwordOverTheBound_returns400BeforeTheServiceIsCalled() throws Exception {
+        String body = "{\"email\":\"test@example.com\",\"password\":\"" + "a".repeat(257) + "\"}";
+
+        mockMvc.perform(post("/api/identity/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.properties.errors.password").value("Password is too long"));
+
+        verifyNoInteractions(identityAuthService);
+    }
+
+    @Test
+    void login_passwordAtTheBound_reachesTheService() throws Exception {
+        String password = "a".repeat(256);
+        when(identityAuthService.login(VALID_EMAIL, password)).thenReturn(FAKE_TOKENS);
+
+        mockMvc.perform(post("/api/identity/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"test@example.com\",\"password\":\"" + password + "\"}"))
+                .andExpect(status().isOk());
+
+        verify(identityAuthService).login(VALID_EMAIL, password);
+    }
+
+    @Test
+    void login_emailOverTheBound_returns400BeforeTheServiceIsCalled() throws Exception {
+        String body = "{\"email\":\"" + "a".repeat(256) + "\",\"password\":\"password1234\"}";
+
+        mockMvc.perform(post("/api/identity/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.properties.errors.email").value("Email is too long"));
+
+        verifyNoInteractions(identityAuthService);
+    }
+
+    @Test
+    void register_emailOverTheBound_returns400WithFieldError() throws Exception {
+        String email = "a".repeat(250) + "@example.com";
+
+        mockMvc.perform(post("/api/identity/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\",\"password\":\"password1234\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.properties.errors.email").exists());
+
+        verifyNoInteractions(identityAuthService);
+    }
+
+    @Test
+    void refresh_tokenOverTheBound_returns400BeforeTheServiceIsCalled() throws Exception {
+        mockMvc.perform(post("/api/identity/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + "a".repeat(129) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.properties.errors.refreshToken").value("Refresh token is not valid"));
+
+        verifyNoInteractions(identityAuthService);
+    }
+
+    @Test
+    void logout_tokenOverTheBound_returns400BeforeTheServiceIsCalled() throws Exception {
+        mockMvc.perform(post("/api/identity/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + "a".repeat(129) + "\"}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(identityAuthService);
+    }
 }
