@@ -39,9 +39,35 @@ jobs:
             exit 1
           fi
 
-      # SSH to the server and roll the new images. The server already holds
-      # docker-compose.prod.yml and the production .env; this only updates the
-      # image tag, logs in to GHCR, pulls, and restarts.
+      # The deploy script comes from the commit this workflow runs from, so going
+      # back to an older image still uses the current, tested way of deploying.
+      - name: Check out the deploy script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      # The compose file comes from the commit being deployed, so the server never
+      # runs a build against a compose file written for a different one. A tag
+      # that is not a commit of this repository fails here, before the server is
+      # touched.
+      #
+      # Both files travel to the server as base64 in environment variables. That
+      # keeps the SSH step to the one action already trusted with the key, and
+      # base64 has no character a shell would read as anything but text.
+      - name: Pack the compose file and the deploy script
+        env:
+          IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+        run: |
+          git fetch --quiet --depth 1 origin "${IMAGE_TAG}"
+          git show "FETCH_HEAD:docker-compose.prod.yml" > "${RUNNER_TEMP}/docker-compose.prod.yml"
+          echo "COMPOSE_FILE_B64=$(base64 -w0 "${RUNNER_TEMP}/docker-compose.prod.yml")" >> "$GITHUB_ENV"
+          echo "DEPLOY_SCRIPT_B64=$(base64 -w0 deploy/deploy.sh)" >> "$GITHUB_ENV"
+
+      # SSH to the server and hand over to deploy/deploy.sh, which pulls the
+      # images, dumps the database, starts the new containers and waits for the
+      # backend to report healthy. If it does not, the script exits non-zero and
+      # this job fails. The server keeps the production .env; nothing in it is
+      # read or printed here.
       #
       # GHCR auth uses the token GitHub mints for this run, passed in over SSH
       # as an env var. The server stores no standing registry credential; the
@@ -59,23 +85,14 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           # Pass the env vars above into the remote shell session.
-          envs: GHCR_TOKEN,GHCR_ACTOR,IMAGE_TAG
+          envs: GHCR_TOKEN,GHCR_ACTOR,IMAGE_TAG,COMPOSE_FILE_B64,DEPLOY_SCRIPT_B64
+          # The dump and the health wait can take a few minutes between them.
+          command_timeout: 15m
           script: |
             set -e
             cd /opt/fitt
-
-            # Point the stack at the tag chosen for this deploy. Rewrites the
-            # IMAGE_TAG line in the server's .env in place.
-            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${IMAGE_TAG}/" .env
-
-            # Authenticate to GHCR with the run-scoped token, then log out at
-            # the end so nothing is left on the box.
-            echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_ACTOR}" --password-stdin
-
-            # Pull the new images and recreate. MySQL keeps its data volume.
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
-
-            # Remove the stored credential and clean up old image layers.
-            docker logout ghcr.io
-            docker image prune -f
+            umask 077
+            printf '%s' "${COMPOSE_FILE_B64}" | base64 -d > docker-compose.prod.yml.new
+            printf '%s' "${DEPLOY_SCRIPT_B64}" | base64 -d > deploy.sh
+            export GHCR_TOKEN GHCR_ACTOR IMAGE_TAG
+            bash deploy.sh
