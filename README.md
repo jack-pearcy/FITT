@@ -84,4 +84,6 @@ Project direction, development phases, and architectural decisions are documente
 
 ## License
 
-Copyright (c) 2026 Jack Pearcy. All rights reserved. See `LICENSE`.
+Copyright (c) 2026 Jack Pearcy. All rights reserved.
+
+This repository is public so its code can be read, for example by employers. It is **not open source**: you may not copy, run, modify, redistribute or reuse it, use it to train AI models, or use the FITT name or branding without written permission. See `LICENSE` for the full terms.

@@ -1,6 +1,68 @@
+FITT Source-Available License (View Only)
+
 Copyright (c) 2026 Jack Pearcy. All rights reserved.
 
-This source code is published publicly for portfolio, evaluation, and
-educational viewing only. No license is granted to use, copy, modify,
-distribute, or create derivative works without the author's express
-written permission.
+This repository, including its source code, documentation, designs, images,
+icons, website text and every other file in it (the "Work"), is published so
+that people can read it, for example to evaluate the author's skills. It is
+NOT open source. No open source license applies to the Work.
+
+1. What you may do
+
+   You may view and read the Work on GitHub.
+
+   Because the repository is public on GitHub, GitHub's Terms of Service let
+   other GitHub users view it and fork it within GitHub. That use is allowed
+   only to the extent those Terms require. It grants no other right.
+
+2. What you may not do without the author's prior written permission
+
+   You may not, in whole or in part:
+
+   a. copy, download for reuse, or reproduce the Work outside GitHub;
+   b. use, install, run, host or deploy the Work, or any service built from it;
+   c. modify, adapt, translate or create derivative works of the Work;
+   d. publish, distribute, sublicense, sell, rent or lend the Work;
+   e. use the Work, or any part of it, in a commercial or non-commercial product
+      or service, including an app published in any app store;
+   f. use the Work to train, fine-tune, evaluate or improve any machine
+      learning or artificial intelligence model, or include it in any dataset;
+   g. remove or change any copyright, license or attribution notice.
+
+3. Names, logos and assets
+
+   This license grants no right to use the name "FITT", its logo, its app
+   icon, its screenshots, its website or any other branding, or anything
+   confusingly similar to them.
+
+4. Third-party components
+
+   Libraries and tools that the Work depends on are not part of the Work.
+   They remain under their own licenses, as published by their owners.
+
+5. Contributions
+
+   The author does not accept unsolicited contributions. Opening an issue or
+   pull request gives you no rights in the Work.
+
+6. No warranty
+
+   THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING WITHOUT LIMITATION THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+
+7. Limitation of liability
+
+   TO THE FULLEST EXTENT ALLOWED BY LAW, IN NO EVENT SHALL THE AUTHOR BE LIABLE
+   FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR
+   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE WORK OR ANY USE OF
+   IT.
+
+8. Termination
+
+   Any permission granted under this license ends automatically, without
+   notice, if you break any of its terms.
+
+9. Permission requests
+
+   To ask for permission beyond this license, email support@fittapp.dev.
