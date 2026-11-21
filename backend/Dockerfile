@@ -2,7 +2,7 @@
 # layers so the final image stays small and carries no build tooling.
 
 # ---------- build ----------
-FROM eclipse-temurin:21-jdk AS build
+FROM eclipse-temurin:24-jdk AS build
 WORKDIR /build
 
 # Dependencies before source so the dependency download layer stays cached
@@ -19,7 +19,7 @@ RUN ./mvnw clean package -DskipTests -B
 RUN java -Djarmode=tools -jar target/backend-0.0.1-SNAPSHOT.jar extract --layers --destination extracted
 
 # ---------- runtime ----------
-FROM eclipse-temurin:21-jre-alpine AS runtime
+FROM eclipse-temurin:24-jre-alpine AS runtime
 WORKDIR /application
 
 # Patch the base image's OS packages so the image carries the security fixes
