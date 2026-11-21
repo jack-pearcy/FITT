@@ -62,6 +62,7 @@ jobs:
           git show "FETCH_HEAD:docker-compose.prod.yml" > "${RUNNER_TEMP}/docker-compose.prod.yml"
           echo "COMPOSE_FILE_B64=$(base64 -w0 "${RUNNER_TEMP}/docker-compose.prod.yml")" >> "$GITHUB_ENV"
           echo "DEPLOY_SCRIPT_B64=$(base64 -w0 deploy/deploy.sh)" >> "$GITHUB_ENV"
+          echo "BACKUP_SCRIPT_B64=$(base64 -w0 deploy/backup-offsite.sh)" >> "$GITHUB_ENV"
 
       # SSH to the server and hand over to deploy/deploy.sh, which pulls the
       # images, dumps the database, starts the new containers and waits for the
@@ -85,7 +86,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           # Pass the env vars above into the remote shell session.
-          envs: GHCR_TOKEN,GHCR_ACTOR,IMAGE_TAG,COMPOSE_FILE_B64,DEPLOY_SCRIPT_B64
+          envs: GHCR_TOKEN,GHCR_ACTOR,IMAGE_TAG,COMPOSE_FILE_B64,DEPLOY_SCRIPT_B64,BACKUP_SCRIPT_B64
           # The dump and the health wait can take a few minutes between them.
           command_timeout: 15m
           script: |
@@ -94,5 +95,8 @@ jobs:
             umask 077
             printf '%s' "${COMPOSE_FILE_B64}" | base64 -d > docker-compose.prod.yml.new
             printf '%s' "${DEPLOY_SCRIPT_B64}" | base64 -d > deploy.sh
+            # Kept current by every deploy. It only runs from the server's own
+            # nightly schedule, never from here.
+            printf '%s' "${BACKUP_SCRIPT_B64}" | base64 -d > backup-offsite.sh
             export GHCR_TOKEN GHCR_ACTOR IMAGE_TAG
             bash deploy.sh

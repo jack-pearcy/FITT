@@ -69,8 +69,14 @@ install_compose_file() {
 # Writes a compressed dump of the database and prints its path on the last line.
 # A dump is only kept once it has been read back to its final line, so a file in
 # the backup directory is always a complete one.
+#
+# The second argument names the kind of dump and the third says how many of that
+# kind to keep. A deploy uses the defaults; backup-offsite.sh asks for "nightly"
+# with its own count, so the two kinds never prune each other.
 backup_database() {
     local label="${1:-unknown}"
+    local prefix="${2:-pre-deploy}"
+    local keep="${3:-$KEEP_BACKUPS}"
     local container
     container="$(compose ps --all --quiet mysql 2>/dev/null || true)"
     if [[ -z "$container" ]]; then
@@ -85,7 +91,7 @@ backup_database() {
 
     mkdir -p "$BACKUP_DIR"
     chmod 700 "$BACKUP_DIR"
-    local file="$BACKUP_DIR/pre-deploy-$(date -u +%Y%m%dT%H%M%SZ)-${label:0:12}.sql.gz"
+    local file="$BACKUP_DIR/$prefix-$(date -u +%Y%m%dT%H%M%SZ)-${label:0:12}.sql.gz"
 
     # The password is read inside the container from its own environment, and
     # passed to mysqldump through MYSQL_PWD so it never appears in a process list.
@@ -95,14 +101,14 @@ backup_database() {
     if ! compose exec -T mysql sh -c \
         'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump --single-transaction --routines --triggers --no-tablespaces -u root "$MYSQL_DATABASE"' \
         | gzip > "$file.partial"; then
-        echo "mysqldump failed, so the deploy stops here." >&2
+        echo "mysqldump failed, so no dump was kept." >&2
         rm -f "$file.partial"
         return 1
     fi
 
     # mysqldump writes "Dump completed" as its last line only when it got to the end.
     if ! gzip -t "$file.partial" || ! gzip -dc "$file.partial" | tail -n 1 | grep -q 'Dump completed'; then
-        echo "The dump did not finish, so the deploy stops here." >&2
+        echo "The dump did not finish, so no dump was kept." >&2
         rm -f "$file.partial"
         return 1
     fi
@@ -111,7 +117,7 @@ backup_database() {
 
     # Newest first; everything past the ones to keep goes.
     local old
-    ls -1t "$BACKUP_DIR"/pre-deploy-*.sql.gz | tail -n +"$((KEEP_BACKUPS + 1))" | while IFS= read -r old; do
+    ls -1t "$BACKUP_DIR"/"$prefix"-*.sql.gz | tail -n +"$((keep + 1))" | while IFS= read -r old; do
         rm -f "$old"
     done
 
