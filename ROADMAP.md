@@ -676,16 +676,22 @@ covered the Continue button, and a keyboard toolbar item did not appear inside t
 the backend, was found the same way while building plan editing, and a fifth while building exercise
 changes during a workout.
 
-Not yet deployed: production still runs the build from before PR #69. Until it is deployed the live API
-has no refresh tokens and the app falls back to a one hour session, and it does not return the units
-preference, so the app shows kilograms to every user. It also has no delete account or change password
-route, so those two screens fail against it. Five migrations (V5 to V9) will run on the next deploy.
-The deploy script, the container limits, the request size limits, the coach and the website also reach
-production only then, and that first deploy recreates the MySQL container once.
+Deployed 2026-11-21: production runs 237d776, everything through PR #122. Before that it had not been
+deployed since 2026-06-09, when it took the build from PR #28, so this deploy ran seven migrations (V3 to
+V9), not the five this section used to name.
+- The upgrade was rehearsed locally first: the June build and the current build made from source, the
+  June stack seeded with duplicate set and entry numbers, then the steps of deploy.sh run in order. All
+  migrations ran, every row was kept, and V7 renumbered the duplicates.
+- A Hetzner snapshot was taken by hand before the deploy, and deploy.sh dumped the database before it
+  started the new containers. The backend reported healthy ten seconds after it started.
+- Checked live afterwards: health, the landing, privacy, support and sign-in pages, the security headers,
+  the refresh route, and the 1 MB request limit.
+- Not checked: a sign-in from the app against production. The coach is off until FITT_COACH_API_KEY is set
+  on the server.
 
 Remaining in this phase:
-- Deploy, then upload a TestFlight build. The production server needs its own FITT_COACH_API_KEY for the
-  coach.
+- Upload a TestFlight build, after a sign-in from the app against production. The production server
+  needs its own FITT_COACH_API_KEY for the coach.
 - A coach screen in the app.
 - Turn on the off-server backup: choose a storage provider, set up rclone and the crontab on the server,
   alert when a night fails, and name the provider and the 30 day retention in the privacy policy.
