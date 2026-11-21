@@ -1,6 +1,6 @@
 # Stage 1: build the Angular app into static files.
 # Node 22 is the current LTS line. Alpine keeps the build image small.
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 
 WORKDIR /app
 
