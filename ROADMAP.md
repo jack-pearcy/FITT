@@ -494,8 +494,6 @@ Tracked for the future; not scheduled.
 
 - Freemium model: short full-access trial leading to a paywall on advanced features. Subscriptions outperform
   ads for solo indie fitness apps.
-- Business email at the domain (Cloudflare Email Routing is the free receiving option; a hosted mailbox only if
-  a team forms).
 - Hetzner automated backups (worth the cost once there is real user data to protect).
 - Cloud-config / infrastructure-as-code provisioning (fold the runbook into an automated bootstrap script).
 - Cloudflare proxy / CDN (orange cloud) in front, with SSL mode Full (strict) to avoid loops.
@@ -641,6 +639,35 @@ Completed this phase (as of 2026-11-16):
   - Three more defects were found on the simulator while building the delete screen: a confirmation
     that covered the title, a button pushed under the keyboard, and a success message that a screen
     cleared before it was shown.
+- Operations fixes from the 2026-11-17 review shipped (PR #113, PR #114, PR #115, PR #120, PR #121).
+  - A deploy now runs deploy/deploy.sh on the server: it checks the new compose file, pulls the images,
+    dumps the database (the last ten dumps are kept), starts the containers, and fails unless the backend
+    reports healthy. Nothing rolls back by itself; choosing between the old image and the dump is left to
+    a person.
+  - Every production container rotates its logs (five files of 10 MB) and has a memory limit: MySQL 1 GB,
+    the backend 768 MB, Caddy 256 MB. The backend heap is half its limit, and the JVM exits when it runs
+    out of memory so Docker restarts it.
+  - Caddy refuses an API request body over 1 MB, the login, refresh and register fields have size limits,
+    and logout shares the login rate limit.
+  - An uptime check asks /api/health from a GitHub runner every 15 minutes, and a failed run sends
+    GitHub's notification email. Scheduled runs can start late or be dropped, and GitHub switches the
+    workflow off after 60 days without repository activity.
+  - A nightly backup script dumps the database and copies it off the server through rclone. It refuses
+    any destination that does not encrypt before sending, and keeps remote copies for 30 days. It is not
+    running yet: no storage provider is chosen, the server setup is by hand, and a failed night alerts
+    nobody.
+- An AI coach review shipped on the server only (PR #116). POST /api/users/{userId}/coach/review returns a
+  short review of recent training written by Claude through the Anthropic API. The model receives exercise
+  names, muscle groups, completed sets, how many days ago each session was, and the goal direction; never
+  ids, email, dates, notes or body data. Five reviews per user per day. It is off unless FITT_COACH_API_KEY
+  is set. Tried once against the live API. There is no app screen yet.
+- A public website shipped (PR #117, PR #118, PR #119). fittapp.dev is now a landing page in the app's
+  colors, with a privacy policy and a support page: plain HTML and CSS, no scripts, no cookies. The web
+  app starts at /login. The app icon's waist was slimmed in the same batch.
+  - Privacy rule, decided 2026-11-19: FITT stores only what the app needs, with no analytics, tracking,
+    ads or sale of data, and sends the AI model only what a request needs. The policy is written to it.
+  - support@fittapp.dev and privacy@fittapp.dev are Proton mailboxes, set up 2026-11-20 outside the
+    repository, with SPF, DKIM and DMARC on the domain.
 
 The loop a lifter needs now works end to end on the phone: account, onboarding, plan, workout, next day.
 Each piece was run on the simulator against a local backend before it merged, and three defects were found
@@ -653,8 +680,15 @@ Not yet deployed: production still runs the build from before PR #69. Until it i
 has no refresh tokens and the app falls back to a one hour session, and it does not return the units
 preference, so the app shows kilograms to every user. It also has no delete account or change password
 route, so those two screens fail against it. Five migrations (V5 to V9) will run on the next deploy.
+The deploy script, the container limits, the request size limits, the coach and the website also reach
+production only then, and that first deploy recreates the MySQL container once.
 
 Remaining in this phase:
+- Deploy, then upload a TestFlight build. The production server needs its own FITT_COACH_API_KEY for the
+  coach.
+- A coach screen in the app.
+- Turn on the off-server backup: choose a storage provider, set up rclone and the crontab on the server,
+  alert when a night fails, and name the provider and the 30 day retention in the privacy policy.
 - Settings: change the units preference after onboarding. It needs a route to read biometrics back
   first (see the gaps below).
 - Make the mobile-test job a required check in the branch ruleset (a repository setting), and add a CI
