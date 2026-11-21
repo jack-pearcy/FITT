@@ -60,6 +60,12 @@ jobs:
         working-directory: backend
         run: ./mvnw --batch-mode failsafe:integration-test failsafe:verify
 
+      # The uptime workflow runs on a schedule, not on pull requests, so a
+      # change to its script would otherwise go untested until it mattered.
+      # This plays a healthy, an unhealthy and a missing service at it.
+      - name: Test the uptime check script
+        run: bash deploy/test-uptime-check.sh
+
   # The iOS client's unit tests. The package builds for macOS as well as iOS,
   # so the tests run with plain "swift test": no simulator and no signing.
   # macos-26 is named exactly, not macos-latest, so the Xcode and Swift
