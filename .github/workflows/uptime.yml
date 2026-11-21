@@ -1,0 +1,52 @@
+# Checks from outside the server that the live service answers.
+#
+# The server cannot report its own outage: if the machine, Docker or Caddy is
+# down, nothing on it can raise an alarm. A GitHub runner is a different
+# machine on a different network, so it sees what a user would see.
+#
+# How the alarm reaches a person: a failed run of a scheduled workflow sends a
+# GitHub notification (email by default) to the person who last changed the
+# schedule below. There is no third party service and no extra account.
+#
+# Known limits, all from GitHub's documentation:
+#   - Scheduled runs can start late when GitHub is busy, and a run can be
+#     dropped. This is a coarse check, not minute by minute monitoring.
+#   - In a public repository a scheduled workflow is switched off after 60 days
+#     with no repository activity. Re-enable it under the Actions tab.
+name: Uptime
+
+# Quoted so YAML does not read the bare word on as a boolean.
+"on":
+  schedule:
+    # Every 15 minutes, off the start of the hour, which GitHub names as its
+    # busiest time for scheduled runs.
+    - cron: "7,22,37,52 * * * *"
+  # Lets a person run the check by hand from the Actions tab.
+  workflow_dispatch:
+
+# The check reads two files from the repository and nothing else.
+permissions:
+  contents: read
+
+# A slow run must not pile up behind the next one.
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  health:
+    # A fork has no service of its own to watch.
+    if: github.repository == 'jack-pearcy/FITT'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Pinned to a commit, the same rule ci.yml spells out.
+      - name: Check out the check script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          sparse-checkout: deploy/uptime-check.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Ask the health endpoint
+        run: bash deploy/uptime-check.sh https://fittapp.dev/api/health
