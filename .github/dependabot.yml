@@ -27,6 +27,27 @@ updates:
       interval: weekly
     commit-message:
       prefix: "build"
+    # Angular's packages are released together and only install at matching
+    # versions. One pull request per package left the others behind, and npm
+    # refused to install the result, so they move as one group.
+    groups:
+      angular:
+        patterns:
+          - "@angular/*"
+          - "@angular-devkit/*"
+    # A new major Angular release needs "ng update" and its migrations, not a
+    # version bump. vitest and TypeScript follow the ranges the installed
+    # Angular supports, so their majors wait for that upgrade too. Security
+    # updates are not affected by these rules.
+    ignore:
+      - dependency-name: "@angular/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@angular-devkit/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directory: /backend
