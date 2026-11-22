@@ -18,7 +18,7 @@ public enum SplitType: String, Codable, CaseIterable, Sendable {
 }
 
 /// Mirrors the backend `ExerciseResponse` record.
-public struct Exercise: Decodable, Equatable, Identifiable, Sendable {
+public struct Exercise: Codable, Equatable, Identifiable, Sendable {
     public let id: Int64
     public let name: String
     public let muscleGroup: MuscleGroup
