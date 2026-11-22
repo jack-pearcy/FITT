@@ -194,6 +194,88 @@ struct AppModelTests {
         #expect(store.read() == nil)
     }
 
+    // MARK: Unsaved plan forms
+
+    private func draftsFolder() -> URL {
+        FileManager.default.temporaryDirectory.appending(path: "fitt-drafts-\(UUID().uuidString)", directoryHint: .isDirectory)
+    }
+
+    private func modelWithDrafts(_ server: StubServer, folder: URL) async -> AppModel {
+        server.respond { _ in .json(200, #"{"biometricsComplete":true,"goalsComplete":true,"onboardingComplete":true}"#) }
+        let store = InMemoryTokenStore(token: makeToken(userId: 7, expiresAt: now.addingTimeInterval(600)))
+        let now = now
+        let model = AppModel(
+            backend: server.backend(tokenStore: store),
+            tokenStore: store,
+            drafts: DraftStore(directory: folder, now: { now }),
+            now: { now }
+        )
+        await model.start()
+        return model
+    }
+
+    @Test("a kept plan form opens again for the same user")
+    func keptPlanDraftComesBack() async {
+        let folder = draftsFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let model = await modelWithDrafts(StubServer(), folder: folder)
+
+        model.keepPlanDraft(namedDraft("Half built"), editing: nil)
+
+        #expect(model.savedPlanDraft(editing: nil)?.name == "Half built")
+        #expect(model.savedPlanDraft(editing: 3) == nil)
+    }
+
+    @Test("creating the plan removes its kept form")
+    func createPlanDropsDraft() async {
+        let folder = draftsFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let server = StubServer()
+        let model = await modelWithDrafts(server, folder: folder)
+        model.keepPlanDraft(namedDraft(), editing: nil)
+        let created = planJSON(id: 9, name: "Full Body", active: true)
+        let next = nextLiftJSON(planId: 9, planName: "Full Body")
+        server.respond { request in
+            if request.method == "POST" { return .json(201, created) }
+            return request.path.hasSuffix("/next-lift") ? .json(200, next) : .json(200, "[\(created)]")
+        }
+
+        let saved = await model.createPlan(namedDraft())
+
+        #expect(saved)
+        #expect(model.savedPlanDraft(editing: nil) == nil)
+    }
+
+    @Test("a plan that fails to save keeps its form")
+    func failedCreateKeepsDraft() async {
+        let folder = draftsFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let server = StubServer()
+        let model = await modelWithDrafts(server, folder: folder)
+        model.keepPlanDraft(namedDraft("Keep me"), editing: nil)
+        server.respond { _ in .json(500, #"{"status":500}"#) }
+
+        let saved = await model.createPlan(namedDraft("Keep me"))
+
+        #expect(!saved)
+        #expect(model.savedPlanDraft(editing: nil)?.name == "Keep me")
+    }
+
+    @Test("sign out removes every kept form")
+    func signOutDropsDrafts() async {
+        let folder = draftsFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let server = StubServer()
+        let model = await modelWithDrafts(server, folder: folder)
+        model.keepPlanDraft(namedDraft(), editing: nil)
+        model.keepPlanDraft(namedDraft(), editing: 3)
+        server.respond { _ in .json(204, "") }
+
+        await model.signOut()
+
+        #expect(!FileManager.default.fileExists(atPath: folder.path()))
+    }
+
     // MARK: Onboarding
 
     private func status(biometrics: Bool, goals: Bool) -> String {
