@@ -66,6 +66,12 @@ jobs:
       - name: Test the uptime check script
         run: bash deploy/test-uptime-check.sh
 
+      # The uptime Worker runs on Cloudflare, not here, so this is the only
+      # place its logic is tested before it is deployed. Node's own test
+      # runner, already on the runner image, so nothing is installed.
+      - name: Test the uptime Worker
+        run: node --test deploy/uptime-worker/test/index.test.js
+
   # The iOS client's unit tests. The package builds for macOS as well as iOS,
   # so the tests run with plain "swift test": no simulator and no signing.
   # macos-26 is named exactly, not macos-latest, so the Xcode and Swift

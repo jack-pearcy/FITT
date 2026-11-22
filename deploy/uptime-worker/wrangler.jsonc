@@ -1,0 +1,33 @@
+// The uptime Worker. src/index.js explains what it does and how to set it up.
+{
+  "$schema": "https://unpkg.com/wrangler@4.158.0/config-schema.json",
+  "name": "fitt-uptime",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+
+  // Wrangler sends anonymous usage data by default. Not from this project.
+  "send_metrics": false,
+
+  // Scheduled runs only. No workers.dev address and no routes, so the Worker
+  // cannot be reached from the internet.
+  "workers_dev": false,
+  "preview_urls": false,
+
+  // Every five minutes, in UTC. One trigger: the free plan allows five per
+  // account, and the daily heartbeat is worked out from this same schedule.
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+
+  // Not secret. The GitHub token is a secret, set with "wrangler secret put".
+  "vars": {
+    "HEALTH_URL": "https://fittapp.dev/api/health",
+    "GITHUB_REPO": "jack-pearcy/FITT",
+    "WORKFLOW_FILE": "uptime.yml"
+  },
+
+  // Keeps the per-run log lines so "wrangler tail" and the dashboard show them.
+  "observability": {
+    "enabled": true
+  }
+}

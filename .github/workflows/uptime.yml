@@ -8,9 +8,15 @@
 # GitHub notification (email by default) to the person who last changed the
 # schedule below. There is no third party service and no extra account.
 #
+# Who starts it: mostly the Cloudflare Worker in deploy/uptime-worker. It
+# checks every five minutes and dispatches this workflow when the service is
+# down, plus once a day as proof the path works. A dispatched run notifies the
+# person whose token started it. The schedule below stays as a backstop.
+#
 # Known limits, all from GitHub's documentation:
 #   - Scheduled runs can start late when GitHub is busy, and a run can be
-#     dropped. This is a coarse check, not minute by minute monitoring.
+#     dropped. In practice most are: one fired in 11 hours on 2026-11-21,
+#     which is why the Worker exists.
 #   - In a public repository a scheduled workflow is switched off after 60 days
 #     with no repository activity. Re-enable it under the Actions tab.
 name: Uptime

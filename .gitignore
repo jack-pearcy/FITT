@@ -11,6 +11,10 @@ project_dump.txt
 
 # Environment variables
 .env
+
+# Wrangler's local state and local secrets for the uptime Worker
+deploy/uptime-worker/.wrangler/
+deploy/uptime-worker/.dev.vars*
 .DS_Store
 
 dump_project.py

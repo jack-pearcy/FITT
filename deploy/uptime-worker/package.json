@@ -1,0 +1,9 @@
+{
+  "name": "fitt-uptime-worker",
+  "private": true,
+  "type": "module",
+  "description": "Scheduled Cloudflare Worker that watches fittapp.dev. No dependencies: tests use node --test.",
+  "scripts": {
+    "test": "node --test test/index.test.js"
+  }
+}
