@@ -53,7 +53,7 @@ struct HistoryView: View {
                 } else if let message = model.errorMessage {
                     LoadFailedView(message: message) { await load() }
                 } else {
-                    ProgressView()
+                    SkeletonList()
                 }
             }
             .canvas()

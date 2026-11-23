@@ -19,12 +19,17 @@ public struct RootView: View {
             switch model.phase {
             case .loading:
                 ProgressView()
+                    .transition(.opacity)
             case .signedOut:
                 SignInView()
+                    .transition(.opacity)
             case .signedIn:
                 SignedInView()
+                    .transition(.opacity)
             }
         }
+        // One screen fades into the next, so signing in or out is not a hard cut.
+        .motion(value: model.phase)
         .environment(model)
         .fittTheme()
         .task { await model.start() }
