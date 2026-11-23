@@ -89,6 +89,19 @@ public class RefreshTokenService {
         return new Rotation(current.getOwnerUserId(), next);
     }
 
+    // Checks that the token is a live sign-in of this user, and changes nothing.
+    // For a request that needs more proof than an access token but is not a
+    // refresh. A retired token is refused here without ending its family: that
+    // answer belongs to rotate, where a second use is what proves a copy.
+    @Transactional(readOnly = true)
+    public void requireLive(Long userId, String presentedToken) {
+        RefreshTokenEntity token = repository.findByTokenHash(hash(presentedToken))
+                .orElseThrow(InvalidRefreshTokenException::new);
+        if (!token.getOwnerUserId().equals(userId) || token.isRevoked() || token.isExpiredAt(clock.instant())) {
+            throw new InvalidRefreshTokenException();
+        }
+    }
+
     // Logout. Ends the whole family so no token from this login works again.
     // An unknown token is ignored, so logging out twice is not an error.
     @Transactional

@@ -27,6 +27,7 @@ public class AccountService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final MfaService mfaService;
+    private final DeviceLinkService deviceLinkService;
     private final List<UserDataEraser> erasers;
 
     public AccountService(
@@ -36,6 +37,7 @@ public class AccountService {
             RefreshTokenRepository refreshTokenRepository,
             PasswordEncoder passwordEncoder,
             MfaService mfaService,
+            DeviceLinkService deviceLinkService,
             List<UserDataEraser> erasers
     ) {
         this.userRepository = userRepository;
@@ -44,6 +46,7 @@ public class AccountService {
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.mfaService = mfaService;
+        this.deviceLinkService = deviceLinkService;
         this.erasers = erasers;
     }
 
@@ -68,6 +71,7 @@ public class AccountService {
         erasers.forEach(eraser -> eraser.eraseUserData(userId));
         refreshTokenRepository.deleteAllForUser(userId);
         mfaService.eraseAll(userId);
+        deviceLinkService.eraseAll(userId);
         biometricsRepository.deleteAllForUser(userId);
         goalRepository.deleteAllForUser(userId);
         userRepository.deleteById(userId);

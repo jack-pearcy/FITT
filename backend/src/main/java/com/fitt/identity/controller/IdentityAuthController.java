@@ -1,5 +1,6 @@
 package com.fitt.identity.controller;
 
+import com.fitt.identity.dto.DeviceLinkRedeemRequest;
 import com.fitt.identity.dto.LoginRequest;
 import com.fitt.identity.dto.LoginResponse;
 import com.fitt.identity.dto.MfaLoginRequest;
@@ -60,6 +61,15 @@ public class IdentityAuthController {
     public ResponseEntity<TokenResponse> completeMfaLogin(@Valid @RequestBody MfaLoginRequest request) {
         AuthTokens tokens = identityAuthService.completeMfaLogin(request.mfaToken(), request.code());
         return ResponseEntity.ok(toResponse(tokens));
+    }
+
+    // A second device, first the Apple Watch, trades the code its owner's phone
+    // asked for. Public: the device has no token yet, and the code in the body
+    // is the credential. The answer is a full pair, so no-store.
+    @PostMapping("/device-link")
+    public ResponseEntity<TokenResponse> redeemDeviceLink(@Valid @RequestBody DeviceLinkRedeemRequest request) {
+        AuthTokens tokens = identityAuthService.redeemDeviceLink(request.code());
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(toResponse(tokens));
     }
 
     // Public, because the access token has usually expired by the time this is

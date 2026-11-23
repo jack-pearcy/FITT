@@ -2,6 +2,7 @@ package com.fitt.identity.service;
 
 import com.fitt.identity.domain.UserEntity;
 import com.fitt.identity.repository.UserRepository;
+import com.fitt.identity.service.exception.DeviceLinkException;
 import com.fitt.identity.service.exception.EmailAlreadyExistsException;
 import com.fitt.identity.service.exception.IncorrectPasswordException;
 import com.fitt.identity.service.exception.InvalidRefreshTokenException;
@@ -36,6 +37,7 @@ public class IdentityAuthService {
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenService refreshTokenService;
     private final MfaService mfaService;
+    private final DeviceLinkService deviceLinkService;
 
     public IdentityAuthService(
             AuthenticationManager authenticationManager,
@@ -44,7 +46,8 @@ public class IdentityAuthService {
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             RefreshTokenService refreshTokenService,
-            MfaService mfaService
+            MfaService mfaService,
+            DeviceLinkService deviceLinkService
     ) {
         this.authenticationManager = authenticationManager;
         this.jwtEncoder = jwtEncoder;
@@ -53,6 +56,7 @@ public class IdentityAuthService {
         this.passwordEncoder = passwordEncoder;
         this.refreshTokenService = refreshTokenService;
         this.mfaService = mfaService;
+        this.deviceLinkService = deviceLinkService;
     }
 
     // Duplicate check runs first so we return a clean 409 instead of letting
@@ -108,6 +112,17 @@ public class IdentityAuthService {
         return tokensFor(user);
     }
 
+    // Signs in a second device with a code the first one asked for. The pair
+    // starts a token family of its own, so the two devices refresh and sign out
+    // independently. Two-step sign-in is not asked again: the device that asked
+    // for the code had already passed it.
+    public AuthTokens redeemDeviceLink(String code) {
+        Long userId = deviceLinkService.redeem(code);
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(DeviceLinkException::new);
+        return tokensFor(user);
+    }
+
     // Trades a refresh token for a new pair. The presented token is retired, so
     // the caller must store the new one. Not transactional here on purpose: the
     // rotation commits on its own, including the revocation it does on a replay.
@@ -147,6 +162,8 @@ public class IdentityAuthService {
 
         user.changePassword(passwordEncoder.encode(newPassword));
         refreshTokenService.endAllLogins(userId);
+        // A code asked for under the old password must not outlive it.
+        deviceLinkService.eraseAll(userId);
         return tokensFor(user);
     }
 

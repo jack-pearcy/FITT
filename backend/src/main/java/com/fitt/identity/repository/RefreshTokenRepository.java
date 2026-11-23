@@ -19,6 +19,9 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshTokenEntity
     @Query("select t from RefreshTokenEntity t where t.tokenHash = :tokenHash")
     Optional<RefreshTokenEntity> findByTokenHashForUpdate(@Param("tokenHash") String tokenHash);
 
+    // Read only, no lock. For checking a token without rotating it.
+    Optional<RefreshTokenEntity> findByTokenHash(String tokenHash);
+
     @Modifying
     @Query("update RefreshTokenEntity t set t.revokedAt = :now where t.familyId = :familyId and t.revokedAt is null")
     int revokeFamily(@Param("familyId") String familyId, @Param("now") Instant now);

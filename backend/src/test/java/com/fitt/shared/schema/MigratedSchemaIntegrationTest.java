@@ -41,11 +41,15 @@ class MigratedSchemaIntegrationTest {
         // Reaching this line is the test: validation ran while the context started.
         Integer applied = jdbc.queryForObject(
                 "select count(*) from flyway_schema_history where success = 1", Integer.class);
-        assertThat(applied).isGreaterThanOrEqualTo(10);
+        assertThat(applied).isGreaterThanOrEqualTo(11);
 
         Integer mfaTables = jdbc.queryForObject("select count(*) from information_schema.tables"
                 + " where table_schema = database()"
                 + " and table_name in ('user_totp', 'mfa_recovery_codes', 'mfa_challenges')", Integer.class);
         assertThat(mfaTables).isEqualTo(3);
+
+        Integer linkTables = jdbc.queryForObject("select count(*) from information_schema.tables"
+                + " where table_schema = database() and table_name = 'device_link_codes'", Integer.class);
+        assertThat(linkTables).isEqualTo(1);
     }
 }

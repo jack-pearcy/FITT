@@ -155,6 +155,18 @@ class AuthRateLimitFilterTest {
     }
 
     @Test
+    void bothHalvesOfConnectingADevice_areLimited() throws Exception {
+        for (String path : new String[] {
+                "/api/identity/auth/device-link",
+                "/api/users/7/identity/device-link"}) {
+            AuthRateLimitFilter filter = new AuthRateLimitFilter(1, 60, new MutableClock());
+
+            assertThat(call(filter, "POST", path, "1.1.1.1").getStatus()).as(path).isEqualTo(200);
+            assertThat(call(filter, "POST", path, "1.1.1.1").getStatus()).as(path).isEqualTo(429);
+        }
+    }
+
+    @Test
     void readingTheTwoStepStatus_isNotCounted() throws Exception {
         AuthRateLimitFilter filter = new AuthRateLimitFilter(1, 60, new MutableClock());
 
