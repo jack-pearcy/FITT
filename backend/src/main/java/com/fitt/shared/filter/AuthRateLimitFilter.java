@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.UriUtils;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -71,7 +72,23 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {
-        return !"POST".equals(request.getMethod()) || !isLimited(request.getRequestURI());
+        return !"POST".equals(request.getMethod()) || !isLimited(decodedPath(request));
+    }
+
+    // The path the way the router reads it. getRequestURI() is the raw text of the
+    // request line, so /api/identity/auth/%6Cogin does not equal the login path
+    // here, yet Spring decodes it and routes it to login. Matching on the raw text
+    // let one encoded letter skip the limit. Spring Security's firewall already
+    // refuses an encoded slash, an encoded percent sign and a semicolon, so one
+    // decode gives the same path the router sees.
+    private static String decodedPath(HttpServletRequest request) {
+        try {
+            return UriUtils.decode(request.getRequestURI(), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException malformed) {
+            // Not a path any route answers. Counting it costs nothing and never
+            // lets a broken encoding slip past the limit.
+            return LIMITED_PATHS.iterator().next();
+        }
     }
 
     private static boolean isLimited(String path) {

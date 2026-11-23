@@ -73,6 +73,30 @@ class AuthRateLimitFilterTest {
         assertThat(call(filter, "POST", LOGIN, "2.2.2.2").getStatus()).isEqualTo(200);
     }
 
+    // The router decodes the path before it matches, so an encoded letter still
+    // reaches the handler. The limit must count those requests too.
+    @Test
+    void percentEncodedPaths_areCountedLikeThePlainOnes() throws Exception {
+        AuthRateLimitFilter filter = new AuthRateLimitFilter(2, 60, new MutableClock());
+
+        assertThat(call(filter, "POST", LOGIN, "1.1.1.1").getStatus()).isEqualTo(200);
+        assertThat(call(filter, "POST", "/api/identity/auth/%6Cogin", "1.1.1.1").getStatus()).isEqualTo(200);
+        assertThat(call(filter, "POST", "/api/identity/auth/%6Cogin", "1.1.1.1").getStatus()).isEqualTo(429);
+        assertThat(call(filter, "POST", "/api/identity/auth/%72egister", "1.1.1.1").getStatus()).isEqualTo(429);
+        assertThat(call(filter, "POST", "/api/users/7/identity/account/%70assword", "1.1.1.1").getStatus())
+                .isEqualTo(429);
+        assertThat(call(filter, "POST", "/api/users/7/identity/account/%64elete", "1.1.1.1").getStatus())
+                .isEqualTo(429);
+    }
+
+    @Test
+    void aPathWithBrokenEncoding_isCounted() throws Exception {
+        AuthRateLimitFilter filter = new AuthRateLimitFilter(1, 60, new MutableClock());
+
+        assertThat(call(filter, "POST", "/api/identity/auth/%zzlogin", "1.1.1.1").getStatus()).isEqualTo(200);
+        assertThat(call(filter, "POST", LOGIN, "1.1.1.1").getStatus()).isEqualTo(429);
+    }
+
     @Test
     void otherPathsAndMethodsAreNeverCounted() throws Exception {
         AuthRateLimitFilter filter = new AuthRateLimitFilter(1, 60, new MutableClock());
