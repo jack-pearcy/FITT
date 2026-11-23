@@ -21,6 +21,26 @@ struct PlanDraftTests {
         #expect(draft.daysPerWeek == daysPerWeek)
     }
 
+    @Test("a draft survives being written to the device and read back")
+    func codableRoundTrip() throws {
+        var draft = PlanDraft(splitType: .upperLower)
+        draft.name = "Spring block"
+        draft.daysPerWeek = 5
+        draft.add(bench, toDay: draft.days[0].id)
+        draft.add(row, toDay: draft.days[0].id)
+        draft.days[0].slots[1].sets = 5
+        draft.days[0].slots[1].reps = 6
+        draft.moveDay(draft.days[1].id, by: -1)
+
+        let data = try JSONEncoder().encode(draft)
+        let back = try JSONDecoder().decode(PlanDraft.self, from: data)
+
+        #expect(back == draft)
+        #expect(back.splitType == .upperLower)
+        #expect(back.days.map(\.label) == ["Lower", "Upper"])
+        #expect(back.days[1].slots.map(\.exercise.name) == ["Barbell Bench Press", "Bent Over Barbell Row"])
+    }
+
     @Test("changing the split replaces days the user has not touched")
     func splitChangeReplacesUntouchedDays() {
         var draft = PlanDraft(splitType: .pushPullLegs)

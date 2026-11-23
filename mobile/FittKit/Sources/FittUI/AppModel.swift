@@ -59,10 +59,19 @@ public final class AppModel {
     private let backend: Backend
     private let tokenStore: any TokenStore
     private let now: @Sendable () -> Date
+    /// Unsaved forms kept on the device. Nil keeps nothing, which is what the
+    /// tests and previews get unless they pass a store.
+    private let drafts: DraftStore?
 
-    public init(backend: Backend, tokenStore: any TokenStore, now: @escaping @Sendable () -> Date = { Date() }) {
+    public init(
+        backend: Backend,
+        tokenStore: any TokenStore,
+        drafts: DraftStore? = nil,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
         self.backend = backend
         self.tokenStore = tokenStore
+        self.drafts = drafts
         self.now = now
     }
 
@@ -171,8 +180,36 @@ public final class AppModel {
     }
 
     /// Forgets the session on this device and shows the sign-in screen.
+    // MARK: Unsaved plan forms
+
+    /// The plan form this user left unsaved, if it was kept and has not expired.
+    /// `planId` is nil for a new plan.
+    public func savedPlanDraft(editing planId: Int64?) -> PlanDraft? {
+        guard let key = planDraftKey(planId) else { return nil }
+        return drafts?.load(PlanDraft.self, key: key)
+    }
+
+    /// Keeps the plan form on the device until it is saved, discarded or expires.
+    public func keepPlanDraft(_ draft: PlanDraft, editing planId: Int64?) {
+        guard let key = planDraftKey(planId) else { return }
+        drafts?.save(draft, key: key)
+    }
+
+    public func discardPlanDraft(editing planId: Int64?) {
+        guard let key = planDraftKey(planId) else { return }
+        drafts?.remove(key: key)
+    }
+
+    /// One draft per user and plan, so a second account on the phone never
+    /// opens the first one's form.
+    private func planDraftKey(_ planId: Int64?) -> String? {
+        guard case .signedIn(let userId) = phase else { return nil }
+        return "\(userId).plan.\(planId.map(String.init) ?? "new")"
+    }
+
     private func endSession() {
         try? tokenStore.clear()
+        drafts?.removeAll()
         onboarding = nil
         maintenanceCalories = nil
         nextLift = nil
@@ -288,6 +325,7 @@ public final class AppModel {
             saved = true
         }
         guard saved else { return false }
+        discardPlanDraft(editing: planId)
         await loadPlans()
         await loadNextLift()
         return true
@@ -377,6 +415,7 @@ public final class AppModel {
             }
         }
         guard created != nil else { return false }
+        discardPlanDraft(editing: nil)
         // The plan exists even if activating it failed, so the lists are
         // reloaded either way and the form closes.
         let activationProblem = errorMessage

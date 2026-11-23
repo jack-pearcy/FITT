@@ -3,6 +3,11 @@ import SwiftUI
 
 /// The form for a plan, shown as a sheet: empty for a new plan, or filled in
 /// with a saved plan that is being changed.
+///
+/// Building a plan takes a while, so changes are kept on the device as they are
+/// made. A swipe cannot close the sheet while it holds changes, Cancel asks
+/// first, and a form left unsaved (for example when iOS closes the app in the
+/// background) opens again with those changes.
 struct PlanFormView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -10,11 +15,21 @@ struct PlanFormView: View {
     /// The id of the plan being changed. Nil for a new plan.
     private let editingPlanId: Int64?
     @State private var draft: PlanDraft
+    /// The form as it opened. The draft has changes once it differs from this.
+    @State private var original: PlanDraft
+    /// True when the form opened with changes kept from an earlier visit.
+    @State private var restored = false
+    @State private var checkedForKeptDraft = false
+    @State private var confirmingDiscard = false
 
     init(editing plan: WorkoutPlan? = nil) {
         editingPlanId = plan?.id
-        _draft = State(initialValue: plan.map(PlanDraft.init(plan:)) ?? PlanDraft())
+        let start = plan.map(PlanDraft.init(plan:)) ?? PlanDraft()
+        _draft = State(initialValue: start)
+        _original = State(initialValue: start)
     }
+
+    private var hasChanges: Bool { draft != original }
     /// The day an exercise is being picked for, while the picker is open.
     @State private var pickingForDay: UUID?
     @FocusState private var focus: Field?
@@ -31,6 +46,15 @@ struct PlanFormView: View {
     var body: some View {
         NavigationStack {
             ThemedForm {
+                if restored {
+                    Section {
+                        Label("Your unsaved changes are back.", systemImage: "clock.arrow.circlepath")
+                            .font(.subheadline)
+                        Button("Start Over", role: .destructive) { startOver() }
+                            .accessibilityIdentifier("startOverPlan")
+                    }
+                }
+
                 Section {
                     TextField("Name", text: $draft.name)
                         .focused($focus, equals: .name)
@@ -117,8 +141,9 @@ struct PlanFormView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") { cancel() }
                         .secondaryAction()
+                        .accessibilityIdentifier("cancelPlan")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
@@ -133,10 +158,56 @@ struct PlanFormView: View {
                 }
             }
             // A message about the last attempt is stale once the user edits the form.
-            .onChange(of: draft) { model.clearErrors() }
+            .onChange(of: draft) {
+                model.clearErrors()
+                keepOrDropDraft()
+            }
+            .confirmationDialog("Discard your changes?", isPresented: $confirmingDiscard, titleVisibility: .visible) {
+                Button("Discard Changes", role: .destructive) {
+                    model.discardPlanDraft(editing: editingPlanId)
+                    dismiss()
+                }
+                .accessibilityIdentifier("discardPlanChanges")
+                Button("Keep Editing", role: .cancel) {}
+            }
         }
-        .onAppear { model.clearErrors() }
-        .interactiveDismissDisabled(model.isWorking)
+        .onAppear {
+            model.clearErrors()
+            restoreKeptDraft()
+        }
+        .interactiveDismissDisabled(model.isWorking || hasChanges)
+    }
+
+    /// Opens the form with the changes left unsaved last time, once per opening.
+    /// The exercise picker brings this view back on screen, so it must not run again.
+    private func restoreKeptDraft() {
+        guard !checkedForKeptDraft else { return }
+        checkedForKeptDraft = true
+        if let kept = model.savedPlanDraft(editing: editingPlanId), kept != original {
+            draft = kept
+            restored = true
+        }
+    }
+
+    private func keepOrDropDraft() {
+        if hasChanges {
+            model.keepPlanDraft(draft, editing: editingPlanId)
+        } else {
+            model.discardPlanDraft(editing: editingPlanId)
+        }
+    }
+
+    private func startOver() {
+        restored = false
+        draft = original
+    }
+
+    private func cancel() {
+        if hasChanges {
+            confirmingDiscard = true
+        } else {
+            dismiss()
+        }
     }
 
     private func save() {
