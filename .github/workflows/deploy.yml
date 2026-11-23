@@ -15,8 +15,18 @@ name: Deploy
         description: "Image tag (commit SHA) to deploy"
         required: true
 
+# One deploy at a time. A second run waits for the first instead of racing it
+# on the server's .env and containers.
+concurrency:
+  group: production
+  cancel-in-progress: false
+
 jobs:
   deploy:
+    # Only from main. The deploy script and the backup script that land on the
+    # server come from the branch this run starts on, so another branch must not
+    # be able to supply them. The production environment has the same rule.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # Links this job to the production environment. The required-reviewers
     # protection rule on that environment is what pauses the job for approval
@@ -41,15 +51,22 @@ jobs:
 
       # The deploy script comes from the commit this workflow runs from, so going
       # back to an older image still uses the current, tested way of deploying.
+      # The whole history of main is fetched so the next step can tell whether
+      # the tag is a commit of main.
       - name: Check out the deploy script
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       # The compose file comes from the commit being deployed, so the server never
-      # runs a build against a compose file written for a different one. A tag
-      # that is not a commit of this repository fails here, before the server is
-      # touched.
+      # runs a build against a compose file written for a different one.
+      #
+      # The tag must be a commit of main. GitHub also serves commits that only
+      # exist in pull requests, including ones from forks, and a compose file
+      # from one of those could mount the host's disk. Nothing is fetched by
+      # SHA: a commit that is not in main's history is refused here, before the
+      # server is touched.
       #
       # Both files travel to the server as base64 in environment variables. That
       # keeps the SSH step to the one action already trusted with the key, and
@@ -58,8 +75,12 @@ jobs:
         env:
           IMAGE_TAG: ${{ github.event.inputs.image_tag }}
         run: |
-          git fetch --quiet --depth 1 origin "${IMAGE_TAG}"
-          git show "FETCH_HEAD:docker-compose.prod.yml" > "${RUNNER_TEMP}/docker-compose.prod.yml"
+          if ! git cat-file -e "${IMAGE_TAG}^{commit}" 2>/dev/null \
+            || ! git merge-base --is-ancestor "${IMAGE_TAG}" HEAD; then
+            echo "image_tag is not a commit on main, refusing to deploy it" >&2
+            exit 1
+          fi
+          git show "${IMAGE_TAG}:docker-compose.prod.yml" > "${RUNNER_TEMP}/docker-compose.prod.yml"
           echo "COMPOSE_FILE_B64=$(base64 -w0 "${RUNNER_TEMP}/docker-compose.prod.yml")" >> "$GITHUB_ENV"
           echo "DEPLOY_SCRIPT_B64=$(base64 -w0 deploy/deploy.sh)" >> "$GITHUB_ENV"
           echo "BACKUP_SCRIPT_B64=$(base64 -w0 deploy/backup-offsite.sh)" >> "$GITHUB_ENV"

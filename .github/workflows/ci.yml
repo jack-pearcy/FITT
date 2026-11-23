@@ -18,6 +18,11 @@ name: CI
   # Lets us run the pipeline by hand from the Actions tab when needed.
   workflow_dispatch:
 
+# Every job starts with read access to the code and nothing else. The job that
+# publishes images asks for package write access itself.
+permissions:
+  contents: read
+
 env:
   REGISTRY: ghcr.io
 
@@ -122,14 +127,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4
 
-      # Authenticate to ghcr.io with the token GitHub mints for this run.
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550  # v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       # Build the backend image to a local tarball instead of pushing. Scanning
       # the tarball needs no registry and no daemon access, so the image is
       # never published until Trivy has cleared it.
@@ -154,13 +151,7 @@ jobs:
           exit-code: '1'
           trivyignores: .trivyignore
 
-      # Scan passed, so load the tarball into Docker and push it.
-      - name: Push the backend image
-        run: |
-          docker load --input /tmp/backend-image.tar
-          docker push ${{ steps.img.outputs.backend }}
-
-      # Same build, scan, push sequence for the frontend-plus-Caddy image.
+      # The same build and scan for the frontend-plus-Caddy image.
       - name: Build the frontend image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7
         with:
@@ -177,7 +168,20 @@ jobs:
           exit-code: '1'
           trivyignores: .trivyignore
 
-      - name: Push the frontend image
+      # Both scans passed. Only now does the job log in to the registry, so the
+      # push credential does not exist on the runner while the build tools and
+      # the scanner, which are downloaded at run time, are running.
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550  # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Neither image is published unless both were cleared.
+      - name: Push both images
         run: |
+          docker load --input /tmp/backend-image.tar
           docker load --input /tmp/frontend-image.tar
+          docker push ${{ steps.img.outputs.backend }}
           docker push ${{ steps.img.outputs.frontend }}
