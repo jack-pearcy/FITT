@@ -1,3 +1,4 @@
+import FittAPI
 import SwiftUI
 
 /// The single view the app target shows. It owns the app model and chooses

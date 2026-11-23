@@ -37,6 +37,8 @@ targets:
     dependencies:
       - package: FittKit
         product: FittUI
+      - package: FittKit
+        product: FittAPI
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.fittapp.fitt
