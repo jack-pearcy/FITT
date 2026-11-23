@@ -97,3 +97,78 @@ struct SkeletonList: View {
         .accessibilityLabel("Loading")
     }
 }
+
+/// A small filled action inside a row, such as Log beside the fields of a set.
+struct PillButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Theme.canvas)
+            .padding(.horizontal, Theme.Space.m)
+            .padding(.vertical, 6)
+            .background(Theme.accent, in: Capsule())
+            .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.4)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.94 : 1)
+            .animation(Theme.animation(Theme.quick, reduceMotion: reduceMotion), value: configuration.isPressed)
+    }
+}
+
+/// How far along something is: a track with the accent filling it from the left.
+/// The fill grows from nothing when the bar first shows, and glides on a change.
+struct ProgressBar: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// From 0 to 1. Anything outside is clamped.
+    let fraction: Double
+    @State private var shown: Double = 0
+
+    var body: some View {
+        // One reader for one bar. It is never used inside a repeated row.
+        GeometryReader { proxy in
+            Capsule()
+                .fill(Theme.accent)
+                .frame(width: max(proxy.size.height, proxy.size.width * shown))
+                .opacity(shown > 0 ? 1 : 0)
+        }
+        .frame(height: 6)
+        .background(Theme.well, in: Capsule())
+        .onAppear { set(fraction) }
+        .onChange(of: fraction) { _, new in set(new) }
+        .accessibilityHidden(true)
+    }
+
+    private func set(_ value: Double) {
+        withAnimation(Theme.animation(reduceMotion: reduceMotion)) {
+            shown = min(max(value, 0), 1)
+        }
+    }
+}
+
+private struct Ticking: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .monospacedDigit()
+            .contentTransition(reduceMotion ? .opacity : .numericText())
+    }
+}
+
+extension View {
+    /// A number that rolls to its new value when it changes inside an animation.
+    /// Under Reduce Motion the digits fade.
+    func ticking() -> some View {
+        modifier(Ticking())
+    }
+
+    /// A row that stands on the canvas with no card behind it, for a card or a
+    /// button that brings its own surface.
+    func bareRow() -> some View {
+        self
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+    }
+}

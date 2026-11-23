@@ -36,6 +36,63 @@ private struct ExerciseRow: View {
     }
 }
 
+/// What to train next, as one card: the day, the plan it belongs to, and how far
+/// through the rotation it is.
+private struct NextLiftCard: View {
+    let next: NextLift
+    let day: WorkoutPlanDay
+
+    private var setCount: Int { day.exercises.reduce(0) { $0 + $1.sets } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.l) {
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                HStack {
+                    Text("Next up").sectionLabel()
+                    Spacer()
+                    if next.deload {
+                        Text("Deload")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Theme.accent)
+                            .padding(.horizontal, Theme.Space.s)
+                            .padding(.vertical, 3)
+                            .background(Theme.well, in: Capsule())
+                    }
+                }
+                Text(day.dayLabel)
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text(next.planName ?? "")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+
+            VStack(alignment: .leading, spacing: Theme.Space.s) {
+                ProgressBar(fraction: next.daysInRotation > 0
+                    ? Double(next.dayNumber) / Double(next.daysInRotation)
+                    : 0)
+                HStack {
+                    Text("Day \(next.dayNumber) of \(next.daysInRotation)").ticking()
+                    Spacer()
+                    Text("Week \(next.weekInCycle)").ticking()
+                }
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(Theme.textSecondary)
+            }
+
+            Text("\(day.exercises.count) \(day.exercises.count == 1 ? "exercise" : "exercises") · \(setCount) \(setCount == 1 ? "set" : "sets")")
+                .font(.footnote)
+                .foregroundStyle(Theme.textSecondary)
+        }
+        .card()
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Next up: \(day.dayLabel), \(next.planName ?? ""). Day \(next.dayNumber) of \(next.daysInRotation), week \(next.weekInCycle)\(next.deload ? ", deload" : "")")
+        .accessibilityIdentifier("nextLift")
+    }
+}
+
 /// A full-screen message with a retry, for a screen that could not load at all.
 struct LoadFailedView: View {
     let message: String
@@ -67,8 +124,10 @@ struct TodayView: View {
             Group {
                 if model.activeSession != nil {
                     WorkoutView()
+                        .entrance(.opacity.combined(with: .offset(y: 24)))
                 } else if let next = model.nextLift, checkedForSession {
                     content(next)
+                        .entrance(.opacity)
                 } else if let message = model.errorMessage {
                     LoadFailedView(message: message) { await load() }
                 } else {
@@ -76,6 +135,9 @@ struct TodayView: View {
                 }
             }
             .canvas()
+            // The workout rises into place when it starts, and Today fades back
+            // when it ends.
+            .motion(value: model.activeSession?.id)
             .navigationTitle(model.activeSession == nil ? "Today" : "Workout")
         }
         .task { await load() }
@@ -98,9 +160,8 @@ struct TodayView: View {
         } else if let day = next.day {
             ThemedList {
                 Section {
-                    LabeledContent("Plan", value: next.planName ?? "")
-                    LabeledContent("Day", value: "\(next.dayNumber) of \(next.daysInRotation)")
-                    LabeledContent("Week", value: next.deload ? "\(next.weekInCycle), deload" : "\(next.weekInCycle)")
+                    NextLiftCard(next: next, day: day)
+                        .bareRow()
                 } footer: {
                     if next.alreadyTrainedToday {
                         Text("You have already trained today. This is the next session.")
@@ -108,7 +169,7 @@ struct TodayView: View {
                     }
                 }
 
-                LabeledSection(day.dayLabel) {
+                LabeledSection("Exercises") {
                     if day.exercises.isEmpty {
                         Text("This day has no exercises yet.")
                             .foregroundStyle(Theme.textSecondary)
@@ -122,16 +183,17 @@ struct TodayView: View {
                     Button {
                         Task { await model.startWorkout() }
                     } label: {
-                        HStack {
+                        HStack(spacing: Theme.Space.s) {
                             Text("Start Workout")
                             if model.isWorking {
-                                Spacer()
-                                ProgressView()
+                                ProgressView().tint(Theme.canvas)
                             }
                         }
                     }
+                    .buttonStyle(PrimaryButtonStyle())
                     .disabled(model.isWorking || day.exercises.isEmpty)
                     .accessibilityIdentifier("startWorkout")
+                    .bareRow()
                 } footer: {
                     if let message = model.errorMessage {
                         Text(message)
@@ -140,6 +202,8 @@ struct TodayView: View {
                     }
                 }
             }
+            // The next day slides its numbers over when a workout is finished.
+            .motion(value: next)
             .refreshable { await load() }
         } else {
             ContentUnavailableView(
