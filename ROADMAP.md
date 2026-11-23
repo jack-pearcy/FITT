@@ -668,6 +668,45 @@ Completed this phase (as of 2026-11-16):
     ads or sale of data, and sends the AI model only what a request needs. The policy is written to it.
   - support@fittapp.dev and privacy@fittapp.dev are Proton mailboxes, set up 2026-11-20 outside the
     repository, with SPF, DKIM and DMARC on the domain.
+- The repository went public under a view-only license (PR #130, PR #132, PR #133). The site no longer
+  calls the code open source, the LICENSE spells out that the code may be read and not reused, and the
+  site footer links to it. A deploy now waits for an approval on the production environment.
+- Deploy and CI were tightened (PR #124, PR #136). A deploy accepts only a commit that is in main's
+  history, runs only from main, and queues behind a running one. Every CI job gets a read-only token
+  unless it asks for more, and neither image is pushed unless both pass their scan. Dependabot groups
+  the Angular packages into one pull request and skips major versions of Angular, vitest and TypeScript.
+- A second uptime check shipped (PR #134): a Cloudflare Worker asks /api/health every five minutes, up
+  to three times, and starts the Uptime workflow when every try fails. Once a day it starts the
+  workflow anyway, so a green run shows the alarm path still works. That daily run has not been
+  confirmed yet.
+- The plan form keeps its draft (PR #135). An unsaved plan is stored on the device per user and per
+  plan for seven days, out of backups, and comes back if the form is closed by anything but Save or
+  Discard. A swipe no longer closes a form that has changes, and Cancel asks first.
+- The auth rate limit counts percent-encoded paths (PR #139). It matched the raw request path, so one
+  encoded letter in /login skipped the limit while the router still delivered the request.
+- Two-step sign-in shipped on the server only (PR #143, Flyway V10). A six-digit code from an
+  authenticator app (TOTP, RFC 6238) is the second step, with ten one-time recovery codes for a lost
+  phone. Sign-in changes only for an account that turned it on. It is off unless
+  FITT_MFA_ENCRYPTION_KEY is set. There are no app or web screens yet, and no passkeys.
+- Motion and a visual pass over every tab shipped (PR #141, PR #142, PR #144, PR #145). One file gates
+  all animation on Reduce Motion, under which everything becomes a short fade. Today leads with a
+  "Next up" card, a workout shows its progress and a running timer, a saved set gives a haptic, lists
+  animate on change, History opens to a summary card, and Weight has a trend line.
+- The Apple Watch app was started (PR #146, PR #147, PR #160, Flyway V11).
+  - The backend client moved out of the phone's UI module into its own package target, so the watch
+    can use it without the phone's screens.
+  - A watchOS app target ships inside the phone app. This first piece is the frame only: the watch
+    reads its own Keychain and shows either that it is connected or that the phone has to connect it.
+  - The server can connect a second device. The signed in phone asks for a code that lasts 60 seconds
+    and works once, and the watch trades it for its own session. Only a hash of the code is stored.
+    Ending the watch's session later does not sign the phone out.
+  - Not built: the phone and watch sides of connecting, a list of connected devices, and the workout
+    screens on the watch. Run on the watch simulator only, never on a real watch.
+- The support page now says the progression style is one setting for the account (PR #152). The
+  server has always kept one model per account; the page said it was chosen per exercise.
+- Dependencies were brought up to date in one batch on 2026-11-23, among them Angular 21.2.26 and
+  anthropic-java 3.11.0. One mismatch is left: the Angular command-line tool is on version 22 while
+  the framework is on 21.
 
 The loop a lifter needs now works end to end on the phone: account, onboarding, plan, workout, next day.
 Each piece was run on the simulator against a local backend before it merged, and three defects were found
@@ -689,16 +728,23 @@ V9), not the five this section used to name.
 - Not checked: a sign-in from the app against production. The coach is off until FITT_COACH_API_KEY is set
   on the server.
 
+Deployed again 2026-11-21 (40ac2d3) and 2026-11-23 (14c1bce, everything through PR #139). Main is ahead
+of production by two-step sign-in, the device codes, the motion work, the watch app and the dependency
+batch. The next deploy runs two migrations, V10 and V11.
+
 Remaining in this phase:
 - Upload a TestFlight build, after a sign-in from the app against production. The production server
   needs its own FITT_COACH_API_KEY for the coach.
 - A coach screen in the app.
+- Two-step sign-in: the app and web screens, passkeys, and the second step on password change and
+  account deletion. Production needs its own FITT_MFA_ENCRYPTION_KEY before it can be turned on.
+- The watch app: connecting from the phone, a list of connected devices, and the workout screens.
 - Turn on the off-server backup: choose a storage provider, set up rclone and the crontab on the server,
   alert when a night fails, and name the provider and the 30 day retention in the privacy policy.
 - Settings: change the units preference after onboarding. It needs a route to read biometrics back
   first (see the gaps below).
 - Make the mobile-test job a required check in the branch ruleset (a repository setting), and add a CI
-  build of the app target. The job runs the package tests only (311 at PR #111).
+  build of the app target. The job runs the package tests only (327 at PR #147).
 - Exercise how-to videos: a how-to icon beside an exercise that plays a short generated 3D clip of the
   movement, with the clips served from the existing Hetzner server. Noted 2026-11-15; not started.
 
