@@ -428,7 +428,7 @@ private struct AccountView: View {
                         if let calories = goals.calorieGoal {
                             LabeledContent("Daily calories") {
                                 Text("\(calories)")
-                                    .monospacedDigit()
+                                    .ticking()
                                     .accessibilityIdentifier("calorieGoal")
                             }
                             LabeledContent("Calorie goal", value: goals.calorieGoalMode == .auto ? "Automatic" : "Manual")
@@ -496,6 +496,10 @@ private struct AccountView: View {
                     .accessibilityIdentifier("deleteAccount")
                 }
             }
+            // Saved goals roll and fade to their new values, and the summary
+            // under the progression picker fades to the chosen model's.
+            .motion(value: model.goals)
+            .motion(value: model.progressionModel)
             .canvas()
             .navigationTitle("Account")
         }
