@@ -41,6 +41,7 @@ class IdentityAuthServiceTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private RefreshTokenService refreshTokenService;
     @Mock private MfaService mfaService;
+    @Mock private DeviceLinkService deviceLinkService;
 
     private IdentityAuthService service;
 
@@ -50,7 +51,7 @@ class IdentityAuthServiceTest {
         props.setSecretValue("irrelevant-for-this-test-but-long-enough");
         service = new IdentityAuthService(
                 authenticationManager, jwtEncoder, props, userRepository, passwordEncoder, refreshTokenService,
-                mfaService);
+                mfaService, deviceLinkService);
     }
 
     private void stubTokenEncoding() {

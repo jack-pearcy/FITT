@@ -42,7 +42,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     private static final Set<String> LIMITED_PATHS =
             Set.of("/api/identity/auth/login", "/api/identity/auth/register", "/api/identity/auth/refresh",
-                    "/api/identity/auth/logout", "/api/identity/auth/mfa");
+                    "/api/identity/auth/logout", "/api/identity/auth/mfa", "/api/identity/auth/device-link");
 
     // Above this many tracked clients, drop the idle ones so the map cannot grow
     // without bound under a flood of distinct addresses.
@@ -72,7 +72,8 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private static final Set<String> LIMITED_SUFFIXES = Set.of(
             "/identity/account/delete", "/identity/account/password",
             "/identity/mfa/totp/setup", "/identity/mfa/totp/confirm",
-            "/identity/mfa/totp/disable", "/identity/mfa/recovery-codes");
+            "/identity/mfa/totp/disable", "/identity/mfa/recovery-codes",
+            "/identity/device-link");
 
     @Override
     protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {

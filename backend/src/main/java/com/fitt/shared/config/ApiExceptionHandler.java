@@ -31,6 +31,7 @@ import com.fitt.identity.service.exception.GoalNotFoundException;
 import com.fitt.identity.service.exception.IncorrectPasswordException;
 import com.fitt.identity.service.exception.InvalidMfaCodeException;
 import com.fitt.identity.service.exception.InvalidRefreshTokenException;
+import com.fitt.identity.service.exception.DeviceLinkException;
 import com.fitt.identity.service.exception.MfaChallengeException;
 import com.fitt.identity.service.exception.MfaLockedException;
 import com.fitt.identity.service.exception.MfaStateException;
@@ -244,6 +245,14 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     public ResponseEntity<ProblemDetail> handleMfaChallenge(MfaChallengeException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
         problem.setTitle("Sign-in Step Expired");
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problem);
+    }
+
+    // 401: the device is not signed in, and the code has to be asked for again.
+    @ExceptionHandler(DeviceLinkException.class)
+    public ResponseEntity<ProblemDetail> handleDeviceLink(DeviceLinkException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problem.setTitle("Device Link Refused");
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problem);
     }
 
