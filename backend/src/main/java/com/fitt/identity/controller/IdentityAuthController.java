@@ -1,12 +1,16 @@
 package com.fitt.identity.controller;
 
 import com.fitt.identity.dto.LoginRequest;
+import com.fitt.identity.dto.LoginResponse;
+import com.fitt.identity.dto.MfaLoginRequest;
 import com.fitt.identity.dto.RefreshRequest;
 import com.fitt.identity.dto.RegisterRequest;
 import com.fitt.identity.dto.TokenResponse;
 import com.fitt.identity.service.AuthTokens;
 import com.fitt.identity.service.IdentityAuthService;
+import com.fitt.identity.service.LoginResult;
 import jakarta.validation.Valid;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,9 +40,25 @@ public class IdentityAuthController {
 
     // Public endpoint, configured in SecurityConfig.
     // 401 is handled automatically by Spring Security if credentials fail.
+    // For an account with two-step sign-in the answer holds no tokens, only the
+    // token for the second step below.
     @PostMapping("/login")
-    public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
-        AuthTokens tokens = identityAuthService.login(request.email(), request.password());
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+        LoginResult result = identityAuthService.login(request.email(), request.password());
+        if (result.needsSecondStep()) {
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                    .body(LoginResponse.secondStepDue(result.mfaToken()));
+        }
+        return ResponseEntity.ok(LoginResponse.signedIn(
+                result.tokens().accessToken(), result.tokens().refreshToken()));
+    }
+
+    // The second step: the token from login plus a code from the authenticator
+    // app, or a recovery code. Public for the same reason refresh is: there is no
+    // access token yet, and the token in the body is the credential.
+    @PostMapping("/mfa")
+    public ResponseEntity<TokenResponse> completeMfaLogin(@Valid @RequestBody MfaLoginRequest request) {
+        AuthTokens tokens = identityAuthService.completeMfaLogin(request.mfaToken(), request.code());
         return ResponseEntity.ok(toResponse(tokens));
     }
 

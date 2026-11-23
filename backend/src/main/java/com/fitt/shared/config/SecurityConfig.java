@@ -47,6 +47,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/api/identity/health").permitAll()
                         .requestMatchers("/api/identity/auth/login").permitAll()
+                        .requestMatchers("/api/identity/auth/mfa").permitAll()
                         .requestMatchers("/api/identity/auth/register").permitAll()
                         .requestMatchers("/api/identity/auth/refresh").permitAll()
                         .requestMatchers("/api/identity/auth/logout").permitAll()
