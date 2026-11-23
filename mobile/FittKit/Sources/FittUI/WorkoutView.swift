@@ -37,6 +37,11 @@ struct WorkoutView: View {
     @State private var notes = ""
     /// The exercise waiting for a yes before it is removed with its sets.
     @State private var removing: ExerciseEntry?
+    /// The set that was just saved. Its tile is lit for a moment, then settles.
+    @State private var justLogged: Int64?
+    /// Goes up by one for each saved set, which is what the haptic listens to.
+    @State private var loggedCount = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var focus: Field?
 
     private struct Field: Hashable {
@@ -50,6 +55,11 @@ struct WorkoutView: View {
     var body: some View {
         if let session = model.activeSession {
             ThemedList {
+                Section {
+                    WorkoutProgressCard(session: session, plannedSets: plannedSets(in: session))
+                        .bareRow()
+                }
+
                 ForEach(session.orderedEntries) { entry in
                     Section {
                         ForEach(entry.orderedSets) { set in
@@ -64,6 +74,12 @@ struct WorkoutView: View {
                                 }
                             }
                             .setTile()
+                            .overlay {
+                                RoundedRectangle(cornerRadius: Theme.rowRadius, style: .continuous)
+                                    .strokeBorder(Theme.accent, lineWidth: 1.5)
+                                    .opacity(justLogged == set.id ? 1 : 0)
+                            }
+                            .scaleEffect(justLogged == set.id && !reduceMotion ? 1.03 : 1)
                             .swipeActions {
                                 Button("Delete", role: .destructive) {
                                     Task { await model.deleteSet(set.id, entryId: entry.id) }
@@ -143,26 +159,35 @@ struct WorkoutView: View {
                             }
                         }
                     } label: {
-                        HStack {
+                        HStack(spacing: Theme.Space.s) {
                             Text("Finish Workout")
                             if model.isWorking {
-                                Spacer()
-                                ProgressView()
+                                ProgressView().tint(Theme.canvas)
                             }
                         }
                     }
+                    .buttonStyle(PrimaryButtonStyle())
                     .disabled(model.isWorking)
                     .accessibilityIdentifier("finishWorkout")
+                    .bareRow()
+                } footer: {
+                    Text("Finishing moves your plan on to its next day.")
+                }
 
+                Section {
                     Button("Discard Workout", role: .destructive) {
                         confirmingDiscard = true
                     }
                     .disabled(model.isWorking)
                     .accessibilityIdentifier("discardWorkout")
-                } footer: {
-                    Text("Finishing moves your plan on to its next day.")
                 }
             }
+            // Sets and exercises slide in and out as the session changes, and a
+            // suggestion fades in when it arrives.
+            .motion(value: session)
+            .motion(value: model.suggestions)
+            .motion(Theme.quick, value: justLogged)
+            .sensoryFeedback(.success, trigger: loggedCount)
             .scrollDismissesKeyboard(.interactively)
             .keyboardDoneBar(isShown: focus != nil) { focus = nil }
             // A message about the last attempt is stale once the user edits a set.
@@ -244,17 +269,40 @@ struct WorkoutView: View {
                 Task {
                     // The values stay in the row after a save: the next set is
                     // usually the same weight and reps.
-                    _ = await model.logSet(draft.wrappedValue, entryId: entry.id)
+                    if await model.logSet(draft.wrappedValue, entryId: entry.id) {
+                        celebrate(entryId: entry.id)
+                    }
                 }
             }
-            // Without this, a button in a list row makes the whole row one tap target.
-            .buttonStyle(.borderless)
+            // A style of its own also keeps the tap on the button. With the default
+            // style, a button in a list row makes the whole row one tap target.
+            .buttonStyle(PillButtonStyle())
             .disabled(model.isWorking)
             .accessibilityIdentifier("logSet.\(entry.orderIndex)")
         }
         ForEach(["weight", "reps", "rpe"], id: \.self) { field in
             FieldError(field: AppModel.setFieldKey(entryId: entry.id, field: field))
         }
+    }
+
+    /// Marks the newest set of an entry as just logged, and lets go of it a
+    /// moment later so the tile settles back.
+    private func celebrate(entryId: Int64) {
+        guard let newest = model.activeSession?.exerciseEntries
+            .first(where: { $0.id == entryId })?.sets.map(\.id).max()
+        else { return }
+        loggedCount += 1
+        justLogged = newest
+        Task {
+            try? await Task.sleep(for: .milliseconds(650))
+            if justLogged == newest { justLogged = nil }
+        }
+    }
+
+    /// The sets the plan asks for across the exercises of this workout. Zero
+    /// when none of them is in the plan's day.
+    private func plannedSets(in session: WorkoutSession) -> Int {
+        session.exerciseEntries.reduce(0) { $0 + (target(for: $1)?.sets ?? 0) }
     }
 
     /// An exercise with nothing logged goes at once. One with sets asks first,
@@ -272,5 +320,50 @@ struct WorkoutView: View {
     /// session came from the day the server still reports as next.
     private func target(for entry: ExerciseEntry) -> PlanDayExercise? {
         model.nextLift?.day?.exercises.first { $0.exercise.id == entry.exercise.id }
+    }
+}
+
+/// The top of a workout: how long it has run and how many sets are in.
+private struct WorkoutProgressCard: View {
+    let session: WorkoutSession
+    /// Zero when the plan has no target for this workout.
+    let plannedSets: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                    Text("Sets").sectionLabel()
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Space.xs) {
+                        Text("\(session.loggedSetCount)")
+                            .heroMetric()
+                            .ticking()
+                        if plannedSets > 0 {
+                            Text("of \(plannedSets)")
+                                .font(.title3.weight(.medium))
+                                .foregroundStyle(Theme.textSecondary)
+                                .ticking()
+                        }
+                    }
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: Theme.Space.xs) {
+                    Text("Time").sectionLabel()
+                    Text(session.startedAt, style: .timer)
+                        .font(.title3.weight(.medium))
+                        .metric()
+                        .foregroundStyle(Theme.textPrimary)
+                }
+            }
+            if plannedSets > 0 {
+                ProgressBar(fraction: Double(session.loggedSetCount) / Double(plannedSets))
+            }
+        }
+        .card()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(plannedSets > 0
+            ? "\(session.loggedSetCount) of \(plannedSets) sets logged"
+            : "\(session.loggedSetCount) sets logged")
+        .accessibilityIdentifier("workoutProgress")
     }
 }
