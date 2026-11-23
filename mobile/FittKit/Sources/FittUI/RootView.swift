@@ -9,7 +9,8 @@ public struct RootView: View {
         let tokenStore = KeychainTokenStore()
         _model = State(initialValue: AppModel(
             backend: Backend(config: config, tokenStore: tokenStore),
-            tokenStore: tokenStore
+            tokenStore: tokenStore,
+            drafts: DraftStore()
         ))
     }
 

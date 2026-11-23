@@ -23,8 +23,9 @@ public struct NewWorkoutPlan: Encodable, Equatable, Sendable {
 }
 
 /// A plan being built in the form. `plan()` turns it into a request or reports
-/// which fields are wrong, so the screen holds no rules of its own.
-public struct PlanDraft: Equatable, Sendable {
+/// which fields are wrong, so the screen holds no rules of its own. It is
+/// Codable so an unsaved form can be kept on the device.
+public struct PlanDraft: Codable, Equatable, Sendable {
     public static let maxNameLength = 100
     public static let maxLabelLength = 50
     public static let daysPerWeek = 1...7
@@ -33,7 +34,7 @@ public struct PlanDraft: Equatable, Sendable {
     public static let sets = 1...20
     public static let reps = 1...200
 
-    public struct Slot: Equatable, Identifiable, Sendable {
+    public struct Slot: Codable, Equatable, Identifiable, Sendable {
         public let id: UUID
         public let exercise: Exercise
         public var sets: Int
@@ -47,7 +48,7 @@ public struct PlanDraft: Equatable, Sendable {
         }
     }
 
-    public struct Day: Equatable, Identifiable, Sendable {
+    public struct Day: Codable, Equatable, Identifiable, Sendable {
         public let id: UUID
         public var label: String
         public var slots: [Slot]
