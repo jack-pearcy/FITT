@@ -35,19 +35,36 @@ struct HistoryView: View {
                             NavigationLink {
                                 SessionDetailView(session: session, planName: planName(for: session))
                             } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
-                                    Text([planName(for: session), session.contentText, session.durationText]
-                                        .compactMap { $0 }
-                                        .joined(separator: " · "))
-                                        .font(.footnote)
-                                        .foregroundStyle(Theme.textSecondary)
+                                HStack(spacing: Theme.Space.m) {
+                                    VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                                        Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
+                                            .font(.headline)
+                                            .foregroundStyle(Theme.textPrimary)
+                                        Text([planName(for: session), session.contentText]
+                                            .compactMap { $0 }
+                                            .joined(separator: " · "))
+                                            .font(.footnote)
+                                            .foregroundStyle(Theme.textSecondary)
+                                    }
+                                    Spacer(minLength: 0)
+                                    if let durationText = session.durationText {
+                                        Text(durationText)
+                                            .font(.footnote.weight(.medium))
+                                            .metric()
+                                            .foregroundStyle(Theme.textSecondary)
+                                            .padding(.horizontal, Theme.Space.s)
+                                            .padding(.vertical, 3)
+                                            .background(Theme.well, in: Capsule())
+                                    }
                                 }
+                                .padding(.vertical, Theme.Space.xs)
                             }
                             .accessibilityIdentifier("session.\(session.id)")
                             .listRowBackground(Theme.card)
                         }
                         .themedScroll()
+                        // A finished workout slides in at the top, and a deleted one slides out.
+                        .motion(value: history)
                         .refreshable { await load() }
                     }
                 } else if let message = model.errorMessage {
@@ -89,13 +106,26 @@ private struct SessionDetailView: View {
     var body: some View {
         ThemedList {
             Section {
-                LabeledContent("Started", value: session.startedAt.formatted(date: .abbreviated, time: .shortened))
-                if let durationText = session.durationText {
-                    LabeledContent("Length", value: durationText)
+                VStack(alignment: .leading, spacing: Theme.Space.m) {
+                    VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                        Text(planName ?? "Workout").sectionLabel()
+                        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.xs) {
+                            Text("\(session.loggedSetCount)").heroMetric()
+                            Text(session.loggedSetCount == 1 ? "set" : "sets")
+                                .font(.title3.weight(.medium))
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                    }
+                    Text([session.startedAt.formatted(date: .abbreviated, time: .shortened), session.durationText]
+                        .compactMap { $0 }
+                        .joined(separator: " · "))
+                        .font(.footnote)
+                        .foregroundStyle(Theme.textSecondary)
                 }
-                if let planName {
-                    LabeledContent("Plan", value: planName)
-                }
+                .card()
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("sessionSummary")
+                .bareRow()
             }
 
             if let notes = session.notes {

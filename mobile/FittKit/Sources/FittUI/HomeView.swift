@@ -36,6 +36,18 @@ private struct ExerciseRow: View {
     }
 }
 
+/// Marks the plan the user is training on.
+private struct ActiveBadge: View {
+    var body: some View {
+        Text("Active")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Theme.canvas)
+            .padding(.horizontal, Theme.Space.s)
+            .padding(.vertical, 3)
+            .background(Theme.accent, in: Capsule())
+    }
+}
+
 /// What to train next, as one card: the day, the plan it belongs to, and how far
 /// through the rotation it is.
 private struct NextLiftCard: View {
@@ -236,20 +248,30 @@ struct PlansView: View {
                     } else {
                         List(plans) { plan in
                             NavigationLink(value: plan.id) {
-                                LabeledContent {
-                                    if plan.active {
-                                        Text("Active")
-                                            .foregroundStyle(.tint)
+                                HStack(spacing: Theme.Space.m) {
+                                    VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                                        Text(plan.name)
+                                            .font(.headline)
+                                            .foregroundStyle(Theme.textPrimary)
+                                        Text("\(plan.splitType.label), \(plan.daysPerWeek) days a week")
+                                            .font(.footnote)
+                                            .foregroundStyle(Theme.textSecondary)
                                     }
-                                } label: {
-                                    Text(plan.name)
-                                    Text("\(plan.splitType.label), \(plan.daysPerWeek) days a week")
+                                    Spacer(minLength: 0)
+                                    if plan.active {
+                                        ActiveBadge()
+                                            .entrance()
+                                    }
                                 }
+                                .padding(.vertical, Theme.Space.xs)
                             }
                             .accessibilityIdentifier("plan.\(plan.id)")
                             .listRowBackground(Theme.card)
                         }
                         .themedScroll()
+                        // A new plan slides in, a deleted one slides out, and the
+                        // Active badge settles on the plan that now has it.
+                        .motion(value: plans)
                         .refreshable { await model.loadPlans() }
                     }
                 } else if let message = model.errorMessage {
@@ -309,7 +331,10 @@ private struct PlanDetailView: View {
                     LabeledContent("Split", value: plan.splitType.label)
                     LabeledContent("Days a week", value: "\(plan.daysPerWeek)")
                     if plan.active {
-                        LabeledContent("Status", value: "Active")
+                        LabeledContent("Status") { ActiveBadge() }
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Status")
+                            .accessibilityValue("Active")
                     } else {
                         Button {
                             Task { await model.activatePlan(plan.id) }
@@ -351,6 +376,9 @@ private struct PlanDetailView: View {
                         .accessibilityIdentifier("deletePlan")
                 }
             }
+            // Make Active gives way to the status row, and edited days move to
+            // their new places.
+            .motion(value: plan)
             .canvas()
             .navigationTitle(plan.name)
             .toolbar {
