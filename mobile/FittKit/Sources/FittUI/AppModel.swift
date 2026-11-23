@@ -1,3 +1,4 @@
+import FittAPI
 import FittCore
 import Foundation
 import Observation

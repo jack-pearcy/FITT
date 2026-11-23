@@ -1,6 +1,7 @@
 import FittCore
 import Foundation
 import Testing
+@testable import FittAPI
 @testable import FittUI
 
 @Suite("AppModel")

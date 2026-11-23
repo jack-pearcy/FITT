@@ -1,4 +1,5 @@
 import Foundation
+@testable import FittAPI
 @testable import FittUI
 
 /// A canned HTTP response for one request.

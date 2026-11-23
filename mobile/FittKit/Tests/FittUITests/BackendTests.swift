@@ -1,7 +1,7 @@
 import FittCore
 import Foundation
 import Testing
-@testable import FittUI
+@testable import FittAPI
 
 @Suite("Backend")
 struct BackendTests {

@@ -1,4 +1,4 @@
-import FittUI
+import FittAPI
 import Foundation
 
 // Which FITT API the app talks to. Nothing secret belongs in this file.
