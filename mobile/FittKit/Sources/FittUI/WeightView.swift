@@ -1,3 +1,4 @@
+import Charts
 import FittCore
 import SwiftUI
 
@@ -33,12 +34,21 @@ struct WeightView: View {
                         ThemedList {
                             if let average = model.weightAverage {
                                 Section {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("7 day average").sectionLabel()
-                                        Text(model.units.bodyWeightText(kilograms: average)).heroMetric()
+                                    VStack(alignment: .leading, spacing: Theme.Space.m) {
+                                        VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                                            Text("7 day average").sectionLabel()
+                                            Text(model.units.bodyWeightText(kilograms: average))
+                                                .heroMetric()
+                                                .ticking()
+                                        }
+                                        if entries.count > 1 {
+                                            WeightTrend(entries: entries)
+                                        }
                                     }
+                                    .card()
                                     .accessibilityElement(children: .combine)
                                     .accessibilityIdentifier("weightAverage")
+                                    .bareRow()
                                 }
                             }
                             Section {
@@ -63,6 +73,10 @@ struct WeightView: View {
                                 }
                             }
                         }
+                        // A logged day slides into the list, a deleted one slides out,
+                        // and the average rolls to its new value.
+                        .motion(value: entries)
+                        .motion(value: model.weightAverage)
                         .refreshable { await model.loadWeightLog() }
                     }
                 } else if let message = model.errorMessage {
@@ -84,6 +98,61 @@ struct WeightView: View {
             }
         }
         .task { await model.loadWeightLog() }
+    }
+}
+
+/// The logged weights as one line, oldest on the left. It has no axes: it shows
+/// the direction, and the list below has the numbers. The line draws in from
+/// the left the first time it shows, and fades in under Reduce Motion.
+private struct WeightTrend: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let entries: [BodyWeightEntry]
+    @State private var drawn = false
+
+    private struct Point: Identifiable {
+        let id: Int64
+        let date: Date
+        let kilograms: Double
+    }
+
+    private var points: [Point] {
+        entries
+            .compactMap { entry in
+                entry.loggedAt.date().map {
+                    Point(id: entry.id, date: $0, kilograms: NSDecimalNumber(decimal: entry.weight).doubleValue)
+                }
+            }
+            .sorted { $0.date < $1.date }
+    }
+
+    var body: some View {
+        let points = points
+        let low = points.map(\.kilograms).min() ?? 0
+        let high = points.map(\.kilograms).max() ?? 1
+        // Room above and below, so a flat week is a line across the middle
+        // and not one pressed against an edge.
+        let margin = max((high - low) * 0.15, 0.25)
+
+        Chart(points) { point in
+            LineMark(x: .value("Day", point.date), y: .value("Weight", point.kilograms))
+                .interpolationMethod(.monotone)
+                .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                .foregroundStyle(Theme.accent)
+        }
+        .chartXAxis(.hidden)
+        .chartYAxis(.hidden)
+        .chartYScale(domain: (low - margin)...(high + margin))
+        .frame(height: 64)
+        .mask(alignment: .leading) {
+            Rectangle().scaleEffect(x: drawn || reduceMotion ? 1 : 0, anchor: .leading)
+        }
+        .opacity(drawn ? 1 : 0)
+        .onAppear {
+            withAnimation(reduceMotion ? Theme.calm : .easeOut(duration: 0.7)) {
+                drawn = true
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
