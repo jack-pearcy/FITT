@@ -29,7 +29,12 @@ import com.fitt.coach.service.exception.CoachUnavailableException;
 import com.fitt.identity.service.exception.BiometricsNotFoundException;
 import com.fitt.identity.service.exception.GoalNotFoundException;
 import com.fitt.identity.service.exception.IncorrectPasswordException;
+import com.fitt.identity.service.exception.InvalidMfaCodeException;
 import com.fitt.identity.service.exception.InvalidRefreshTokenException;
+import com.fitt.identity.service.exception.MfaChallengeException;
+import com.fitt.identity.service.exception.MfaLockedException;
+import com.fitt.identity.service.exception.MfaStateException;
+import com.fitt.identity.service.exception.MfaUnavailableException;
 import com.fitt.workouts.service.exception.ExerciseEntryNotFoundException;
 import com.fitt.workouts.service.exception.SetEntryNotFoundException;
 
@@ -221,6 +226,50 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
         problem.setTitle("Invalid Refresh Token");
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problem);
+    }
+
+    // 400 under the field, like a wrong password on a signed in route. The same
+    // answer at the second sign-in step: nobody is signed in there yet, so there is
+    // no session a 401 could wrongly end, and the client shows it beside the box.
+    @ExceptionHandler(InvalidMfaCodeException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidMfaCode(InvalidMfaCodeException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation failed");
+        problem.setTitle("Bad Request");
+        problem.setProperty("errors", Map.of("code", ex.getMessage()));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
+    }
+
+    // 401: the first step has to be done again, which is what a client does on 401.
+    @ExceptionHandler(MfaChallengeException.class)
+    public ResponseEntity<ProblemDetail> handleMfaChallenge(MfaChallengeException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problem.setTitle("Sign-in Step Expired");
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problem);
+    }
+
+    @ExceptionHandler(MfaLockedException.class)
+    public ResponseEntity<ProblemDetail> handleMfaLocked(MfaLockedException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+        problem.setTitle("Too Many Requests");
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+                .body(problem);
+    }
+
+    // 503: switched off on this server, the request itself was fine.
+    @ExceptionHandler(MfaUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleMfaUnavailable(MfaUnavailableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+        problem.setTitle("Two-step Sign-in Unavailable");
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(problem);
+    }
+
+    // 409: a valid request that does not fit the account's current state.
+    @ExceptionHandler(MfaStateException.class)
+    public ResponseEntity<ProblemDetail> handleMfaState(MfaStateException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Conflict");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
     }
 
     // Re-thrown so ExceptionTranslationFilter routes it to RestAccessDeniedHandler.

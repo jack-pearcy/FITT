@@ -25,7 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 // Slows down password guessing, account spam, and refresh token guessing on the
 // public auth endpoints, and password guessing on the routes that ask a signed in
-// user for the password again. Logout is public too and looks a refresh token up,
+// user for the password again. The second sign-in step and the two-step sign-in
+// settings are limited here too, on top of the per-account lock on wrong codes. Logout is public too and looks a refresh token up,
 // so it is limited with the rest.
 // A sliding window per client address: more than maxAttempts POSTs inside the
 // window gets a 429 with Retry-After until the oldest attempt ages out.
@@ -41,7 +42,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     private static final Set<String> LIMITED_PATHS =
             Set.of("/api/identity/auth/login", "/api/identity/auth/register", "/api/identity/auth/refresh",
-                    "/api/identity/auth/logout");
+                    "/api/identity/auth/logout", "/api/identity/auth/mfa");
 
     // Above this many tracked clients, drop the idle ones so the map cannot grow
     // without bound under a flood of distinct addresses.
@@ -68,7 +69,10 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     // Signed in routes that take the password again. The user id is in the middle
     // of the path, so these are matched by their ending.
-    private static final Set<String> LIMITED_SUFFIXES = Set.of("/identity/account/delete", "/identity/account/password");
+    private static final Set<String> LIMITED_SUFFIXES = Set.of(
+            "/identity/account/delete", "/identity/account/password",
+            "/identity/mfa/totp/setup", "/identity/mfa/totp/confirm",
+            "/identity/mfa/totp/disable", "/identity/mfa/recovery-codes");
 
     @Override
     protected boolean shouldNotFilter(@NonNull HttpServletRequest request) {

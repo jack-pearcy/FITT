@@ -26,6 +26,7 @@ public class AccountService {
     private final UserGoalRepository goalRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
+    private final MfaService mfaService;
     private final List<UserDataEraser> erasers;
 
     public AccountService(
@@ -34,6 +35,7 @@ public class AccountService {
             UserGoalRepository goalRepository,
             RefreshTokenRepository refreshTokenRepository,
             PasswordEncoder passwordEncoder,
+            MfaService mfaService,
             List<UserDataEraser> erasers
     ) {
         this.userRepository = userRepository;
@@ -41,6 +43,7 @@ public class AccountService {
         this.goalRepository = goalRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
+        this.mfaService = mfaService;
         this.erasers = erasers;
     }
 
@@ -64,6 +67,7 @@ public class AccountService {
         // so nothing is ever left pointing at an account that is not there.
         erasers.forEach(eraser -> eraser.eraseUserData(userId));
         refreshTokenRepository.deleteAllForUser(userId);
+        mfaService.eraseAll(userId);
         biometricsRepository.deleteAllForUser(userId);
         goalRepository.deleteAllForUser(userId);
         userRepository.deleteById(userId);

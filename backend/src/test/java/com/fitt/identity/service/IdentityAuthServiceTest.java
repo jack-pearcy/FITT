@@ -40,6 +40,7 @@ class IdentityAuthServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private RefreshTokenService refreshTokenService;
+    @Mock private MfaService mfaService;
 
     private IdentityAuthService service;
 
@@ -48,7 +49,8 @@ class IdentityAuthServiceTest {
         JwtProperties props = new JwtProperties();
         props.setSecretValue("irrelevant-for-this-test-but-long-enough");
         service = new IdentityAuthService(
-                authenticationManager, jwtEncoder, props, userRepository, passwordEncoder, refreshTokenService);
+                authenticationManager, jwtEncoder, props, userRepository, passwordEncoder, refreshTokenService,
+                mfaService);
     }
 
     private void stubTokenEncoding() {
@@ -139,7 +141,24 @@ class IdentityAuthServiceTest {
         when(refreshTokenService.issue(7L)).thenReturn("refresh-1");
 
         assertThat(service.login("jack@example.com", "whatever"))
-                .isEqualTo(new AuthTokens("token", "refresh-1"));
+                .isEqualTo(LoginResult.signedIn(new AuthTokens("token", "refresh-1")));
+    }
+
+    @Test
+    void login_withTwoStepSignInOn_issuesAChallengeAndNoTokens() {
+        Authentication auth = org.mockito.Mockito.mock(Authentication.class);
+        UserEntity user = new UserEntity("jack@example.com", "hash");
+        ReflectionTestUtils.setField(user, "id", 7L);
+        when(auth.getPrincipal()).thenReturn(user);
+        when(authenticationManager.authenticate(any(Authentication.class))).thenReturn(auth);
+        when(mfaService.isRequiredAtLogin(7L)).thenReturn(true);
+        when(mfaService.startChallenge(7L)).thenReturn("challenge-1");
+
+        assertThat(service.login("jack@example.com", "whatever"))
+                .isEqualTo(LoginResult.needsSecondStep("challenge-1"));
+
+        // The point of the second step: a correct password alone buys no token.
+        org.mockito.Mockito.verifyNoInteractions(jwtEncoder, refreshTokenService);
     }
 
     @Test
