@@ -68,7 +68,7 @@ struct WeightView: View {
                 } else if let message = model.errorMessage {
                     LoadFailedView(message: message) { await model.loadWeightLog() }
                 } else {
-                    ProgressView()
+                    SkeletonList()
                 }
             }
             .canvas()

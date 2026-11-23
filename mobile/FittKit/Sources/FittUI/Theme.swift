@@ -29,7 +29,19 @@ enum Theme {
     /// The spring for every animated change: quick, and it settles without a bounce.
     static let spring = Animation.spring(response: 0.32, dampingFraction: 1)
 
+    /// A row, a tile, a button.
     static let rowRadius: CGFloat = 14
+    /// A card that stands on the canvas by itself.
+    static let cardRadius: CGFloat = 20
+
+    /// The steps every gap and inset is taken from.
+    enum Space {
+        static let xs: CGFloat = 4
+        static let s: CGFloat = 8
+        static let m: CGFloat = 12
+        static let l: CGFloat = 16
+        static let xl: CGFloat = 24
+    }
 }
 
 extension Color {
@@ -150,6 +162,21 @@ extension View {
             .tracking(-1.3)
             .minimumScaleFactor(0.6)
             .lineLimit(1)
+    }
+
+    /// A block of content that stands on the canvas by itself, outside a list.
+    func card() -> some View {
+        self
+            .padding(Theme.Space.l)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+    }
+
+    /// The headline of a card.
+    func cardTitle() -> some View {
+        self
+            .font(.title3.weight(.semibold))
+            .foregroundStyle(Theme.textPrimary)
     }
 
     /// A row drawn as its own tile on the nested surface.

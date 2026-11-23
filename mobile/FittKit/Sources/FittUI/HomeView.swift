@@ -72,7 +72,7 @@ struct TodayView: View {
                 } else if let message = model.errorMessage {
                     LoadFailedView(message: message) { await load() }
                 } else {
-                    ProgressView()
+                    SkeletonList()
                 }
             }
             .canvas()
@@ -191,7 +191,7 @@ struct PlansView: View {
                 } else if let message = model.errorMessage {
                     LoadFailedView(message: message) { await model.loadPlans() }
                 } else {
-                    ProgressView()
+                    SkeletonList()
                 }
             }
             .canvas()
