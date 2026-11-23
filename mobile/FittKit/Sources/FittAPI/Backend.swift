@@ -54,6 +54,54 @@ public struct Backend: Sendable {
         _ = try await perform("POST", "/api/identity/auth/logout", body: RefreshRequest(refreshToken: refreshToken), authenticated: false)
     }
 
+    // MARK: Connecting a second device
+
+    /// Asks the server for a code that lets a second device, the watch, sign in
+    /// with a session of its own.
+    ///
+    /// The server wants the refresh token as well as the access token, so a
+    /// stolen access token alone cannot be turned into a long-lived session.
+    /// That is why this does not go through `perform`: a refresh replaces the
+    /// refresh token, so the body has to be built after any refresh, not before.
+    public func deviceLinkCode() async throws -> DeviceLinkCode {
+        // A Keychain that cannot be read (a locked phone) is an error, not a signed-out user.
+        guard var tokens = try tokenStore.read(), tokens.refreshToken != nil else {
+            throw BackendError.unauthorized
+        }
+        if isExpired(tokens.accessToken) {
+            tokens = try await refresher.refresh(replacing: tokens.accessToken)
+        }
+        do {
+            return try await sendDeviceLinkRequest(with: tokens)
+        } catch BackendError.unauthorized {
+            // Either token may be the stale one. One refresh renews both.
+            let renewed = try await refresher.refresh(replacing: tokens.accessToken)
+            return try await sendDeviceLinkRequest(with: renewed)
+        }
+    }
+
+    private func sendDeviceLinkRequest(with tokens: SessionTokens) async throws -> DeviceLinkCode {
+        guard let refreshToken = tokens.refreshToken,
+              let claims = try? TokenClaims(token: tokens.accessToken) else {
+            throw BackendError.unauthorized
+        }
+        let body = try JSONEncoder().encode(RefreshRequest(refreshToken: refreshToken))
+        let data = try await transport.send(
+            "POST", "/api/users/\(claims.userId)/identity/device-link", body: body, accessToken: tokens.accessToken)
+        guard let code = try? JSONDecoder().decode(DeviceLinkCode.self, from: data) else {
+            throw BackendError.undecodableResponse
+        }
+        return code
+    }
+
+    /// Trades a code from `deviceLinkCode()` for this device's own session. The
+    /// caller stores the tokens. A 401 means the code was used, expired or wrong.
+    public func redeemDeviceLink(code: String) async throws -> SessionTokens {
+        let response: TokenResponse = try await send(
+            "POST", "/api/identity/auth/device-link", body: DeviceLinkRedeem(code: code), authenticated: false)
+        return SessionTokens(response)
+    }
+
     /// Deletes the account and everything stored for it. The server answers 400
     /// with a message for `password` when the password is wrong. After a 204 every
     /// token of the account is dead, so the caller must forget the session.

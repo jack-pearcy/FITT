@@ -34,6 +34,27 @@ public struct RefreshRequest: Encodable, Equatable, Sendable {
     }
 }
 
+/// The answer of `POST /api/users/{id}/identity/device-link`: a code a second
+/// device trades for a session of its own. It works once and only for a short time.
+public struct DeviceLinkCode: Decodable, Equatable, Sendable {
+    public let code: String
+    public let expiresInSeconds: Int
+
+    public init(code: String, expiresInSeconds: Int) {
+        self.code = code
+        self.expiresInSeconds = expiresInSeconds
+    }
+}
+
+/// The body of `POST /api/identity/auth/device-link`, sent by the second device.
+public struct DeviceLinkRedeem: Encodable, Equatable, Sendable {
+    public let code: String
+
+    public init(code: String) {
+        self.code = code
+    }
+}
+
 /// The body of `POST /api/users/{id}/identity/account/delete`: the current
 /// password, typed again, so a session alone is not enough to delete an account.
 public struct AccountDeletion: Encodable, Equatable, Sendable {
