@@ -60,7 +60,7 @@ class PasswordChangeTest {
     void changePassword_endsEverySessionThatCameBeforeIt() throws Exception {
         Account account = register();
         // A second device, signed in on its own.
-        AuthTokens otherDevice = authService.login(account.email(), account.password());
+        AuthTokens otherDevice = authService.login(account.email(), account.password()).tokens();
 
         change(account, account.id(), account.password(), newPassword()).andExpect(status().isOk());
 

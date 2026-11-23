@@ -138,4 +138,28 @@ class AuthRateLimitFilterTest {
 
         assertThat(call(filter, "POST", "/api/identity/auth/logout", "1.1.1.1").getStatus()).isEqualTo(429);
     }
+
+    @Test
+    void theSecondSignInStep_andTheTwoStepSettings_areLimited() throws Exception {
+        for (String path : new String[] {
+                "/api/identity/auth/mfa",
+                "/api/users/7/identity/mfa/totp/setup",
+                "/api/users/7/identity/mfa/totp/confirm",
+                "/api/users/7/identity/mfa/totp/disable",
+                "/api/users/7/identity/mfa/recovery-codes"}) {
+            AuthRateLimitFilter filter = new AuthRateLimitFilter(1, 60, new MutableClock());
+
+            assertThat(call(filter, "POST", path, "1.1.1.1").getStatus()).as(path).isEqualTo(200);
+            assertThat(call(filter, "POST", path, "1.1.1.1").getStatus()).as(path).isEqualTo(429);
+        }
+    }
+
+    @Test
+    void readingTheTwoStepStatus_isNotCounted() throws Exception {
+        AuthRateLimitFilter filter = new AuthRateLimitFilter(1, 60, new MutableClock());
+
+        for (int i = 0; i < 3; i++) {
+            assertThat(call(filter, "GET", "/api/users/7/identity/mfa", "1.1.1.1").getStatus()).isEqualTo(200);
+        }
+    }
 }

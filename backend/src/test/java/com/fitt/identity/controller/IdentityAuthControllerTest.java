@@ -2,6 +2,7 @@ package com.fitt.identity.controller;
 
 import com.fitt.identity.service.AuthTokens;
 import com.fitt.identity.service.IdentityAuthService;
+import com.fitt.identity.service.LoginResult;
 import com.fitt.identity.service.exception.EmailAlreadyExistsException;
 import com.fitt.identity.service.exception.InvalidRefreshTokenException;
 import org.junit.jupiter.api.Test;
@@ -122,7 +123,7 @@ class IdentityAuthControllerTest {
 
     @Test
     void login_validCredentials_returns200WithTokenInBody() throws Exception {
-        when(identityAuthService.login(VALID_EMAIL, VALID_PASSWORD)).thenReturn(FAKE_TOKENS);
+        when(identityAuthService.login(VALID_EMAIL, VALID_PASSWORD)).thenReturn(LoginResult.signedIn(FAKE_TOKENS));
 
         mockMvc.perform(post("/api/identity/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -132,6 +133,21 @@ class IdentityAuthControllerTest {
                 .andExpect(jsonPath("$.refreshToken").value(FAKE_REFRESH));
 
         verify(identityAuthService).login(VALID_EMAIL, VALID_PASSWORD);
+    }
+
+    @Test
+    void login_forAnAccountWithTwoStepSignIn_returnsTheSecondStepAndNoTokens() throws Exception {
+        when(identityAuthService.login(VALID_EMAIL, VALID_PASSWORD))
+                .thenReturn(LoginResult.needsSecondStep("challenge-token"));
+
+        mockMvc.perform(post("/api/identity/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(REQUEST_BODY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mfaRequired").value(true))
+                .andExpect(jsonPath("$.mfaToken").value("challenge-token"))
+                .andExpect(jsonPath("$.token").doesNotExist())
+                .andExpect(jsonPath("$.refreshToken").doesNotExist());
     }
 
     @Test
@@ -212,7 +228,7 @@ class IdentityAuthControllerTest {
     @Test
     void login_passwordAtTheBound_reachesTheService() throws Exception {
         String password = "a".repeat(256);
-        when(identityAuthService.login(VALID_EMAIL, password)).thenReturn(FAKE_TOKENS);
+        when(identityAuthService.login(VALID_EMAIL, password)).thenReturn(LoginResult.signedIn(FAKE_TOKENS));
 
         mockMvc.perform(post("/api/identity/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

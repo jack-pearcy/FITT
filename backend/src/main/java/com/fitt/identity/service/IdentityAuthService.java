@@ -5,6 +5,7 @@ import com.fitt.identity.repository.UserRepository;
 import com.fitt.identity.service.exception.EmailAlreadyExistsException;
 import com.fitt.identity.service.exception.IncorrectPasswordException;
 import com.fitt.identity.service.exception.InvalidRefreshTokenException;
+import com.fitt.identity.service.exception.MfaChallengeException;
 import com.fitt.shared.properties.JwtProperties;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -34,6 +35,7 @@ public class IdentityAuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenService refreshTokenService;
+    private final MfaService mfaService;
 
     public IdentityAuthService(
             AuthenticationManager authenticationManager,
@@ -41,7 +43,8 @@ public class IdentityAuthService {
             JwtProperties jwtProperties,
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
-            RefreshTokenService refreshTokenService
+            RefreshTokenService refreshTokenService,
+            MfaService mfaService
     ) {
         this.authenticationManager = authenticationManager;
         this.jwtEncoder = jwtEncoder;
@@ -49,6 +52,7 @@ public class IdentityAuthService {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.refreshTokenService = refreshTokenService;
+        this.mfaService = mfaService;
     }
 
     // Duplicate check runs first so we return a clean 409 instead of letting
@@ -75,7 +79,11 @@ public class IdentityAuthService {
     // Pattern matching instanceof checks the type and binds in one step.
     // In practice this never fails because loadUserByUsername always returns a UserEntity,
     // but failing fast here is cleaner than letting a ClassCastException surface later.
-    public AuthTokens login(String email, String password) {
+    //
+    // A correct password is the whole sign-in only for an account without
+    // two-step sign-in. With it, no token is issued here: the caller gets a
+    // challenge, and completeMfaLogin issues the tokens once the code is right.
+    public LoginResult login(String email, String password) {
         Authentication auth = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(normalizeEmail(email), password)
         );
@@ -85,6 +93,18 @@ public class IdentityAuthService {
             throw new IllegalStateException("unexpected principal type after authentication");
         }
 
+        if (mfaService.isRequiredAtLogin(user.getId())) {
+            return LoginResult.needsSecondStep(mfaService.startChallenge(user.getId()));
+        }
+        return LoginResult.signedIn(tokensFor(user));
+    }
+
+    // The second step. The challenge names the user, so the email is not sent
+    // again, and it is used up by a correct code.
+    public AuthTokens completeMfaLogin(String mfaToken, String code) {
+        Long userId = mfaService.redeemChallenge(mfaToken, code);
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(MfaChallengeException::new);
         return tokensFor(user);
     }
 

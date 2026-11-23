@@ -64,6 +64,11 @@ services:
       # Optional. With no key in .env the AI coach is switched off.
       FITT_COACH_API_KEY: ${FITT_COACH_API_KEY:-}
       FITT_COACH_MODEL: ${FITT_COACH_MODEL:-claude-opus-5-5}
+      # Optional. The key that encrypts authenticator app secrets: 32 random
+      # bytes, Base64 encoded. With no key in .env two-step sign-in is switched
+      # off. Once people have set it up, losing this key means they can only
+      # sign in with a recovery code, so it belongs in the same backup as .env.
+      FITT_MFA_ENCRYPTION_KEY: ${FITT_MFA_ENCRYPTION_KEY:-}
     # No host port published. The backend is reachable only by Caddy over the
     # internal Docker network. Publishing 8080 was fine locally but would
     # expose the API directly to the internet in production.
