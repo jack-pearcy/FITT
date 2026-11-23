@@ -1,16 +1,31 @@
 import FittAPI
 import SwiftUI
 
+/// The one token store and the one backend client of the phone app.
+///
+/// The app target makes this once and hands it to everything that talks to the
+/// server: the screens, and the part that answers the watch. They must share
+/// it, because only one of them may renew the session at a time.
+public struct AppServices: Sendable {
+    public let tokenStore: any TokenStore
+    public let backend: Backend
+
+    public init(config: BackendConfig) {
+        let tokenStore = KeychainTokenStore()
+        self.tokenStore = tokenStore
+        self.backend = Backend(config: config, tokenStore: tokenStore)
+    }
+}
+
 /// The single view the app target shows. It owns the app model and chooses
 /// between loading, sign in, and the signed-in screens.
 public struct RootView: View {
     @State private var model: AppModel
 
-    public init(config: BackendConfig) {
-        let tokenStore = KeychainTokenStore()
+    public init(services: AppServices) {
         _model = State(initialValue: AppModel(
-            backend: Backend(config: config, tokenStore: tokenStore),
-            tokenStore: tokenStore,
+            backend: services.backend,
+            tokenStore: services.tokenStore,
             drafts: DraftStore()
         ))
     }
