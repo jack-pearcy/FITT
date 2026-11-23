@@ -5,6 +5,13 @@ options:
   bundleIdPrefix: dev.fittapp
   deploymentTarget:
     iOS: "17.0"
+    watchOS: "10.0"
+# One version for the phone app and the watch app. App Store Connect refuses an
+# upload where the two differ, so it is set once here and not per target.
+settings:
+  base:
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
 packages:
   FittKit:
     path: FittKit
@@ -39,18 +46,51 @@ targets:
         product: FittUI
       - package: FittKit
         product: FittAPI
+      # Puts the watch app inside the phone app, which is how it reaches a watch:
+      # installing FITT on the iPhone offers it on the paired Apple Watch.
+      - target: FITTWatch
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.fittapp.fitt
         # The icon is drawn by tools/make-icon.swift into App/Assets.xcassets.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MARKETING_VERSION: "0.1"
-        CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
         TARGETED_DEVICE_FAMILY: "1"
         # Signing for a device or an archive. The team id comes from the environment
         # so it is not kept in the repository:
         #   FITT_DEVELOPMENT_TEAM=ABCDE12345 xcodegen
         # Without it the value is empty, which is enough for the simulator.
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ${FITT_DEVELOPMENT_TEAM}
+  FITTWatch:
+    type: application
+    platform: watchOS
+    sources: [Watch]
+    info:
+      path: Watch/Info.plist
+      properties:
+        CFBundleDisplayName: FITT
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        # A single-target watch app, the form Apple has asked for since watchOS 7.
+        WKApplication: true
+        # Ties the watch app to the phone app it ships inside.
+        WKCompanionAppBundleIdentifier: dev.fittapp.fitt
+        # Same reason as on the phone: a Debug build may reach a backend on this Mac.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    dependencies:
+      - package: FittKit
+        product: FittWatch
+      - package: FittKit
+        product: FittAPI
+    settings:
+      base:
+        # Apple requires the watch app's id to start with the phone app's.
+        PRODUCT_BUNDLE_IDENTIFIER: dev.fittapp.fitt.watchkitapp
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "4"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ${FITT_DEVELOPMENT_TEAM}

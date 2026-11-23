@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "FittCore", targets: ["FittCore"]),
         .library(name: "FittAPI", targets: ["FittAPI"]),
         .library(name: "FittUI", targets: ["FittUI"]),
+        .library(name: "FittWatch", targets: ["FittWatch"]),
     ],
     targets: [
         // Rules and API models. Foundation only: no UI, no networking, no storage.
@@ -20,7 +21,11 @@ let package = Package(
         .target(name: "FittAPI", dependencies: ["FittCore"]),
         // The phone's app model and SwiftUI screens.
         .target(name: "FittUI", dependencies: ["FittCore", "FittAPI"]),
+        // The watch's model and screens. Builds for macOS too, so its tests run
+        // with `swift test` like the rest.
+        .target(name: "FittWatch", dependencies: ["FittCore", "FittAPI"]),
         .testTarget(name: "FittCoreTests", dependencies: ["FittCore"]),
+        .testTarget(name: "FittWatchTests", dependencies: ["FittWatch", "FittAPI", "FittCore"]),
         // Backend and AppModel against a stubbed URLSession. No network, no Keychain.
         .testTarget(name: "FittUITests", dependencies: ["FittUI", "FittAPI", "FittCore"]),
     ]
