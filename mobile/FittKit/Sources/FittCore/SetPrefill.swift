@@ -12,10 +12,11 @@ public enum SetPrefill {
     /// 3. the first set of the newest finished workout with the exercise;
     /// 4. nothing, so the fields start empty.
     ///
-    /// Weights arrive in kilograms and are shown in the user's unit. A weight
-    /// the user lifted, today or last time, is shown as it was, so a 24 kg
-    /// dumbbell stays 24. Only the suggestion is rounded to a plate step, so a
-    /// pound user sees 225 rather than 225.4.
+    /// Weights arrive in kilograms and are shown in the user's unit, never
+    /// rounded to a plate. A weight the user lifted, today or last time, is
+    /// shown as it was, so a 24 kg dumbbell stays 24. The suggestion is shown
+    /// as the server gave it, so "keep 24" prefills 24 and the field matches
+    /// the suggested line under the exercise.
     public static func draft(
         exerciseId: Int64,
         loggedToday: [SetEntry],
@@ -30,7 +31,7 @@ public enum SetPrefill {
         }
         if let suggestion, suggestion.hasTarget {
             return SetDraft(
-                weight: platedWeight(suggestion.suggestedWeight, units: units),
+                weight: PlateStep.plain(units.shown(kilograms: suggestion.suggestedWeight)),
                 reps: suggestion.suggestedReps.map(String.init) ?? "")
         }
         return fromHistory(exerciseId: exerciseId, history: history, units: units)
@@ -49,9 +50,5 @@ public enum SetPrefill {
         return SetDraft(
             weight: set.weight.map { PlateStep.plain(units.shown(kilograms: $0)) } ?? "",
             reps: set.reps.map(String.init) ?? "")
-    }
-
-    private static func platedWeight(_ kilograms: Decimal, units: UnitsPreference) -> String {
-        PlateStep.plain(PlateStep(units: units).rounded(units.shown(kilograms: kilograms)))
     }
 }

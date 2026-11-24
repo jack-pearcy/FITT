@@ -32,7 +32,8 @@ public struct LastTime: Equatable, Sendable {
     public func text(units: UnitsPreference) -> String {
         groups.map { group in
             let reps = group.reps.map(String.init).joined(separator: ", ")
-            guard let weight = group.weight else { return "\(reps) reps" }
+            let repsWord = group.reps == [1] ? "rep" : "reps"
+            guard let weight = group.weight else { return "\(reps) \(repsWord)" }
             return "\(units.shown(kilograms: weight).formatted()) \(units.weightLabel) × \(reps)"
         }
         .joined(separator: "; ")

@@ -73,11 +73,17 @@ struct SetForm: View {
         }
     }
 
-    /// "Log 80 kg × 8" when the fields hold a set, "Log" otherwise.
     private var logTitle: String {
-        guard let reps = filledReps else { return "Log" }
+        Self.logTitle(draft: draft, units: units)
+    }
+
+    /// The log button's text: "Log 80 kg × 8" when the fields hold a set,
+    /// "Log 12 reps" or "Log 1 rep" without a weight, "Log" otherwise.
+    static func logTitle(draft: SetDraft, units: UnitsPreference) -> String {
+        guard let reps = Int(draft.reps.trimmingCharacters(in: .whitespaces)) else { return "Log" }
         let weight = draft.weight.trimmingCharacters(in: .whitespaces)
-        return weight.isEmpty ? "Log \(reps) reps" : "Log \(weight) \(units.weightLabel) × \(reps)"
+        let repsWord = reps == 1 ? "rep" : "reps"
+        return weight.isEmpty ? "Log \(reps) \(repsWord)" : "Log \(weight) \(units.weightLabel) × \(reps)"
     }
 
     private var logSpoken: String {
@@ -94,10 +100,6 @@ struct SetForm: View {
         return weight.isEmpty
             ? "Log set, \(reps) \(repsWord)"
             : "Log set, \(weight) \(units.weightName(plural: plural)) for \(reps) \(repsWord)"
-    }
-
-    private var filledReps: Int? {
-        Int(draft.reps.trimmingCharacters(in: .whitespaces))
     }
 }
 

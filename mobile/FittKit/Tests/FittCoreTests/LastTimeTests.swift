@@ -55,6 +55,14 @@ struct LastTimeTests {
         #expect(last.accessibilityText(units: .metric) == "Last time, 12 and 10 reps")
     }
 
+    @Test("one bodyweight set of one rep reads in the singular")
+    func bodyweightSingular() throws {
+        let sessions = [F.session(id: 10, day: 1, entries: [(F.bench, [F.set(1, reps: 1, weight: nil)])])]
+        let last = try #require(LastTime.find(exerciseId: F.bench.id, in: sessions))
+        #expect(last.text(units: .metric) == "1 rep")
+        #expect(last.accessibilityText(units: .metric) == "Last time, 1 rep")
+    }
+
     @Test("one set of one rep reads in the singular")
     func singular() throws {
         let sessions = [F.session(id: 10, day: 1, entries: [(F.bench, [F.set(1, reps: 1, weight: "1")])])]

@@ -84,13 +84,37 @@ struct SetPrefillTests {
         #expect(draft == SetDraft(weight: "102.5", reps: "8"))
     }
 
-    @Test("a suggestion in pounds is rounded to a 5 lb plate")
+    @Test("a suggestion in pounds shows as the pounds the suggestion line reads")
     func fromSuggestionInPounds() {
-        // 102.5 kg is 225.97 lb, which shows as 226.0 and rounds to 225.
+        // 102.5 kg is 225.97 lb, which shows as 226.0 and is not moved to a plate.
         let draft = SetPrefill.draft(
             exerciseId: F.bench.id, loggedToday: [],
             suggestion: F.suggestion(weight: "102.5", reps: 8), history: [], units: .imperial)
-        #expect(draft == SetDraft(weight: "225", reps: "8"))
+        #expect(draft == SetDraft(weight: "226", reps: "8"))
+        // 175 lb kept from last time is 79.38 kg and comes back as 175.
+        let kept = SetPrefill.draft(
+            exerciseId: F.bench.id, loggedToday: [],
+            suggestion: F.suggestion(weight: "79.38", reps: 12), history: [], units: .imperial)
+        #expect(kept == SetDraft(weight: "175", reps: "12"))
+    }
+
+    @Test("a suggestion to keep a weight off the plate grid prefills that weight")
+    func suggestionOffGrid() {
+        for (suggested, shown) in [("24", "24"), ("12", "12"), ("6", "6"), ("1", "1")] {
+            let draft = SetPrefill.draft(
+                exerciseId: F.bench.id, loggedToday: [],
+                suggestion: F.suggestion(weight: suggested, reps: 12), history: history, units: .metric)
+            #expect(draft == SetDraft(weight: shown, reps: "12"))
+        }
+    }
+
+    @Test("a set logged today in pounds is converted, not rounded, and wins over the suggestion")
+    func repeatsTodayInPounds() {
+        // 175 lb is stored as 79.38 kg, which shows as 175.0 lb again.
+        let draft = SetPrefill.draft(
+            exerciseId: F.bench.id, loggedToday: [F.set(1, reps: 8, weight: "79.38")],
+            suggestion: F.suggestion(weight: "102.5", reps: 8), history: history, units: .imperial)
+        #expect(draft == SetDraft(weight: "175", reps: "8"))
     }
 
     @Test("a suggestion without reps fills only the weight")
@@ -109,7 +133,7 @@ struct SetPrefillTests {
         #expect(draft == SetDraft(weight: "80", reps: "8"))
     }
 
-    @Test("without a suggestion the newest session's set with the same number fills the set")
+    @Test("without a suggestion the newest finished session's first set fills the set")
     func fromLastSession() {
         let draft = SetPrefill.draft(
             exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: history, units: .metric)
