@@ -8,25 +8,21 @@ import org.slf4j.LoggerFactory;
 import java.sql.SQLException;
 import java.sql.Statement;
 
-/**
- * V12. A user has at most one unfinished workout session (finished_at null).
- * Starting a session never checked for an open one, and the web app started a
- * new session on every tap, so several open sessions per user can already exist.
- *
- * <p>First those are cleaned up. For each user the newest open session stays open:
- * the latest started_at, and on a tie the highest id. Every other open session
- * of that user is stale:
- * <ul>
- *   <li>a stale session holding at least one set is finished. set_entries stores
- *       no time a set was done, so its finish time is its start time;</li>
- *   <li>a stale session with no sets is deleted, with its exercise entries first.</li>
- * </ul>
- * The migration logs only three counts: sessions finished, exercise entries
- * deleted and sessions deleted. No user data is read out or logged.
- *
- * <p>This is a Java migration, not SQL, so those counts reach the deploy log.
- * Flyway runs it in one transaction where the database allows, as it does SQL.
- */
+// V12. A user has at most one unfinished workout session (finished_at null).
+// Starting a session never checked for an open one, and the web app started a
+// new session on every tap, so several open sessions per user can already exist.
+//
+// First those are cleaned up. For each user the newest open session stays open:
+// the latest started_at, and on a tie the highest id. Every other open session
+// of that user is stale:
+// - A stale session holding at least one set is finished. set_entries stores
+//   no time a set was done, so its finish time is its start time.
+// - A stale session with no sets is deleted, with its exercise entries first.
+// The migration logs only three counts: sessions finished, exercise entries
+// deleted and sessions deleted. No user data is read out or logged.
+//
+// This is a Java migration, not SQL, so those counts reach the deploy log.
+// Flyway runs it in one transaction where the database allows, as it does SQL.
 public class V12__one_open_session_per_user extends BaseJavaMigration {
 
     private static final Logger log = LoggerFactory.getLogger(V12__one_open_session_per_user.class);
