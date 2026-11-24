@@ -9,12 +9,12 @@ public enum SetPrefill {
     /// has something:
     /// 1. the newest set logged for it in this workout, repeated as it is;
     /// 2. the suggestion, when it has a target;
-    /// 3. the newest finished workout with the exercise: the set with the same
-    ///    number, else its last set;
+    /// 3. the first set of the newest finished workout with the exercise;
     /// 4. nothing, so the fields start empty.
     ///
     /// Weights arrive in kilograms and are shown in the user's unit. A weight
-    /// from the suggestion or from history is rounded to a plate step, so a
+    /// the user lifted, today or last time, is shown as it was, so a 24 kg
+    /// dumbbell stays 24. Only the suggestion is rounded to a plate step, so a
     /// pound user sees 225 rather than 225.4.
     public static func draft(
         exerciseId: Int64,
@@ -33,22 +33,21 @@ public enum SetPrefill {
                 weight: platedWeight(suggestion.suggestedWeight, units: units),
                 reps: suggestion.suggestedReps.map(String.init) ?? "")
         }
-        return fromHistory(exerciseId: exerciseId, setNumber: 1, history: history, units: units)
+        return fromHistory(exerciseId: exerciseId, history: history, units: units)
     }
 
-    /// The set with this number from the newest finished workout that has the
-    /// exercise, else that workout's last set. Empty when there is none.
-    public static func fromHistory(
+    /// The first set of the newest finished workout that has the exercise, in
+    /// the user's unit and not rounded. Empty when there is none.
+    private static func fromHistory(
         exerciseId: Int64,
-        setNumber: Int,
         history: [WorkoutSession],
         units: UnitsPreference
     ) -> SetDraft {
         guard let last = LastTime.find(exerciseId: exerciseId, in: history),
-              let set = last.sets.first(where: { $0.setNumber == setNumber }) ?? last.sets.last
+              let set = last.sets.first
         else { return SetDraft() }
         return SetDraft(
-            weight: set.weight.map { platedWeight($0, units: units) } ?? "",
+            weight: set.weight.map { PlateStep.plain(units.shown(kilograms: $0)) } ?? "",
             reps: set.reps.map(String.init) ?? "")
     }
 

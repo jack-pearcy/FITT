@@ -123,21 +123,38 @@ struct SetPrefillTests {
         #expect(draft == SetDraft(weight: "80", reps: "8"))
     }
 
-    @Test("a set number past last time's sets takes its last set")
-    func pastLastSessionSets() {
-        // A set logged today would win, so the history branch is asked directly.
-        #expect(SetPrefill.fromHistory(exerciseId: F.bench.id, setNumber: 5, history: history, units: .metric)
-            == SetDraft(weight: "77.5", reps: "7"))
-        #expect(SetPrefill.fromHistory(exerciseId: F.bench.id, setNumber: 2, history: history, units: .metric)
-            == SetDraft(weight: "80", reps: "8"))
+    @Test("last time's first set fills the set, not its last")
+    func takesFirstSetOfLastSession() {
+        let sessions = [
+            F.session(id: 30, day: 2, entries: [(F.bench, [F.set(1, reps: 10, weight: "70"), F.set(2, reps: 6, weight: "72.5")])]),
+        ]
+        let draft = SetPrefill.draft(
+            exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: sessions, units: .metric)
+        #expect(draft == SetDraft(weight: "70", reps: "10"))
     }
 
-    @Test("last time in pounds is rounded to a 5 lb plate")
+    @Test("a metric weight off the plate grid comes back as it was lifted")
+    func metricOffGrid() {
+        for (stored, shown) in [("24", "24"), ("22", "22"), ("81.25", "81.25")] {
+            let sessions = [F.session(id: 31, day: 2, entries: [(F.bench, [F.set(1, reps: 8, weight: stored)])])]
+            let draft = SetPrefill.draft(
+                exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: sessions, units: .metric)
+            #expect(draft == SetDraft(weight: shown, reps: "8"))
+        }
+    }
+
+    @Test("last time in pounds comes back as the pounds typed")
     func fromLastSessionInPounds() {
-        // 80 kg is 176.4 lb, which rounds to 175.
+        // 175 lb is stored as 79.38 kg, which shows as 175.0 lb again.
+        let sessions = [F.session(id: 32, day: 2, entries: [(F.bench, [F.set(1, reps: 8, weight: "79.38")])])]
         let draft = SetPrefill.draft(
-            exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: history, units: .imperial)
+            exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: sessions, units: .imperial)
         #expect(draft == SetDraft(weight: "175", reps: "8"))
+        // 12.5 lb is stored as 5.67 kg and is not pushed up to a 5 lb plate.
+        let dumbbell = [F.session(id: 33, day: 2, entries: [(F.bench, [F.set(1, reps: 12, weight: "5.67")])])]
+        let light = SetPrefill.draft(
+            exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: dumbbell, units: .imperial)
+        #expect(light == SetDraft(weight: "12.5", reps: "12"))
     }
 
     @Test("an unfinished session and an exercise with no sets are not last time")
@@ -164,8 +181,9 @@ struct SetPrefillTests {
 
     @Test("a prefilled set passes the form's own checks")
     func prefillIsValid() throws {
+        let sessions = [F.session(id: 34, day: 2, entries: [(F.bench, [F.set(1, reps: 8, weight: "79.38")])])]
         let draft = SetPrefill.draft(
-            exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: history, units: .imperial)
+            exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: sessions, units: .imperial)
         let logged = try draft.loggedSet(units: .imperial)
         #expect(logged.reps == 8)
         #expect(logged.weight == Decimal(string: "79.38", locale: Locale(identifier: "en_US_POSIX")))
