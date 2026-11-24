@@ -1819,12 +1819,27 @@ struct AppModelTests {
         let server = StubServer()
         let model = await startedWithoutHistory(server)
         let finished = historyJSON(id: 10, startedAt: "2026-11-10T05:00:00Z")
-        server.respond { _ in .json(200, "[\(finished)]") }
+        // The history answer is held until the test lets it go, so sign out
+        // lands while the request is on its way, not before it is sent.
+        let release = DispatchSemaphore(value: 0)
+        server.respond { request in
+            if request.method == "GET", request.path.hasSuffix("/workout-sessions") { release.wait() }
+            return .json(200, "[\(finished)]")
+        }
+        let before = server.requests.count
 
-        async let load: Void = model.loadHistoryForWorkout()
+        let load = Task { await model.loadHistoryForWorkout() }
+        while !server.requests.dropFirst(before).contains(where: { $0.path.hasSuffix("/workout-sessions") }) {
+            await Task.yield()
+        }
+        #expect(calls(server, after: before) == ["GET /api/users/7/workout-sessions"])
+        // Sign out clears the session before its first suspension, and the main
+        // actor is held from here to there, so the answer cannot land first.
+        release.signal()
         await model.signOut()
-        await load
+        await load.value
 
+        #expect(model.phase == .signedOut)
         #expect(model.history == nil)
     }
 
