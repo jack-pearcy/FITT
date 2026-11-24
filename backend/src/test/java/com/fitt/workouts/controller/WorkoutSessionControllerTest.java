@@ -119,6 +119,9 @@ class WorkoutSessionControllerTest {
                 .andExpect(content().string(""));
     }
 
+    // The stage 0 contract test row says 404 for a foreign user. This route answers
+    // 403, as every other route under /api/users/{userId}/workout-sessions does on
+    // a path user mismatch; one route alone answering 404 would be inconsistent.
     @Test
     void getOpenSession_ofAnotherUser_returns403AndReadsNothing() throws Exception {
         mockMvc.perform(get("/api/users/{userId}/workout-sessions/open", USER_ID)

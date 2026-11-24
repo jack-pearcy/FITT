@@ -1,8 +1,13 @@
 package com.fitt.shared.schema;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import db.migration.V12__one_open_session_per_user;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -59,7 +64,21 @@ class OneOpenSessionMigrationIntegrationTest {
         // User 3: one open session, nothing to clean.
         long alone = session(jdbc, 3, "2026-05-06T10:00:00", null);
 
-        flyway(dataSource, "12").migrate();
+        Logger v12Log = (Logger) LoggerFactory.getLogger(V12__one_open_session_per_user.class);
+        ListAppender<ILoggingEvent> logged = new ListAppender<>();
+        logged.start();
+        v12Log.addAppender(logged);
+        try {
+            flyway(dataSource, "12").migrate();
+        } finally {
+            v12Log.detachAppender(logged);
+        }
+
+        // The deploy log gets the three counts and nothing else: user 1 has one old
+        // session with sets, one entry in an empty old session, and two empty old
+        // sessions; user 2 has one empty older session on the tie.
+        assertThat(logged.list).extracting(ILoggingEvent::getFormattedMessage).containsExactly(
+                "V12 open session cleanup: 1 sessions finished, 1 exercise entries deleted, 3 sessions deleted");
 
         assertThat(openIds(jdbc, 1)).containsExactly(newest);
         assertThat(exists(jdbc, "workout_sessions", empty)).isFalse();
