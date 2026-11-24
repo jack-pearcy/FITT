@@ -5,6 +5,7 @@ import com.fitt.workouts.service.exception.ExerciseNotFoundException;
 import com.fitt.workouts.service.exception.WorkoutPlanNotFoundException;
 import com.fitt.workouts.service.exception.WorkoutSessionNotFoundException;
 import com.fitt.workouts.service.exception.ExerciseInUseException;
+import com.fitt.workouts.service.exception.OpenSessionExistsException;
 import com.fitt.measurements.service.exception.BodyWeightEntryNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -99,6 +100,16 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     public ResponseEntity<ProblemDetail> handleExerciseInUse(ExerciseInUseException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problem.setTitle("Exercise In Use");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+    }
+
+    // 409 because the user already has a workout in progress. openSessionId names
+    // it, so the client resumes that session instead of starting another.
+    @ExceptionHandler(OpenSessionExistsException.class)
+    public ResponseEntity<ProblemDetail> handleOpenSessionExists(OpenSessionExistsException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Open Session Exists");
+        problem.setProperty("openSessionId", ex.getOpenSessionId());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
     }
 
