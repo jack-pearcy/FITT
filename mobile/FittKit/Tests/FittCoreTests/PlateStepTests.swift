@@ -45,17 +45,6 @@ struct PlateStepTests {
         #expect(lb.down(3) == 0)
     }
 
-    @Test("rounding goes to the nearest plate, halves up")
-    func rounding() {
-        let kg = PlateStep(units: .metric)
-        #expect(kg.rounded(81) == 80)
-        #expect(kg.rounded(decimal("101.3")) == decimal("102.5"))
-        #expect(kg.rounded(decimal("101.25")) == decimal("102.5"))
-        let lb = PlateStep(units: .imperial)
-        #expect(lb.rounded(decimal("220.5")) == 220)
-        #expect(lb.rounded(decimal("222.5")) == 225)
-    }
-
     @Test("typed text steps as a number and comes back as plain text")
     func stepsText() {
         let kg = PlateStep(units: .metric)

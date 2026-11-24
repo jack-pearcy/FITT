@@ -192,11 +192,16 @@ public struct SetDraft: Equatable, Sendable {
     public var weight = ""
     public var reps = ""
     public var rpe = ""
+    /// The stored kilograms a prefilled weight was shown from. Showing pounds
+    /// rounds to a tenth, and turning that back into kilograms does not always
+    /// land on the start, so an untouched prefill logs these kilograms instead.
+    public var prefillKilograms: Decimal?
 
-    public init(weight: String = "", reps: String = "", rpe: String = "") {
+    public init(weight: String = "", reps: String = "", rpe: String = "", prefillKilograms: Decimal? = nil) {
         self.weight = weight
         self.reps = reps
         self.rpe = rpe
+        self.prefillKilograms = prefillKilograms
     }
 
     /// The set to send. The weight is converted to kilograms, the unit the server stores.
@@ -213,7 +218,8 @@ public struct SetDraft: Equatable, Sendable {
         if !weight.trimmingCharacters(in: .whitespaces).isEmpty {
             // The limit is checked on the number as typed, so the message matches it.
             if let typed = DecimalInput.parse(weight)?.rounded(scale: 2), Self.weight.contains(typed) {
-                weightValue = units.kilograms(typed: typed).rounded(scale: 2)
+                weightValue = prefilled(typed: typed, units: units)
+                    ?? units.kilograms(typed: typed).rounded(scale: 2)
             } else {
                 problems["weight"] = "Enter a weight up to 9999.99"
             }
@@ -229,5 +235,12 @@ public struct SetDraft: Equatable, Sendable {
 
         guard problems.isEmpty, let repsValue else { throw ValidationFailure(fields: problems) }
         return LoggedSet(reps: repsValue, weight: weightValue, rpe: rpeValue)
+    }
+
+    /// The prefilled kilograms, while the weight still reads as the prefill
+    /// showed it. Once the user changes the number, the typed weight counts.
+    private func prefilled(typed: Decimal, units: UnitsPreference) -> Decimal? {
+        guard let prefillKilograms, units.shown(kilograms: prefillKilograms) == typed else { return nil }
+        return prefillKilograms.rounded(scale: 2)
     }
 }

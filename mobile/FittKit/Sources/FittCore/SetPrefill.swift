@@ -16,7 +16,8 @@ public enum SetPrefill {
     /// rounded to a plate. A weight the user lifted, today or last time, is
     /// shown as it was, so a 24 kg dumbbell stays 24. The suggestion is shown
     /// as the server gave it, so "keep 24" prefills 24 and the field matches
-    /// the suggested line under the exercise.
+    /// the suggested line under the exercise. The draft keeps those kilograms,
+    /// so logging it untouched stores them exactly, with no drift through pounds.
     public static func draft(
         exerciseId: Int64,
         loggedToday: [SetEntry],
@@ -27,12 +28,14 @@ public enum SetPrefill {
         if let newest = loggedToday.max(by: { $0.setNumber < $1.setNumber }) {
             return SetDraft(
                 weight: newest.weight.map { PlateStep.plain(units.shown(kilograms: $0)) } ?? "",
-                reps: newest.reps.map(String.init) ?? "")
+                reps: newest.reps.map(String.init) ?? "",
+                prefillKilograms: newest.weight)
         }
         if let suggestion, suggestion.hasTarget {
             return SetDraft(
                 weight: PlateStep.plain(units.shown(kilograms: suggestion.suggestedWeight)),
-                reps: suggestion.suggestedReps.map(String.init) ?? "")
+                reps: suggestion.suggestedReps.map(String.init) ?? "",
+                prefillKilograms: suggestion.suggestedWeight)
         }
         return fromHistory(exerciseId: exerciseId, history: history, units: units)
     }
@@ -49,6 +52,7 @@ public enum SetPrefill {
         else { return SetDraft() }
         return SetDraft(
             weight: set.weight.map { PlateStep.plain(units.shown(kilograms: $0)) } ?? "",
-            reps: set.reps.map(String.init) ?? "")
+            reps: set.reps.map(String.init) ?? "",
+            prefillKilograms: set.weight)
     }
 }

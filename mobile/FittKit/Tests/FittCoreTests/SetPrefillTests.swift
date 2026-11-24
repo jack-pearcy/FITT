@@ -49,6 +49,10 @@ enum PrefillFixtures {
 struct SetPrefillTests {
     private typealias F = PrefillFixtures
 
+    private func kg(_ text: String) -> Decimal {
+        Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")) ?? -1
+    }
+
     private let history = [
         F.session(id: 10, day: 1, entries: [(F.bench, [F.set(1, reps: 8, weight: "75"), F.set(2, reps: 8, weight: "75")])]),
         F.session(id: 11, day: 3, entries: [
@@ -65,7 +69,7 @@ struct SetPrefillTests {
             suggestion: F.suggestion(weight: "102.5", reps: 8),
             history: history,
             units: .metric)
-        #expect(draft == SetDraft(weight: "81", reps: "6"))
+        #expect(draft == SetDraft(weight: "81", reps: "6", prefillKilograms: kg("81")))
     }
 
     @Test("a bodyweight set logged today repeats with the weight left empty")
@@ -81,7 +85,7 @@ struct SetPrefillTests {
         let draft = SetPrefill.draft(
             exerciseId: F.bench.id, loggedToday: [],
             suggestion: F.suggestion(weight: "102.5", reps: 8), history: history, units: .metric)
-        #expect(draft == SetDraft(weight: "102.5", reps: "8"))
+        #expect(draft == SetDraft(weight: "102.5", reps: "8", prefillKilograms: kg("102.5")))
     }
 
     @Test("a suggestion in pounds shows as the pounds the suggestion line reads")
@@ -90,12 +94,12 @@ struct SetPrefillTests {
         let draft = SetPrefill.draft(
             exerciseId: F.bench.id, loggedToday: [],
             suggestion: F.suggestion(weight: "102.5", reps: 8), history: [], units: .imperial)
-        #expect(draft == SetDraft(weight: "226", reps: "8"))
+        #expect(draft == SetDraft(weight: "226", reps: "8", prefillKilograms: kg("102.5")))
         // 175 lb kept from last time is 79.38 kg and comes back as 175.
         let kept = SetPrefill.draft(
             exerciseId: F.bench.id, loggedToday: [],
             suggestion: F.suggestion(weight: "79.38", reps: 12), history: [], units: .imperial)
-        #expect(kept == SetDraft(weight: "175", reps: "12"))
+        #expect(kept == SetDraft(weight: "175", reps: "12", prefillKilograms: kg("79.38")))
     }
 
     @Test("a suggestion to keep a weight off the plate grid prefills that weight")
@@ -104,7 +108,7 @@ struct SetPrefillTests {
             let draft = SetPrefill.draft(
                 exerciseId: F.bench.id, loggedToday: [],
                 suggestion: F.suggestion(weight: suggested, reps: 12), history: history, units: .metric)
-            #expect(draft == SetDraft(weight: shown, reps: "12"))
+            #expect(draft == SetDraft(weight: shown, reps: "12", prefillKilograms: kg(suggested)))
         }
     }
 
@@ -114,7 +118,7 @@ struct SetPrefillTests {
         let draft = SetPrefill.draft(
             exerciseId: F.bench.id, loggedToday: [F.set(1, reps: 8, weight: "79.38")],
             suggestion: F.suggestion(weight: "102.5", reps: 8), history: history, units: .imperial)
-        #expect(draft == SetDraft(weight: "175", reps: "8"))
+        #expect(draft == SetDraft(weight: "175", reps: "8", prefillKilograms: kg("79.38")))
     }
 
     @Test("a suggestion without reps fills only the weight")
@@ -122,7 +126,7 @@ struct SetPrefillTests {
         let draft = SetPrefill.draft(
             exerciseId: F.bench.id, loggedToday: [],
             suggestion: F.suggestion(weight: "60", reps: nil), history: [], units: .metric)
-        #expect(draft == SetDraft(weight: "60", reps: ""))
+        #expect(draft == SetDraft(weight: "60", reps: "", prefillKilograms: kg("60")))
     }
 
     @Test("a suggestion of zero is no target, so last time fills the set")
@@ -130,21 +134,21 @@ struct SetPrefillTests {
         let draft = SetPrefill.draft(
             exerciseId: F.bench.id, loggedToday: [],
             suggestion: F.suggestion(weight: "0", reps: 8), history: history, units: .metric)
-        #expect(draft == SetDraft(weight: "80", reps: "8"))
+        #expect(draft == SetDraft(weight: "80", reps: "8", prefillKilograms: kg("80")))
     }
 
     @Test("without a suggestion the newest finished session's first set fills the set")
     func fromLastSession() {
         let draft = SetPrefill.draft(
             exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: history, units: .metric)
-        #expect(draft == SetDraft(weight: "80", reps: "8"))
+        #expect(draft == SetDraft(weight: "80", reps: "8", prefillKilograms: kg("80")))
     }
 
     @Test("history is read newest first whatever order it arrives in")
     func historyOrder() {
         let draft = SetPrefill.draft(
             exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: history.reversed(), units: .metric)
-        #expect(draft == SetDraft(weight: "80", reps: "8"))
+        #expect(draft == SetDraft(weight: "80", reps: "8", prefillKilograms: kg("80")))
     }
 
     @Test("last time's first set fills the set, not its last")
@@ -154,7 +158,7 @@ struct SetPrefillTests {
         ]
         let draft = SetPrefill.draft(
             exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: sessions, units: .metric)
-        #expect(draft == SetDraft(weight: "70", reps: "10"))
+        #expect(draft == SetDraft(weight: "70", reps: "10", prefillKilograms: kg("70")))
     }
 
     @Test("a metric weight off the plate grid comes back as it was lifted")
@@ -163,7 +167,7 @@ struct SetPrefillTests {
             let sessions = [F.session(id: 31, day: 2, entries: [(F.bench, [F.set(1, reps: 8, weight: stored)])])]
             let draft = SetPrefill.draft(
                 exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: sessions, units: .metric)
-            #expect(draft == SetDraft(weight: shown, reps: "8"))
+            #expect(draft == SetDraft(weight: shown, reps: "8", prefillKilograms: kg(stored)))
         }
     }
 
@@ -173,12 +177,12 @@ struct SetPrefillTests {
         let sessions = [F.session(id: 32, day: 2, entries: [(F.bench, [F.set(1, reps: 8, weight: "79.38")])])]
         let draft = SetPrefill.draft(
             exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: sessions, units: .imperial)
-        #expect(draft == SetDraft(weight: "175", reps: "8"))
+        #expect(draft == SetDraft(weight: "175", reps: "8", prefillKilograms: kg("79.38")))
         // 12.5 lb is stored as 5.67 kg and is not pushed up to a 5 lb plate.
         let dumbbell = [F.session(id: 33, day: 2, entries: [(F.bench, [F.set(1, reps: 12, weight: "5.67")])])]
         let light = SetPrefill.draft(
             exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: dumbbell, units: .imperial)
-        #expect(light == SetDraft(weight: "12.5", reps: "12"))
+        #expect(light == SetDraft(weight: "12.5", reps: "12", prefillKilograms: kg("5.67")))
     }
 
     @Test("an unfinished session and an exercise with no sets are not last time")
@@ -190,7 +194,7 @@ struct SetPrefillTests {
         ]
         let draft = SetPrefill.draft(
             exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: sessions, units: .metric)
-        #expect(draft == SetDraft(weight: "70", reps: "10"))
+        #expect(draft == SetDraft(weight: "70", reps: "10", prefillKilograms: kg("70")))
     }
 
     @Test("with no suggestion and no history the set starts empty")
@@ -211,5 +215,37 @@ struct SetPrefillTests {
         let logged = try draft.loggedSet(units: .imperial)
         #expect(logged.reps == 8)
         #expect(logged.weight == Decimal(string: "79.38", locale: Locale(identifier: "en_US_POSIX")))
+    }
+
+    @Test("an untouched suggestion in pounds logs the suggested kilograms exactly")
+    func untouchedSuggestionInPounds() throws {
+        // 102.5 kg shows as 226 lb, and 226 lb alone would log as 102.51 kg.
+        let draft = SetPrefill.draft(
+            exerciseId: F.bench.id, loggedToday: [],
+            suggestion: F.suggestion(weight: "102.5", reps: 8), history: [], units: .imperial)
+        #expect(try draft.loggedSet(units: .imperial).weight == kg("102.5"))
+    }
+
+    @Test("a metric set repeated after switching to pounds logs the same kilograms")
+    func untouchedMetricSetInPounds() throws {
+        // 100 kg shows as 220.5 lb, and 220.5 lb alone would log as 100.02 kg.
+        let today = SetPrefill.draft(
+            exerciseId: F.bench.id, loggedToday: [F.set(1, reps: 5, weight: "100")],
+            suggestion: nil, history: [], units: .imperial)
+        #expect(today.weight == "220.5")
+        #expect(try today.loggedSet(units: .imperial).weight == kg("100"))
+        let sessions = [F.session(id: 35, day: 2, entries: [(F.bench, [F.set(1, reps: 5, weight: "100")])])]
+        let last = SetPrefill.draft(
+            exerciseId: F.bench.id, loggedToday: [], suggestion: nil, history: sessions, units: .imperial)
+        #expect(try last.loggedSet(units: .imperial).weight == kg("100"))
+    }
+
+    @Test("an edited weight logs what was typed, not the prefill")
+    func editedPrefillLogsTyped() throws {
+        var draft = SetPrefill.draft(
+            exerciseId: F.bench.id, loggedToday: [],
+            suggestion: F.suggestion(weight: "102.5", reps: 8), history: [], units: .imperial)
+        draft.weight = "230"
+        #expect(try draft.loggedSet(units: .imperial).weight == kg("104.33"))
     }
 }

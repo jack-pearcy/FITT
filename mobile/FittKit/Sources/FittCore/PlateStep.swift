@@ -24,11 +24,6 @@ public struct PlateStep: Equatable, Sendable {
         max(0, (plates(in: value, rounding: .up) - 1) * size)
     }
 
-    /// The nearest plate, halves going up.
-    public func rounded(_ value: Decimal) -> Decimal {
-        plates(in: value, rounding: .plain) * size
-    }
-
     /// Steps typed text and gives back plain text with a dot, which the form
     /// reads back on any keyboard. Text that is not a number counts as zero,
     /// and the result stays inside what the form accepts.
