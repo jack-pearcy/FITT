@@ -1740,6 +1740,94 @@ struct AppModelTests {
         #expect(model.history == nil)
     }
 
+    // MARK: History for the workout screen
+
+    /// A workout started on a model that has not read its sessions, as when
+    /// the launch read failed, so the history is still unloaded.
+    private func startedWithoutHistory(_ server: StubServer) async -> AppModel {
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let next = nextLiftWithDay
+        let empty = sessionJSON()
+        let withBench = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+        server.respond { request in
+            if request.path.hasSuffix("/next-lift") { return .json(200, next) }
+            return request.path.hasSuffix("/entries") ? .json(200, withBench) : .json(201, empty)
+        }
+        await model.loadNextLift()
+        await model.startWorkout()
+        return model
+    }
+
+    @Test("the workout screen reads the history once when it is missing")
+    func workoutLoadsHistoryOnce() async {
+        let server = StubServer()
+        let model = await startedWithoutHistory(server)
+        #expect(model.history == nil)
+        let before = server.requests.count
+        let older = historyJSON(id: 10, startedAt: "2026-11-10T05:00:00Z")
+        let newer = historyJSON(id: 11, startedAt: "2026-11-14T05:00:00Z")
+        let open = historyJSON(id: 12, startedAt: "2026-11-16T05:20:32Z", finished: false)
+        server.respond { _ in .json(200, "[\(older),\(open),\(newer)]") }
+
+        async let first: Void = model.loadHistoryForWorkout()
+        async let second: Void = model.loadHistoryForWorkout()
+        _ = await (first, second)
+        await model.loadHistoryForWorkout()
+
+        #expect(model.history?.map(\.id) == [11, 10])
+        #expect(model.activeSession?.exerciseEntries.map(\.id) == [30])
+        #expect(calls(server, after: before) == ["GET /api/users/7/workout-sessions"])
+    }
+
+    @Test("a history already loaded is not read again for the workout screen")
+    func workoutKeepsLoadedHistory() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        let before = server.requests.count
+
+        await model.loadHistoryForWorkout()
+
+        #expect(model.history == [])
+        #expect(server.requests.count == before)
+    }
+
+    @Test("a history that cannot load says nothing, logging still works, and the next visit tries again")
+    func workoutHistoryFailsQuietly() async {
+        let server = StubServer()
+        let model = await startedWithoutHistory(server)
+        server.respond(nil)
+
+        await model.loadHistoryForWorkout()
+
+        #expect(model.history == nil)
+        #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
+
+        let updated = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench, sets: #"{"id":101,"setNumber":1,"reps":8,"weight":100.00,"rpe":null,"completed":true}"#))
+        server.respond { _ in .json(200, updated) }
+        let saved = await model.logSet(SetDraft(weight: "100", reps: "8"), entryId: 30)
+        #expect(saved)
+
+        let finished = historyJSON(id: 10, startedAt: "2026-11-10T05:00:00Z")
+        server.respond { _ in .json(200, "[\(finished)]") }
+        await model.loadHistoryForWorkout()
+        #expect(model.history?.map(\.id) == [10])
+    }
+
+    @Test("a history that arrives after sign out is dropped")
+    func workoutHistoryAfterSignOut() async {
+        let server = StubServer()
+        let model = await startedWithoutHistory(server)
+        let finished = historyJSON(id: 10, startedAt: "2026-11-10T05:00:00Z")
+        server.respond { _ in .json(200, "[\(finished)]") }
+
+        async let load: Void = model.loadHistoryForWorkout()
+        await model.signOut()
+        await load
+
+        #expect(model.history == nil)
+    }
+
     @Test("a finish that cannot reach the server keeps the workout open")
     func finishWorkoutOffline() async {
         let server = StubServer()
