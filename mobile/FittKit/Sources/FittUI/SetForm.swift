@@ -17,6 +17,7 @@ struct SetForm: View {
     let isWorking: Bool
     let focus: FocusState<WorkoutField?>.Binding
     let onLog: () -> Void
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let plate = PlateStep(units: units)
@@ -50,7 +51,10 @@ struct SetForm: View {
                 field: WorkoutField(entryId: entry.id, name: "reps"),
                 step: RepStep.stepped
             )
-            HStack(spacing: Theme.Space.s) {
+            // At accessibility sizes RPE sits above a full width Log button.
+            let stacked = typeSize.isAccessibilitySize
+            let layout = stacked ? AnyLayout(VStackLayout(spacing: Theme.Space.s)) : AnyLayout(HStackLayout(spacing: Theme.Space.s))
+            layout {
                 TextField("RPE", text: $draft.rpe)
                     .numberEntry(decimal: true)
                     .focused(focus, equals: WorkoutField(entryId: entry.id, name: "rpe"))
@@ -60,7 +64,10 @@ struct SetForm: View {
                 Button(action: onLog) {
                     Text(logTitle)
                         .monospacedDigit()
-                        .frame(minHeight: 32)
+                        .lineLimit(stacked ? 2 : nil)
+                        .minimumScaleFactor(stacked ? 0.7 : 1)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: stacked ? .infinity : nil, minHeight: 32)
                 }
                 // A style of its own also keeps the tap on the button. With the default
                 // style, a button in a list row makes the whole row one tap target.
@@ -118,13 +125,30 @@ private struct StepperField: View {
     let field: WorkoutField
     let step: (String, Bool) -> String
     @ScaledMetric private var fieldWidth: CGFloat = 72
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var stacked: Bool { typeSize.isAccessibilitySize }
 
     var body: some View {
+        // At accessibility sizes the label takes its own line above the buttons.
+        VStack(alignment: .leading, spacing: Theme.Space.xs) {
+            if stacked { label }
+            row
+        }
+    }
+
+    private var label: some View {
+        Text(title)
+            .foregroundStyle(Theme.textSecondary)
+            .accessibilityHidden(true)
+    }
+
+    private var row: some View {
         HStack(spacing: Theme.Space.s) {
-            Text(title)
-                .foregroundStyle(Theme.textSecondary)
-                .accessibilityHidden(true)
-            Spacer(minLength: Theme.Space.s)
+            if !stacked {
+                label
+                Spacer(minLength: Theme.Space.s)
+            }
             Button { text = step(text, false) } label: { Image(systemName: "minus") }
                 .buttonStyle(StepButtonStyle())
                 .accessibilityLabel(decreaseLabel)
@@ -133,8 +157,8 @@ private struct StepperField: View {
                 .numberEntry(decimal: decimal)
                 .monospacedDigit()
                 .focused(focus, equals: field)
-                .frame(width: fieldWidth)
-                .frame(minHeight: 44)
+                .frame(width: stacked ? nil : fieldWidth)
+                .frame(maxWidth: stacked ? .infinity : nil, minHeight: 44)
                 .accessibilityLabel(spokenName)
                 .accessibilityAdjustableAction { direction in
                     switch direction {
@@ -152,17 +176,20 @@ private struct StepperField: View {
     }
 }
 
-/// A round 44 point target on the nested surface, for a plus or a minus.
+/// A round 44 point target on the nested surface, for a plus or a minus. It
+/// grows with the text up to 72 points, about a quarter of the row, and no more.
 private struct StepButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric private var size: CGFloat = 44
 
     func makeBody(configuration: Configuration) -> some View {
+        let side = min(max(size, 44), 72)
         configuration.label
             .font(.body.weight(.semibold))
+            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
             .foregroundStyle(Theme.textPrimary)
-            .frame(width: max(size, 44), height: max(size, 44))
+            .frame(width: side, height: side)
             .background(Theme.well, in: Circle())
             .contentShape(Circle())
             .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
@@ -273,4 +300,9 @@ private enum PreviewData {
 
 #Preview("Pounds") {
     ExerciseRowPreview(entry: PreviewData.entry(), suggestion: nil, history: PreviewData.history, units: .imperial)
+}
+
+#Preview("Largest text") {
+    ExerciseRowPreview(entry: PreviewData.entry(), suggestion: PreviewData.suggestion, history: PreviewData.history)
+        .environment(\.dynamicTypeSize, .accessibility5)
 }
