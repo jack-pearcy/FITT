@@ -81,12 +81,19 @@ struct SetForm: View {
     }
 
     private var logSpoken: String {
-        guard let reps = filledReps else { return "Log set" }
+        Self.logSpoken(draft: draft, units: units)
+    }
+
+    /// What VoiceOver reads for the log button: "Log set, 80 kilograms for 8
+    /// reps", with the unit and the reps singular when the number is one.
+    static func logSpoken(draft: SetDraft, units: UnitsPreference) -> String {
+        guard let reps = Int(draft.reps.trimmingCharacters(in: .whitespaces)) else { return "Log set" }
         let repsWord = reps == 1 ? "rep" : "reps"
         let weight = draft.weight.trimmingCharacters(in: .whitespaces)
+        let plural = DecimalInput.parse(weight) != 1
         return weight.isEmpty
             ? "Log set, \(reps) \(repsWord)"
-            : "Log set, \(weight) \(units.weightName()) for \(reps) \(repsWord)"
+            : "Log set, \(weight) \(units.weightName(plural: plural)) for \(reps) \(repsWord)"
     }
 
     private var filledReps: Int? {
