@@ -67,10 +67,10 @@ import Testing
         let store = InMemoryTokenStore()
         let token = makeToken(userId: 5, expiresAt: Date().addingTimeInterval(3600))
         let redeemed = Recorder()
-        let model = WatchModel(tokenStore: store, phone: FakePhone(.success("one-time-code"))) { code in
+        let model = WatchModel(tokenStore: store, phone: FakePhone(.success("one-time-code")), backend: FakeBackend(redeem: { code in
             redeemed.add(code)
             return SessionTokens(accessToken: token, refreshToken: "watch-refresh")
-        }
+        }))
         model.start()
 
         await model.connect()
@@ -85,10 +85,10 @@ import Testing
     @Test("a phone out of reach leaves the watch not connected and says so")
     func phoneUnreachable() async {
         let redeemed = Recorder()
-        let model = WatchModel(tokenStore: InMemoryTokenStore(), phone: FakePhone(.failure(.unreachable))) { code in
+        let model = WatchModel(tokenStore: InMemoryTokenStore(), phone: FakePhone(.failure(.unreachable)), backend: FakeBackend(redeem: { code in
             redeemed.add(code)
             return SessionTokens(accessToken: "unused")
-        }
+        }))
         model.start()
 
         await model.connect()
@@ -100,9 +100,7 @@ import Testing
 
     @Test("a signed-out phone is named as the reason")
     func phoneSignedOut() async {
-        let model = WatchModel(tokenStore: InMemoryTokenStore(), phone: FakePhone(.failure(.signedOut))) { _ in
-            SessionTokens(accessToken: "unused")
-        }
+        let model = WatchModel(tokenStore: InMemoryTokenStore(), phone: FakePhone(.failure(.signedOut)), backend: FakeBackend(redeem: { _ in SessionTokens(accessToken: "unused") }))
         model.start()
 
         await model.connect()
@@ -114,9 +112,7 @@ import Testing
     @Test("a code the server refuses stores nothing")
     func serverRefusesCode() async {
         let store = InMemoryTokenStore()
-        let model = WatchModel(tokenStore: store, phone: FakePhone(.success("stale-code"))) { _ in
-            throw BackendError.unauthorized
-        }
+        let model = WatchModel(tokenStore: store, phone: FakePhone(.success("stale-code")), backend: FakeBackend(redeem: { _ in throw BackendError.unauthorized }))
         model.start()
 
         await model.connect()
@@ -129,9 +125,7 @@ import Testing
     @Test("a session whose token cannot be read is not stored")
     func unreadableSession() async {
         let store = InMemoryTokenStore()
-        let model = WatchModel(tokenStore: store, phone: FakePhone(.success("code"))) { _ in
-            SessionTokens(accessToken: "not-a-token", refreshToken: "refresh")
-        }
+        let model = WatchModel(tokenStore: store, phone: FakePhone(.success("code")), backend: FakeBackend(redeem: { _ in SessionTokens(accessToken: "not-a-token", refreshToken: "refresh") }))
         model.start()
 
         await model.connect()
@@ -145,9 +139,7 @@ import Testing
     func retryClearsProblem() async {
         let phone = FakePhone(.failure(.unreachable))
         let token = makeToken(userId: 3, expiresAt: Date().addingTimeInterval(3600))
-        let model = WatchModel(tokenStore: InMemoryTokenStore(), phone: phone) { _ in
-            SessionTokens(accessToken: token, refreshToken: "refresh")
-        }
+        let model = WatchModel(tokenStore: InMemoryTokenStore(), phone: phone, backend: FakeBackend(redeem: { _ in SessionTokens(accessToken: token, refreshToken: "refresh") }))
         model.start()
         await model.connect()
         #expect(model.problem == .phoneUnreachable)
@@ -163,9 +155,7 @@ import Testing
     func connectedDoesNotAsk() async {
         let phone = FakePhone(.success("code"))
         let token = makeToken(userId: 42, expiresAt: Date().addingTimeInterval(3600))
-        let model = WatchModel(tokenStore: InMemoryTokenStore(token: token, refreshToken: "refresh"), phone: phone) { _ in
-            SessionTokens(accessToken: "unused")
-        }
+        let model = WatchModel(tokenStore: InMemoryTokenStore(token: token, refreshToken: "refresh"), phone: phone, backend: FakeBackend(redeem: { _ in SessionTokens(accessToken: "unused") }))
         model.start()
 
         await model.connect()

@@ -10,13 +10,12 @@ public struct WatchRootView: View {
     /// the phone's. The two are separate sign-ins on the server, so one device
     /// renewing its tokens never invalidates the other's.
     public init(config: BackendConfig, tokenStore: any TokenStore = KeychainTokenStore(service: "dev.fittapp.fitt.watch")) {
-        let backend = Backend(config: config, tokenStore: tokenStore)
         let phone = Self.phoneLink()
         self.phone = phone
         _model = State(initialValue: WatchModel(
             tokenStore: tokenStore,
             phone: phone,
-            redeem: { code in try await backend.redeemDeviceLink(code: code) }
+            backend: Backend(config: config, tokenStore: tokenStore)
         ))
     }
 
@@ -39,16 +38,25 @@ public struct WatchRootView: View {
             case .notConnected:
                 NotConnectedView(model: model)
             case .connected:
-                ConnectedView()
+                TodayView(model: model)
             }
         }
         .onAppear { model.start() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { model.start() }
         }
-        // One try each time the app comes to the front with no session.
+        // Each time the app comes to the front: connect if there is no session,
+        // then read today's training, which may have changed on the phone.
         .task(id: scenePhase) {
-            if scenePhase == .active { await model.connect() }
+            guard scenePhase == .active else { return }
+            await model.connect()
+            await model.loadToday()
+        }
+        // Read today's training as soon as a connect works.
+        .onChange(of: model.phase) { _, phase in
+            if case .connected = phase {
+                Task { await model.loadToday() }
+            }
         }
         // And one each time the phone comes into reach while the app is open.
         .task {
@@ -118,21 +126,6 @@ enum NotConnectedText {
     }
 }
 
-/// Placeholder for the workout screens, which arrive with the session handover.
-struct ConnectedView: View {
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.title2)
-                .foregroundStyle(WatchTheme.positive)
-                .accessibilityHidden(true)
-            Text("Connected")
-                .font(.headline)
-                .foregroundStyle(WatchTheme.textPrimary)
-        }
-    }
-}
-
 /// The phone's colors, for the few the watch uses. The phone's `Theme` lives
 /// with its screens in FittUI, which does not build for watchOS, so the values
 /// are repeated here. Change them in both places.
@@ -142,4 +135,7 @@ enum WatchTheme {
     static let textSecondary = Color(red: 0x8A / 255, green: 0x94 / 255, blue: 0xA6 / 255)
     static let accent = Color(red: 0xC8 / 255, green: 0xFF / 255, blue: 0x00 / 255)
     static let positive = Color(red: 0x10 / 255, green: 0xB9 / 255, blue: 0x81 / 255)
+    static let card = Color(red: 0x15 / 255, green: 0x19 / 255, blue: 0x20 / 255)
+    /// Text on the accent color.
+    static let onAccent = Color(red: 0x0B / 255, green: 0x0D / 255, blue: 0x10 / 255)
 }
