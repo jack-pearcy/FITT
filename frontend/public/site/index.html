@@ -81,7 +81,7 @@
       <div class="tile">
         <div class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6M7 6v12M17 6v12M21 9v6M7 12h10"/></svg></div>
         <h3>Fast set logging</h3>
-        <p>Weight, reps and how hard it felt. One tap per set, built to be used between sets with chalk on your hands.</p>
+        <p>Weight, reps and how hard it felt, then Log. The fields keep your last numbers, so a repeat set is one tap, built to be used between sets with chalk on your hands.</p>
       </div>
       <div class="tile">
         <div class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18l6-6 4 3 6-8"/><path d="M15 7h5v5"/></svg></div>
@@ -101,7 +101,7 @@
       <div class="tile">
         <div class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4z"/><path d="M18 15l.8 2 2 .7-2 .7-.8 2-.8-2-2-.7 2-.7z"/></svg></div>
         <h3>An optional coach <span class="tag">Coming</span></h3>
-        <p>Ask for a short review of your recent training, written by an AI model. Off until you turn it on, and it sees your lifts, not who you are.</p>
+        <p>Ask for a short review of your recent training, written by an AI model. It will be off until you turn it on, and it will see your lifts, not who you are.</p>
       </div>
     </div>
   </div>
@@ -118,7 +118,7 @@
           <div class="screen" aria-hidden="true">
             <div class="status"><span>9:47</span><span>FITT</span></div>
             <div class="screen-title">Bench Press</div>
-            <div class="screen-sub">Last time: 80 kg for 8, 8, 7</div>
+            <div class="screen-sub">Plan: 3 × 8</div>
             <div class="panel">
               <div class="row"><div class="name">Set 1</div><div class="value">82.5 kg × 8</div><span class="check">✓</span></div>
               <div class="row"><div class="name">Set 2</div><div class="value">82.5 kg × 8</div><span class="check">✓</span></div>
@@ -132,18 +132,17 @@
             <div class="tabs"><span class="on">Today</span><span>Plans</span><span>Weight</span><span>History</span><span>Account</span></div>
           </div>
         </div>
-        <figcaption><b>Log as you lift</b>Last session's numbers stay in view.</figcaption>
+        <figcaption><b>Log as you lift</b>Your plan and the suggested weight stay in view.</figcaption>
       </figure>
 
       <figure class="shot">
-        <div class="phone" role="img" aria-label="The Weight screen, with a current weight and a line chart trending down.">
+        <div class="phone" role="img" aria-label="The Weight screen, with a 7 day average and a line chart trending down.">
           <div class="screen" aria-hidden="true">
             <div class="status"><span>7:12</span><span>FITT</span></div>
             <div class="screen-title">Weight</div>
             <div class="panel">
-              <div class="label">Current</div>
+              <div class="label">7 day average</div>
               <div class="big">81.4 <small>kg</small></div>
-              <div class="down">0.6 kg down in 30 days</div>
               <svg class="chart" viewBox="0 0 240 96" preserveAspectRatio="none">
                 <path d="M0 24 L30 30 L60 26 L90 40 L120 44 L150 52 L180 58 L210 66 L240 70 L240 96 L0 96 Z" fill="#c8ff00" fill-opacity="0.08"/>
                 <path d="M0 24 L30 30 L60 26 L90 40 L120 44 L150 52 L180 58 L210 66 L240 70" fill="none" stroke="#c8ff00" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
@@ -199,7 +198,7 @@
         <ul class="list">
           <li>Your email and a scrambled password <span>to sign you in</span></li>
           <li>Your plans, sessions and sets <span>the point of the app</span></li>
-          <li>Body weight and measurements <span>only what you enter</span></li>
+          <li>Body weight and height <span>only what you enter</span></li>
           <li>Your goal and the numbers behind it <span>to work out calories</span></li>
         </ul>
       </div>
@@ -225,10 +224,10 @@
     <h2>You stay in control</h2>
     <p class="section-lede">Leaving should be as easy as joining.</p>
     <div class="facts">
-      <div class="fact"><b>Delete everything</b><span>Delete your account from the Account tab and every record tied to it is erased from the database.</span></div>
-      <div class="fact"><b>Sign out everywhere</b><span>Changing your password ends every other session at once.</span></div>
+      <div class="fact"><b>Delete everything</b><span>Delete your account from the Account tab in the iPhone app and every record tied to it is erased from the database. The web app has no delete screen yet, so web users can email us and we will do it.</span></div>
+      <div class="fact"><b>Sign out everywhere</b><span>Changing your password in the iPhone app ends every other session at once.</span></div>
       <div class="fact"><b>Locked down</b><span>Every connection is encrypted, and passwords are stored only as one-way hashes.</span></div>
-      <div class="fact"><b>AI is opt in</b><span>The coach is off until you ask for a review, and your name and email are never sent.</span></div>
+      <div class="fact"><b>AI will be opt in</b><span>The coach is coming and is not in the app yet. When it arrives it stays off until you ask for a review, and your name and email will never be sent.</span></div>
     </div>
   </div>
 </section>
@@ -248,11 +247,11 @@
     </details>
     <details>
       <summary>Do you sell or share my data?</summary>
-      <p>No. There are no advertisers, no data brokers and no analytics companies involved. The only outside service that can ever see training data is the AI model behind the optional coach, and only when you ask for a review.</p>
+      <p>No. There are no advertisers, no data brokers and no analytics companies involved. Your data sits on a server FITT rents from Hetzner, which hosts it for FITT and nothing else. The optional coach is coming, and once it arrives the AI model behind it will see a training summary only when you ask for a review.</p>
     </details>
     <details>
-      <summary>What exactly does the AI coach see?</summary>
-      <p>Exercise names, your completed sets (weight, reps and effort), how many days ago each session was, and whether your goal is to gain, lose or hold. It never receives your email, your name, any account number, exact dates, your notes, your body weight or your measurements. FITT does not keep the text it sends or the review that comes back.</p>
+      <summary>What exactly will the AI coach see?</summary>
+      <p>The coach is not in the app yet. When it arrives it will see exercise names, your completed sets (weight, reps and effort), how many days ago each session was, and whether your goal is to gain, lose or hold. It will never receive your email, your name, any account number, exact dates, your notes, your body weight or your height. FITT will not keep the text it sends or the review that comes back.</p>
     </details>
     <details>
       <summary>Where is my data kept?</summary>
@@ -260,7 +259,7 @@
     </details>
     <details>
       <summary>How do I delete my account?</summary>
-      <p>In the app, open the Account tab, choose Delete Account and confirm with your password. Your account and every plan, session, set, measurement and goal tied to it are erased.</p>
+      <p>In the iPhone app, open the Account tab, choose Delete Account and confirm with your password. Your account and every plan, session, set, body weight entry and goal tied to it are erased. The web app has no delete screen yet. If you use only the web app, email <a href="mailto:privacy@fittapp.dev">privacy@fittapp.dev</a> from the address on your account and we will delete it for you.</p>
     </details>
     <details>
       <summary>Who makes FITT?</summary>
