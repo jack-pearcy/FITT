@@ -195,6 +195,9 @@ private struct OneRepMaxChart: View {
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .frame(height: min(height, 260))
             .padding(.top, min(labelRoom, 16))
+            // The last date label is centred on the last day, so half of it
+            // sits past the plot. Leave room for it on the right.
+            .padding(.trailing, min(labelRoom * 2, 28))
             .mask(alignment: .leading) {
                 Rectangle().scaleEffect(x: drawn || reduceMotion ? 1 : 0, anchor: .leading)
             }
