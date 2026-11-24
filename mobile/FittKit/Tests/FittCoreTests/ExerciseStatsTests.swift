@@ -137,7 +137,7 @@ struct ExerciseStatsTests {
 
         #expect(stats.bestSet?.set.reps == 15)
         #expect(stats.bestEstimate == nil)
-        #expect(stats.series == [ExerciseStats.Point(day: CalendarDate(year: 2026, month: 11, day: 2), estimatedOneRepMax: nil, topWeight: kg("60"))])
+        #expect(stats.series == [ExerciseStats.Point(day: CalendarDate(year: 2026, month: 11, day: 2), estimatedOneRepMax: nil)])
     }
 
     @Test("unfinished sessions and other exercises are left out")
@@ -156,7 +156,7 @@ struct ExerciseStatsTests {
 
     // MARK: Series
 
-    @Test("the series has one point a day, oldest first, with the day's best estimate and top weight")
+    @Test("the series has one point a day, oldest first, with the day's best estimate")
     func seriesByDay() {
         let sessions = [
             session(3, "2026-11-09T08:00:00Z", [(bench, [("105", 3)])]),
@@ -167,8 +167,8 @@ struct ExerciseStatsTests {
         let series = ExerciseStats(exercise: bench, sessions: sessions, calendar: utc).series
 
         #expect(series == [
-            ExerciseStats.Point(day: CalendarDate(year: 2026, month: 11, day: 2), estimatedOneRepMax: kg("120"), topWeight: kg("102.5")),
-            ExerciseStats.Point(day: CalendarDate(year: 2026, month: 11, day: 9), estimatedOneRepMax: kg("115.5"), topWeight: kg("105")),
+            ExerciseStats.Point(day: CalendarDate(year: 2026, month: 11, day: 2), estimatedOneRepMax: kg("120")),
+            ExerciseStats.Point(day: CalendarDate(year: 2026, month: 11, day: 9), estimatedOneRepMax: kg("115.5")),
         ])
     }
 
@@ -198,6 +198,17 @@ struct ExerciseStatsTests {
         #expect(ExerciseStats.records(sessions, limit: 1, calendar: utc).map(\.exercise.id) == [1])
     }
 
+    @Test("records trained in as many sessions are ordered by name")
+    func recordsTieByName() {
+        let sessions = [
+            session(1, "2026-11-02T08:00:00Z", [(bench, [("100", 5)])]),
+            session(2, "2026-11-04T08:00:00Z", [(squat, [("140", 5)])]),
+        ]
+
+        #expect(ExerciseStats.records(sessions, limit: 5, calendar: utc).map(\.exercise.name) == ["Back Squat", "Barbell Bench Press"])
+        #expect(ExerciseStats.records(sessions, limit: 1, calendar: utc).map(\.exercise.name) == ["Back Squat"])
+    }
+
     @Test("an empty history has no records, no series and no volume")
     func emptyHistory() {
         #expect(ExerciseStats.records([], limit: 5, calendar: utc).isEmpty)
@@ -216,6 +227,7 @@ struct ExerciseStatsTests {
             session(1, "2026-11-23T08:00:00Z", [(bench, [("100", 5), ("100", 5)]), (pullUp, [(nil, 10)])]),
             session(2, "2026-11-22T08:00:00Z", [(squat, [("140", 5)]), (bench, [("50", 10)])]),
             session(3, "2026-09-01T08:00:00Z", [(squat, [("140", 5)])]),
+            session(4, "2026-11-24T07:00:00Z", [(bench, [("200", 5)])], finished: false),
         ]
 
         let weeks = MuscleWeek.weeks(sessions, count: 2, now: date("2026-11-24T08:00:00Z"), calendar: utc)

@@ -48,7 +48,7 @@ struct ExerciseStatsContent: View {
                 title: "No sets yet",
                 systemImage: "chart.line.uptrend.xyaxis",
                 message: "Finish a workout with this exercise to see its records.",
-                actionTitle: "Back to History",
+                actionTitle: "Go Back",
                 action: back
             ),
             retry: retry
@@ -59,7 +59,7 @@ struct ExerciseStatsContent: View {
                         VStack(alignment: .leading, spacing: Theme.Space.xs) {
                             Text("Estimated one-rep max").sectionLabel()
                             if let best = stats.bestEstimate {
-                                Text(units.bodyWeightText(kilograms: best.value)).heroMetric()
+                                Text(units.weightText(kilograms: best.value)).heroMetric()
                                 Text("From \(best.from.set.summary(units: units)) on \(best.from.date.day)")
                                     .font(.footnote)
                                     .foregroundStyle(Theme.textSecondary)
@@ -138,7 +138,7 @@ private struct OneRepMaxChart: View {
         guard let first = plots.first, let latest = plots.last,
               let best = plots.max(by: { ($0.kilograms, $1.date) < ($1.kilograms, $0.date) })
         else { return "" }
-        let text = { (plot: Plot) in "\(units.bodyWeightText(kilograms: plot.kilograms)) on \(plot.date.day)" }
+        let text = { (plot: Plot) in "\(units.weightText(kilograms: plot.kilograms)) on \(plot.date.day)" }
         return "First \(text(first)), latest \(text(latest)), best \(text(best))"
     }
 
@@ -207,7 +207,7 @@ struct RecordsSection: View {
                                 Text(stats.exercise.name)
                                     .font(.headline)
                                     .foregroundStyle(Theme.textPrimary)
-                                Text("\(units.bodyWeightText(kilograms: best.value)) · \(best.from.date.day)")
+                                Text("\(units.weightText(kilograms: best.value)) · \(best.from.date.day)")
                                     .font(.footnote)
                                     .metric()
                                     .foregroundStyle(Theme.textSecondary)
@@ -215,7 +215,7 @@ struct RecordsSection: View {
                             .frame(minHeight: 44, alignment: .leading)
                             .accessibilityElement(children: .ignore)
                             .accessibilityLabel(stats.exercise.name)
-                            .accessibilityValue("Estimated one-rep max \(units.bodyWeightText(kilograms: best.value)), \(best.from.date.day)")
+                            .accessibilityValue("Estimated one-rep max \(units.weightText(kilograms: best.value)), \(best.from.date.day)")
                         }
                         .accessibilityIdentifier("record.\(stats.exercise.id)")
                         .listRowBackground(Theme.card)
@@ -231,6 +231,27 @@ struct RecordsSection: View {
 }
 
 #if DEBUG
+/// Local data for previews. Nothing here reaches the network.
+private enum StatsFixtures {
+    static let bench = Exercise(id: 1, name: "Barbell Bench Press", muscleGroup: .chest, custom: false)
+    static let pullUp = Exercise(id: 2, name: "Pull Up", muscleGroup: .back, custom: false)
+
+    /// Six weekly sessions: bench press rising two kilograms a week, and pull ups.
+    static let sessions: [WorkoutSession] = (0..<6).map { week in
+        let start = Date.now.addingTimeInterval(Double(week - 5) * 7 * 86_400)
+        let id = Int64(week + 1)
+        return WorkoutSession(id: id, planId: nil, startedAt: start, finishedAt: start.addingTimeInterval(3600), exerciseEntries: [
+            ExerciseEntry(id: id * 10, orderIndex: 0, exercise: bench, sets: [
+                SetEntry(id: id * 100, setNumber: 1, reps: 8 - week % 2, weight: Decimal(80 + 2 * week), rpe: nil, completed: true),
+                SetEntry(id: id * 100 + 1, setNumber: 2, reps: 6, weight: Decimal(80 + 2 * week), rpe: nil, completed: true),
+            ]),
+            ExerciseEntry(id: id * 10 + 1, orderIndex: 1, exercise: pullUp, sets: [
+                SetEntry(id: id * 100 + 2, setNumber: 1, reps: 10, weight: nil, rpe: nil, completed: true),
+            ]),
+        ])
+    }
+}
+
 @MainActor
 private func statsPreview(_ state: ScreenState<ExerciseStats>) -> some View {
     NavigationStack {

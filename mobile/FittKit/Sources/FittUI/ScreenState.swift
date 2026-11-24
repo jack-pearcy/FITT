@@ -79,26 +79,3 @@ struct OfflineView: View {
         }
     }
 }
-
-#if DEBUG
-/// Local data for previews. Nothing here reaches the network.
-enum StatsFixtures {
-    static let bench = Exercise(id: 1, name: "Barbell Bench Press", muscleGroup: .chest, custom: false)
-    static let pullUp = Exercise(id: 2, name: "Pull Up", muscleGroup: .back, custom: false)
-
-    /// Six weekly sessions: bench press rising two kilograms a week, and pull ups.
-    static let sessions: [WorkoutSession] = (0..<6).map { week in
-        let start = Date.now.addingTimeInterval(Double(week - 5) * 7 * 86_400)
-        let id = Int64(week + 1)
-        return WorkoutSession(id: id, planId: nil, startedAt: start, finishedAt: start.addingTimeInterval(3600), exerciseEntries: [
-            ExerciseEntry(id: id * 10, orderIndex: 0, exercise: bench, sets: [
-                SetEntry(id: id * 100, setNumber: 1, reps: 8 - week % 2, weight: Decimal(80 + 2 * week), rpe: nil, completed: true),
-                SetEntry(id: id * 100 + 1, setNumber: 2, reps: 6, weight: Decimal(80 + 2 * week), rpe: nil, completed: true),
-            ]),
-            ExerciseEntry(id: id * 10 + 1, orderIndex: 1, exercise: pullUp, sets: [
-                SetEntry(id: id * 100 + 2, setNumber: 1, reps: 10, weight: nil, rpe: nil, completed: true),
-            ]),
-        ])
-    }
-}
-#endif

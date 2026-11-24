@@ -1680,6 +1680,20 @@ struct AppModelTests {
         #expect(model.history == [])
     }
 
+    @Test("clearing errors also clears the offline flag")
+    func clearErrorsClearsOffline() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond(nil)
+        await model.loadSessions()
+        #expect(model.isOffline)
+
+        model.clearErrors()
+
+        #expect(!model.isOffline)
+        #expect(model.errorMessage == nil)
+    }
+
     @Test("a server error is not reported as offline")
     func serverErrorIsNotOffline() async {
         let server = StubServer()

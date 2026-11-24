@@ -35,17 +35,15 @@ public struct ExerciseStats: Equatable, Sendable {
         public let from: DatedSet
     }
 
-    /// One training day. Either value is nil when no set that day qualified.
+    /// One training day. The estimate is nil when no set that day qualified.
     public struct Point: Equatable, Sendable, Identifiable {
         public let day: CalendarDate
         public let estimatedOneRepMax: Decimal?
-        public let topWeight: Decimal?
         public var id: CalendarDate { day }
 
-        public init(day: CalendarDate, estimatedOneRepMax: Decimal?, topWeight: Decimal?) {
+        public init(day: CalendarDate, estimatedOneRepMax: Decimal?) {
             self.day = day
             self.estimatedOneRepMax = estimatedOneRepMax
-            self.topWeight = topWeight
         }
     }
 
@@ -92,8 +90,7 @@ public struct ExerciseStats: Equatable, Sendable {
             let point = days[day]
             days[day] = Point(
                 day: day,
-                estimatedOneRepMax: [point?.estimatedOneRepMax, estimate].compactMap { $0 }.max(),
-                topWeight: max(point?.topWeight ?? 0, weight)
+                estimatedOneRepMax: [point?.estimatedOneRepMax, estimate].compactMap { $0 }.max()
             )
         }
         self.bestSet = bestSet
