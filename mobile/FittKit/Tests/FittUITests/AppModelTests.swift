@@ -1663,6 +1663,34 @@ struct AppModelTests {
 
         #expect(model.history == nil)
         #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+        #expect(model.isOffline)
+    }
+
+    @Test("a load that reaches the server clears the offline flag")
+    func offlineClearsOnRetry() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond(nil)
+        await model.loadSessions()
+        server.respond { _ in .json(200, "[]") }
+
+        await model.loadSessions()
+
+        #expect(!model.isOffline)
+        #expect(model.history == [])
+    }
+
+    @Test("a server error is not reported as offline")
+    func serverErrorIsNotOffline() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in .json(500, #"{"status":500}"#) }
+
+        await model.loadSessions()
+
+        #expect(model.history == nil)
+        #expect(model.errorMessage != nil)
+        #expect(!model.isOffline)
     }
 
     @Test("a finished workout goes to the top of a loaded history")
