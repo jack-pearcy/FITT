@@ -131,6 +131,9 @@ private struct Stat: View {
 private struct OneRepMaxChart: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric private var height: CGFloat = 180
+    /// Room above the plot for the half of the top axis label that sits
+    /// over the top gridline.
+    @ScaledMetric(relativeTo: .footnote) private var labelRoom: CGFloat = 10
     @State private var drawn = false
     let series: [ExerciseStats.Point]
     let units: UnitsPreference
@@ -187,7 +190,11 @@ private struct OneRepMaxChart: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
-            .frame(height: height)
+            // Axis text stops growing at the largest standard size, so the
+            // labels never crowd out the line. VoiceOver reads the summary.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            .frame(height: min(height, 260))
+            .padding(.top, min(labelRoom, 16))
             .mask(alignment: .leading) {
                 Rectangle().scaleEffect(x: drawn || reduceMotion ? 1 : 0, anchor: .leading)
             }
