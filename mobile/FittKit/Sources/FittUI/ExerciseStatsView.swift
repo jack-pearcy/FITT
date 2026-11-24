@@ -15,10 +15,12 @@ struct ExerciseStatsView: View {
 
     var body: some View {
         ExerciseStatsContent(
-            state: ScreenState(history: model.history, errorMessage: model.errorMessage, isOffline: model.isOffline) { history in
-                let stats = ExerciseStats(exercise: exercise, sessions: history)
-                return stats.sessionCount > 0 ? stats : nil
-            },
+            state: ExerciseStatsContent.screenState(
+                exercise: exercise,
+                history: model.history,
+                errorMessage: model.errorMessage,
+                isOffline: model.isOffline
+            ),
             units: model.units,
             retry: { await model.loadSessions() },
             back: { dismiss() }
@@ -40,6 +42,20 @@ struct ExerciseStatsContent: View {
     let units: UnitsPreference
     let retry: () async -> Void
     let back: () -> Void
+
+    /// Content once a finished session holds a set of this exercise, even a
+    /// bodyweight set with no estimate. Empty when it was never trained.
+    nonisolated static func screenState(
+        exercise: Exercise,
+        history: [WorkoutSession]?,
+        errorMessage: String?,
+        isOffline: Bool
+    ) -> ScreenState<ExerciseStats> {
+        ScreenState(history: history, errorMessage: errorMessage, isOffline: isOffline) { history in
+            let stats = ExerciseStats(exercise: exercise, sessions: history)
+            return stats.sessionCount > 0 ? stats : nil
+        }
+    }
 
     var body: some View {
         StatesView(

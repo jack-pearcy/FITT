@@ -49,4 +49,42 @@ struct ScreenStateTests {
     func keepsContentOnError() {
         #expect(state(history: [session], error: "Cannot reach the server. Check the connection.", offline: true) == .content(1))
     }
+
+    // MARK: Exercise screen
+
+    private let bench = Exercise(id: 1, name: "Barbell Bench Press", muscleGroup: .chest, custom: false)
+    private let pullUp = Exercise(id: 2, name: "Pull Up", muscleGroup: .back, custom: false)
+
+    private func workout(_ exercise: Exercise, weight: Decimal?, finished: Bool = true) -> WorkoutSession {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        return WorkoutSession(id: 7, planId: nil, startedAt: start, finishedAt: finished ? start.addingTimeInterval(3600) : nil, exerciseEntries: [
+            ExerciseEntry(id: 70, orderIndex: 0, exercise: exercise, sets: [
+                SetEntry(id: 700, setNumber: 1, reps: 10, weight: weight, rpe: nil, completed: true),
+            ]),
+        ])
+    }
+
+    private func exerciseState(_ exercise: Exercise, history: [WorkoutSession]) -> ScreenState<ExerciseStats> {
+        ExerciseStatsContent.screenState(exercise: exercise, history: history, errorMessage: nil, isOffline: false)
+    }
+
+    @Test("an exercise missing from every finished session is empty")
+    func exerciseNeverTrained() {
+        #expect(exerciseState(bench, history: [workout(pullUp, weight: nil)]) == .empty)
+    }
+
+    @Test("an exercise with only bodyweight sets is content with no estimate")
+    func exerciseBodyweightOnly() {
+        guard case .content(let stats) = exerciseState(pullUp, history: [workout(pullUp, weight: nil)]) else {
+            Issue.record("expected content")
+            return
+        }
+        #expect(stats.sessionCount == 1)
+        #expect(stats.bestEstimate == nil)
+    }
+
+    @Test("an exercise only in unfinished sessions is empty")
+    func exerciseOnlyUnfinished() {
+        #expect(exerciseState(bench, history: [workout(bench, weight: 80, finished: false)]) == .empty)
+    }
 }
