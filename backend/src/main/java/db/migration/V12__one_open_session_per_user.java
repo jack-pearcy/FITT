@@ -46,7 +46,7 @@ public class V12__one_open_session_per_user extends BaseJavaMigration {
              and (n.started_at > o.started_at or (n.started_at = o.started_at and n.id > o.id))
             """;
 
-    static final String FINISH_STALE_WITH_SETS = """
+    private static final String FINISH_STALE_WITH_SETS = """
             update workout_sessions
             set finished_at = started_at
             where id in (
@@ -62,7 +62,7 @@ public class V12__one_open_session_per_user extends BaseJavaMigration {
 
     // The stale sessions still open now hold no sets, so no set row points at
     // their entries.
-    static final String DELETE_STALE_ENTRIES = """
+    private static final String DELETE_STALE_ENTRIES = """
             delete from exercise_entries
             where workout_session_id in (
                 select stale.id from (
@@ -73,7 +73,7 @@ public class V12__one_open_session_per_user extends BaseJavaMigration {
             )
             """;
 
-    static final String DELETE_STALE_SESSIONS = """
+    private static final String DELETE_STALE_SESSIONS = """
             delete from workout_sessions
             where id in (
                 select stale.id from (
@@ -101,13 +101,13 @@ public class V12__one_open_session_per_user extends BaseJavaMigration {
     // STORED sits in a MySQL versioned comment: MySQL 8.0 and later run the text
     // inside, and H2, which the unit tests migrate and which has no STORED keyword,
     // reads it as a comment. H2 also takes one change per alter table, hence two.
-    static final String ADD_OPEN_OWNER_COLUMN = """
+    private static final String ADD_OPEN_OWNER_COLUMN = """
             alter table workout_sessions
                 add column open_owner_id bigint
                     generated always as (case when finished_at is null then owner_user_id end) /*!80000 stored */
             """;
 
-    static final String ADD_OPEN_OWNER_UNIQUE_KEY = """
+    private static final String ADD_OPEN_OWNER_UNIQUE_KEY = """
             alter table workout_sessions
                 add constraint uk_workout_sessions_open_owner unique (open_owner_id)
             """;
