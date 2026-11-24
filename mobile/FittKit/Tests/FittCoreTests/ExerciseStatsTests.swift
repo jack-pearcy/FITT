@@ -106,6 +106,19 @@ struct ExerciseStatsTests {
         #expect(stats.bestEstimate?.from.sessionId == 1)
     }
 
+    @Test("a later set at the same weight with more reps beats an earlier one")
+    func bestSetMoreRepsLater() {
+        let sessions = [
+            session(1, "2026-11-02T08:00:00Z", [(bench, [("100", 3)])]),
+            session(2, "2026-11-05T08:00:00Z", [(bench, [("100", 5)])]),
+        ]
+
+        let stats = ExerciseStats(exercise: bench, sessions: sessions, calendar: utc)
+
+        #expect(stats.bestSet?.sessionId == 2)
+        #expect(stats.bestSet?.set.reps == 5)
+    }
+
     @Test("a tie on the estimate goes to the earlier date")
     func estimateTie() {
         let sessions = [
