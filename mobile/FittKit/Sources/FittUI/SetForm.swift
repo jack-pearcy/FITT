@@ -66,7 +66,7 @@ struct SetForm: View {
                         .monospacedDigit()
                         .lineLimit(stacked ? 2 : nil)
                         .minimumScaleFactor(stacked ? 0.7 : 1)
-                        .multilineTextAlignment(.center)
+                        .multilineTextAlignment(stacked ? .center : .leading)
                         .frame(maxWidth: stacked ? .infinity : nil, minHeight: 32)
                 }
                 // A style of its own also keeps the tap on the button. With the default
