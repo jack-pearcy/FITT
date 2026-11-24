@@ -42,15 +42,10 @@ struct WorkoutView: View {
     /// Goes up by one for each saved set, which is what the haptic listens to.
     @State private var loggedCount = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @FocusState private var focus: Field?
-
-    private struct Field: Hashable {
-        let entryId: Int64
-        let name: String
-    }
+    @FocusState private var focus: WorkoutField?
 
     /// Entry ids from the server are positive, so zero cannot clash with one.
-    private static let notesField = Field(entryId: 0, name: "notes")
+    private static let notesField = WorkoutField(entryId: 0, name: "notes")
 
     var body: some View {
         if let session = model.activeSession {
@@ -88,17 +83,23 @@ struct WorkoutView: View {
                         }
                         setForm(for: entry)
                     } header: {
-                        HStack {
-                            Text(entry.exercise.name).sectionLabel()
-                            Spacer()
-                            Menu {
-                                Button("Remove Exercise", role: .destructive) { remove(entry) }
-                            } label: {
-                                Image(systemName: "ellipsis.circle")
+                        VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                            HStack {
+                                Text(entry.exercise.name).sectionLabel()
+                                Spacer()
+                                Menu {
+                                    Button("Remove Exercise", role: .destructive) { remove(entry) }
+                                } label: {
+                                    Image(systemName: "ellipsis.circle")
+                                }
+                                .disabled(model.isWorking)
+                                .accessibilityLabel("Options for \(entry.exercise.name)")
+                                .accessibilityIdentifier("entryMenu.\(entry.id)")
                             }
-                            .disabled(model.isWorking)
-                            .accessibilityLabel("Options for \(entry.exercise.name)")
-                            .accessibilityIdentifier("entryMenu.\(entry.id)")
+                            if let last = LastTime.find(exerciseId: entry.exercise.id, in: model.history ?? []) {
+                                LastTimeLine(lastTime: last, units: model.units)
+                                    .accessibilityIdentifier("lastTime.\(entry.exercise.id)")
+                            }
                         }
                     } footer: {
                         VStack(alignment: .leading, spacing: 4) {
@@ -242,47 +243,42 @@ struct WorkoutView: View {
             // Runs again when an exercise is added, which happens one by one as a
             // workout starts and again each time the user adds one.
             .task(id: session.exerciseEntries.map(\.id)) { await model.loadSuggestions() }
+            // Last time and the fill from history come from the finished
+            // workouts. Nothing waits on them.
+            .task { await model.loadHistoryForWorkout() }
         }
     }
 
-    /// The row that logs the next set of one exercise.
+    /// The row that logs the next set of one exercise. Until the user edits
+    /// it, the row shows the prefill, which follows the suggestion and the
+    /// history as they arrive.
     @ViewBuilder
     private func setForm(for entry: ExerciseEntry) -> some View {
         let draft = Binding(
-            get: { drafts[entry.id] ?? SetDraft() },
+            get: { drafts[entry.id] ?? prefill(for: entry) },
             set: { drafts[entry.id] = $0 }
         )
-        HStack {
-            TextField(model.units.weightLabel, text: draft.weight)
-                .numberEntry(decimal: true)
-                .focused($focus, equals: Field(entryId: entry.id, name: "weight"))
-                .accessibilityIdentifier("weight.\(entry.orderIndex)")
-            TextField("Reps", text: draft.reps)
-                .numberEntry(decimal: false)
-                .focused($focus, equals: Field(entryId: entry.id, name: "reps"))
-                .accessibilityIdentifier("reps.\(entry.orderIndex)")
-            TextField("RPE", text: draft.rpe)
-                .numberEntry(decimal: true)
-                .focused($focus, equals: Field(entryId: entry.id, name: "rpe"))
-                .accessibilityIdentifier("rpe.\(entry.orderIndex)")
-            Button("Log") {
-                Task {
-                    // The values stay in the row after a save: the next set is
-                    // usually the same weight and reps.
-                    if await model.logSet(draft.wrappedValue, entryId: entry.id) {
-                        celebrate(entryId: entry.id)
-                    }
+        SetForm(draft: draft, entry: entry, units: model.units, isWorking: model.isWorking, focus: $focus) {
+            Task {
+                // The values stay in the row after a save: the next set is
+                // usually the same weight and reps.
+                if await model.logSet(draft.wrappedValue, entryId: entry.id) {
+                    celebrate(entryId: entry.id)
                 }
             }
-            // A style of its own also keeps the tap on the button. With the default
-            // style, a button in a list row makes the whole row one tap target.
-            .buttonStyle(PillButtonStyle())
-            .disabled(model.isWorking)
-            .accessibilityIdentifier("logSet.\(entry.orderIndex)")
         }
         ForEach(["weight", "reps", "rpe"], id: \.self) { field in
             FieldError(field: AppModel.setFieldKey(entryId: entry.id, field: field))
         }
+    }
+
+    private func prefill(for entry: ExerciseEntry) -> SetDraft {
+        SetPrefill.draft(
+            exerciseId: entry.exercise.id,
+            loggedToday: entry.sets,
+            suggestion: model.suggestions[entry.exercise.id],
+            history: model.history ?? [],
+            units: model.units)
     }
 
     /// Marks the newest set of an entry as just logged, and lets go of it a
