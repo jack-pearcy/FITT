@@ -26,18 +26,18 @@
 
 <main class="doc">
   <h1>Privacy Policy</h1>
-  <p class="updated">Last updated 20 November 2026</p>
+  <p class="updated">Last updated 24 November 2026</p>
 
   <div class="summary-box">
     <p><strong>The short version.</strong> FITT stores what you type into it so it can show it back to you, and nothing more. There are no ads, no tracking and no analytics. Your data is not sold or shared.</p>
-    <p>You can delete your account and everything tied to it from inside the app at any time.</p>
+    <p>You can delete your account and everything tied to it from inside the iPhone app at any time. The web app has no delete screen yet, so if you use only the web app, email us and we will delete it for you.</p>
   </div>
 
   <h2>Who this covers</h2>
   <p>This policy covers the FITT iPhone app, the FITT web app and this website, all at fittapp.dev. FITT is made and run by one independent developer, referred to here as "FITT" or "we".</p>
 
   <h2>What FITT stores</h2>
-  <p>Every item below is something you enter yourself. FITT collects nothing in the background.</p>
+  <p>Everything below is either something you enter yourself or a sign-in record FITT creates to keep your account secure. FITT collects nothing in the background.</p>
   <div class="table-scroll">
   <table>
     <thead><tr><th>Data</th><th>Why it is stored</th></tr></thead>
@@ -45,13 +45,15 @@
       <tr><td><strong>Email address</strong></td><td>To identify your account and sign you in.</td></tr>
       <tr><td><strong>Password</strong></td><td>Stored only as a one-way hash. Nobody, including us, can read your password.</td></tr>
       <tr><td><strong>Workout plans, sessions, sets and notes</strong></td><td>This is what the app is for: showing your training back to you and suggesting what to lift next.</td></tr>
-      <tr><td><strong>Body weight and measurements</strong></td><td>To show your trend. Only what you choose to log.</td></tr>
+      <tr><td><strong>Body weight</strong></td><td>To show your trend. Only what you choose to log.</td></tr>
       <tr><td><strong>Date of birth, height, sex, activity level and goal</strong></td><td>To work out a calorie target. Asked once during setup.</td></tr>
       <tr><td><strong>Sign-in tokens</strong></td><td>To keep you signed in on your device. Stored on the server only as a hash.</td></tr>
+      <tr><td><strong>Two-step sign-in (coming to the apps; stored only for accounts that have it on)</strong></td><td>The iPhone and web apps cannot turn it on yet. For an account that has it on, it is used to check the codes from your authenticator app. The authenticator secret is stored encrypted, because the server has to read it to check a code. Recovery codes are stored only as hashes.</td></tr>
+      <tr><td><strong>Watch link codes</strong></td><td>To connect your Apple Watch to your account. Each code lasts 60 seconds, works once and is stored only as a hash.</td></tr>
     </tbody>
   </table>
   </div>
-  <p>Body weight, measurements and the details used for the calorie target are health-related information. FITT uses them only for the purposes in the table.</p>
+  <p>Body weight, height and the other details used for the calorie target are health-related information. FITT uses them only for the purposes in the table.</p>
 
   <h2>What FITT does not collect</h2>
   <ul>
@@ -73,38 +75,39 @@
   <p>When you write to the support or privacy address, your message and your email address are stored in a mailbox hosted by Proton. They are used only to answer you. They are not added to your FITT account or used for anything else. Ask and we will delete your messages.</p>
 
   <h2>The optional AI coach</h2>
-  <p>FITT can write a short review of your recent training using an AI model. This feature is optional. Nothing is sent anywhere unless you ask for a review.</p>
-  <h3>What is sent when you ask for a review</h3>
+  <p>A coach that writes a short review of your recent training using an AI model is coming. It is not in the app yet. It will be optional, and nothing will be sent anywhere unless you ask for a review. This section describes how it will work.</p>
+  <h3>What will be sent when you ask for a review</h3>
   <ul>
     <li>The names and muscle groups of the exercises in your most recent sessions.</li>
     <li>Your completed sets: weight, reps and effort rating.</li>
     <li>How many days ago each session was.</li>
     <li>Whether your goal is to gain, lose or hold weight.</li>
   </ul>
-  <h3>What is never sent</h3>
+  <h3>What will never be sent</h3>
   <ul>
     <li>Your email address, your name or any account number.</li>
     <li>Exact dates and times.</li>
     <li>Your session notes.</li>
-    <li>Your body weight, target weight, measurements, date of birth, height or calorie figures.</li>
+    <li>Your body weight, target weight, date of birth, height or calorie figures.</li>
   </ul>
   <h3>Who receives it</h3>
-  <p>The review is written by Claude, a model made by Anthropic, PBC. The request goes from the FITT server to Anthropic. Your device never talks to Anthropic directly.</p>
+  <p>The review will be written by Claude, a model made by Anthropic, PBC. The request will go from the FITT server to Anthropic. Your device will never talk to Anthropic directly.</p>
   <p>Anthropic states that it does not use data sent through its commercial API to train its models unless a customer chooses to allow that. FITT has not allowed it. Anthropic may keep request data for a limited time under its own retention rules, for example to detect misuse. See <a href="https://www.anthropic.com/legal/privacy">Anthropic's privacy policy</a>.</p>
-  <p>FITT itself does not store the text it sends or the review it receives. The review is shown to you and then gone.</p>
+  <p>FITT itself will not store the text it sends or the review it receives. The review will be shown to you and then gone.</p>
 
   <h2>Who can see your data</h2>
-  <p>FITT does not sell, rent or trade your data, and does not share it for advertising. Three companies process data on FITT's behalf:</p>
+  <p>FITT does not sell, rent or trade your data, and does not share it for advertising. Two companies process data on FITT's behalf today, and a third will once the coach arrives:</p>
   <div class="table-scroll">
   <table>
     <thead><tr><th>Company</th><th>What it does</th><th>What it handles</th></tr></thead>
     <tbody>
       <tr><td><strong>Hetzner</strong></td><td>Rents FITT the server the service runs on, in the United States.</td><td>Everything FITT stores sits on this server.</td></tr>
-      <tr><td><strong>Anthropic</strong></td><td>Runs the AI model behind the optional coach.</td><td>Only the training summary described above, and only when you ask for a review.</td></tr>
+      <tr><td><strong>Anthropic</strong></td><td>Runs the AI model behind the optional coach, which is coming.</td><td>Only the training summary described above, and only when you ask for a review. Nothing is sent before the coach arrives.</td></tr>
       <tr><td><strong>Proton</strong></td><td>Hosts the mailboxes behind the support and privacy addresses.</td><td>Only email you choose to send us: your email address and what you write.</td></tr>
     </tbody>
   </table>
   </div>
+  <p>Two more companies provide services to FITT and receive no user data. <strong>Cloudflare</strong> runs the DNS for fittapp.dev and an uptime check that sees only whether the server answers. <strong>GitHub</strong> hosts FITT's code and runs its automated builds and checks.</p>
   <p>We may disclose data if the law requires it. If that ever happens we will hand over only what is required.</p>
 
   <h2>How your data is protected</h2>
@@ -117,14 +120,14 @@
   <p>No service can promise perfect security. If a breach affecting your data is ever found, we will tell affected users without undue delay.</p>
 
   <h2>How long data is kept</h2>
-  <p>Your data is kept for as long as your account exists. When you delete your account, your account and every plan, session, set, note, measurement and goal tied to it are erased from the live database straight away. A backup of the database is taken before each update to the service and the ten most recent are kept, so a deleted account can remain in a backup until newer backups replace it. Backups are used only to restore the service after a failure.</p>
+  <p>Your data is kept for as long as your account exists. When you delete your account, your account and every plan, session, set, note, body weight entry and goal tied to it are erased from the live database straight away. A backup of the database is taken before each update to the service and the ten most recent are kept, so a deleted account can remain in a backup until newer backups replace it. Backups are used only to restore the service after a failure.</p>
 
   <h2>Your choices</h2>
   <ul>
-    <li><strong>See and change your data.</strong> Everything FITT holds about you is visible in the app, where you can edit or remove it.</li>
-    <li><strong>Delete your account.</strong> In the app, open the Account tab, choose Delete Account and confirm with your password.</li>
+    <li><strong>See and change your data.</strong> Your plans, workouts and body weight entries are visible in the app. In the iPhone app you can remove your plans, workouts and body weight entries and change your goal. The web app can remove plans but not yet workouts or body weight entries, so email us and we will remove them. Some things cannot be changed in the app yet: a logged set, the body details you gave during setup (date of birth, height, sex and activity level) and your units. Email us and we will show you or correct anything FITT holds.</li>
+    <li><strong>Delete your account.</strong> In the iPhone app, open the Account tab, choose Delete Account and confirm with your password. The web app has no delete screen yet, so if you use only the web app, email us and we will delete it for you.</li>
     <li><strong>Get a copy.</strong> Email us and we will send you your data in a common file format.</li>
-    <li><strong>Skip the AI coach.</strong> Never ask for a review and nothing is ever sent to Anthropic.</li>
+    <li><strong>Skip the AI coach.</strong> Once the coach arrives, never ask for a review and nothing will ever be sent to Anthropic.</li>
   </ul>
   <p>Depending on where you live, the law may give you further rights, such as the right to object to processing or to complain to your local data protection authority. Email us and we will help with any request.</p>
 
