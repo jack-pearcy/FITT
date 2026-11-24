@@ -41,7 +41,7 @@ class MigratedSchemaIntegrationTest {
         // Reaching this line is the test: validation ran while the context started.
         Integer applied = jdbc.queryForObject(
                 "select count(*) from flyway_schema_history where success = 1", Integer.class);
-        assertThat(applied).isGreaterThanOrEqualTo(11);
+        assertThat(applied).isGreaterThanOrEqualTo(12);
 
         Integer mfaTables = jdbc.queryForObject("select count(*) from information_schema.tables"
                 + " where table_schema = database()"
@@ -51,5 +51,13 @@ class MigratedSchemaIntegrationTest {
         Integer linkTables = jdbc.queryForObject("select count(*) from information_schema.tables"
                 + " where table_schema = database() and table_name = 'device_link_codes'", Integer.class);
         assertThat(linkTables).isEqualTo(1);
+
+        // V12's guard: open_owner_id is not mapped in the entity, and validate
+        // accepts a column the entity does not name.
+        Integer openOwnerKey = jdbc.queryForObject("select count(*) from information_schema.statistics"
+                + " where table_schema = database() and table_name = 'workout_sessions'"
+                + " and index_name = 'uk_workout_sessions_open_owner' and column_name = 'open_owner_id'"
+                + " and non_unique = 0", Integer.class);
+        assertThat(openOwnerKey).isEqualTo(1);
     }
 }
