@@ -94,6 +94,12 @@ public class UserBiometricsEntity {
         this.updatedAt = Instant.now();
     }
 
+    // Called from Settings. Leaves every measurement as it is.
+    public void changeUnits(UnitsPreference unitsPreference) {
+        this.unitsPreference = unitsPreference;
+        this.updatedAt = Instant.now();
+    }
+
     public Long getId() { return id; }
     public Long getOwnerUserId() { return ownerUserId; }
     public BigDecimal getHeightCm() { return heightCm; }
