@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -68,7 +69,8 @@ class BiometricsServiceTest {
     @Test
     void changeUnits_saved_changesUnitsOnlyAndTouchesUpdatedAt() {
         UserBiometricsEntity entity = savedBiometrics();
-        Instant before = entity.getUpdatedAt();
+        Instant before = Instant.parse("2020-01-01T00:00:00Z");
+        ReflectionTestUtils.setField(entity, "updatedAt", before);
         when(biometricsRepository.findByOwnerUserId(USER_ID)).thenReturn(Optional.of(entity));
 
         service.changeUnits(USER_ID, UnitsPreference.IMPERIAL);
@@ -79,7 +81,7 @@ class BiometricsServiceTest {
         assertThat(entity.getDateOfBirth()).isEqualTo(LocalDate.of(1990, 3, 2));
         assertThat(entity.getBiologicalSex()).isEqualTo(BiologicalSex.FEMALE);
         assertThat(entity.getActivityLevel()).isEqualTo(ActivityLevel.LIGHTLY_ACTIVE);
-        assertThat(entity.getUpdatedAt()).isAfterOrEqualTo(before);
+        assertThat(entity.getUpdatedAt()).isAfter(before);
     }
 
     @Test
