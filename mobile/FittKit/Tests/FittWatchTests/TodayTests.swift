@@ -76,6 +76,86 @@ import Testing
         #expect(model.activeSession?.id == 2)
     }
 
+    @Test("start first asks for the open workout, and starts one when there is none")
+    func startAsksFirst() async {
+        let backend = FakeBackend()
+        backend.next = Fixtures.nextLift()
+        let model = connectedModel(backend)
+        await model.loadToday()
+
+        await model.startWorkout()
+
+        #expect(Array(backend.calls.drop { $0 != "open 7" }.prefix(2)) == ["open 7", "start 7"])
+        #expect(model.activeSession?.id == 99)
+    }
+
+    @Test("a workout started on the phone after Today loaded is resumed, not started again")
+    func resumesPhoneWorkout() async {
+        let backend = FakeBackend()
+        backend.next = Fixtures.nextLift()
+        let model = connectedModel(backend)
+        await model.loadToday()
+        #expect(model.activeSession == nil)
+
+        let fromPhone = Fixtures.session(id: 44, finished: false, entries: [
+            ExerciseEntry(id: 1, orderIndex: 0, exercise: Fixtures.pullUp, sets: []),
+        ])
+        backend.openResult = .success(fromPhone)
+        await model.startWorkout()
+
+        #expect(model.activeSession == fromPhone)
+        #expect(backend.started.isEmpty)
+        #expect(backend.addedExercises.isEmpty)
+        #expect(model.todayProblem == nil)
+        #expect(model.isStarting == false)
+    }
+
+    @Test("a 409 on start resumes the session the server names")
+    func conflictResumes() async {
+        let backend = FakeBackend()
+        backend.next = Fixtures.nextLift()
+        let model = connectedModel(backend)
+        await model.loadToday()
+
+        backend.conflictOnStart = Fixtures.session(id: 45, finished: false)
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 45)
+        #expect(backend.calls.suffix(3) == ["open 7", "start 7", "session 45"])
+        #expect(backend.addedExercises.isEmpty)
+        #expect(model.todayProblem == nil)
+    }
+
+    @Test("a server without the open route answers it with an error, and start works as before", arguments: [404, 400])
+    func olderServer(status: Int) async {
+        let backend = FakeBackend()
+        backend.next = Fixtures.nextLift()
+        let model = connectedModel(backend)
+        await model.loadToday()
+
+        backend.openResult = .failure(.problem(status: status, APIProblem(status: status, title: "Bad Request")))
+        await model.startWorkout()
+
+        #expect(backend.started.count == 1)
+        #expect(model.activeSession?.exerciseEntries.map(\.exercise.id) == [20, 10])
+        #expect(model.todayProblem == nil)
+    }
+
+    @Test("no connection on the open route starts nothing and says so")
+    func openOffline() async {
+        let backend = FakeBackend()
+        backend.next = Fixtures.nextLift()
+        let model = connectedModel(backend)
+        await model.loadToday()
+
+        backend.openResult = .failure(.transport)
+        await model.startWorkout()
+
+        #expect(backend.started.isEmpty)
+        #expect(model.activeSession == nil)
+        #expect(model.todayProblem == .offline)
+    }
+
     @Test("start does nothing with no plan day")
     func noDay() async {
         let backend = FakeBackend()
@@ -247,8 +327,33 @@ final class FakeBackend: WatchBackend, @unchecked Sendable {
         return sessionList
     }
 
+    /// What the open-session route answers: nil is a 204.
+    var openResult: Result<WorkoutSession?, BackendError> {
+        get { lock.withLock { _openResult } }
+        set { lock.withLock { _openResult = newValue } }
+    }
+    private var _openResult: Result<WorkoutSession?, BackendError> = .success(nil)
+    /// When set, start answers 409 naming this open session.
+    var conflictOnStart: WorkoutSession? {
+        get { lock.withLock { _conflict } }
+        set { lock.withLock { _conflict = newValue } }
+    }
+    private var _conflict: WorkoutSession?
+
+    func openSession(userId: Int64) async throws -> WorkoutSession? {
+        try record("open \(userId)")
+        return try openResult.get()
+    }
+
+    func session(_ sessionId: Int64, userId: Int64) async throws -> WorkoutSession {
+        try record("session \(sessionId)")
+        guard let named = conflictOnStart, named.id == sessionId else { throw BackendError.unexpectedStatus(404) }
+        return named
+    }
+
     func startSession(_ session: NewWorkoutSession, userId: Int64) async throws -> WorkoutSession {
         try record("start \(userId)")
+        if let named = conflictOnStart { throw BackendError.openSessionExists(openSessionId: named.id) }
         let made = Fixtures.session(id: 99, finished: false)
         lock.withLock {
             _started.append(session)

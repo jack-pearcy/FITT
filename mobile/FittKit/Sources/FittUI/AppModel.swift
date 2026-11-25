@@ -609,6 +609,10 @@ public final class AppModel {
     /// Starts a session for the day the server says is next, then adds that
     /// day's exercises to it. The session is stored after every step, so if an
     /// exercise fails to add, what was created is still shown.
+    ///
+    /// The server keeps one open workout per user. One already open, such as a
+    /// workout started on the watch after this screen loaded, is resumed as it
+    /// stands instead of starting another.
     public func startWorkout() async {
         guard case .signedIn = phase, !isWorking, activeSession == nil,
               let next = nextLift, let day = next.day
@@ -617,8 +621,27 @@ public final class AppModel {
         defer { isWorking = false }
         let startedAt = now()
         await load { userId in
-            var session = try await self.backend.startSession(
-                NewWorkoutSession(startedAt: startedAt, planId: next.planId), userId: userId)
+            let open: WorkoutSession?
+            do {
+                open = try await self.backend.openSession(userId: userId)
+            } catch let error as BackendError where error != .unauthorized && error != .transport {
+                // A server older than the open-session route answers it with an
+                // error status. Start then works as it did before the route.
+                open = nil
+            }
+            if let open {
+                self.activeSession = open
+                return
+            }
+            var session: WorkoutSession
+            do {
+                session = try await self.backend.startSession(
+                    NewWorkoutSession(startedAt: startedAt, planId: next.planId), userId: userId)
+            } catch BackendError.openSessionExists(let openSessionId) {
+                // Another device started one between the two calls above.
+                self.activeSession = try await self.backend.session(openSessionId, userId: userId)
+                return
+            }
             self.activeSession = session
             for item in day.orderedExercises {
                 session = try await self.backend.addEntry(exerciseId: item.exercise.id, sessionId: session.id, userId: userId)
@@ -838,6 +861,8 @@ public final class AppModel {
             isOffline = true
         case .unexpectedStatus, .undecodableResponse:
             errorMessage = "The server gave an unexpected answer. Try again."
+        case .openSessionExists:
+            errorMessage = "A workout is already in progress."
         }
     }
 }

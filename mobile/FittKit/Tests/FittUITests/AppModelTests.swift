@@ -1357,7 +1357,8 @@ struct AppModelTests {
         let empty = sessionJSON()
         let withBoth = sessionJSON(entries: [entryJSON(id: 30, order: 0, exercise: bench), entryJSON(id: 31, order: 1, exercise: squat)].joined(separator: ","))
         server.respond { request in
-            request.path.hasSuffix("/entries") ? .json(200, withBoth) : .json(201, empty)
+            if request.path.hasSuffix("/open") { return StubResponse(status: 204) }
+            return request.path.hasSuffix("/entries") ? .json(200, withBoth) : .json(201, empty)
         }
 
         await model.startWorkout()
@@ -1366,11 +1367,13 @@ struct AppModelTests {
         #expect(model.errorMessage == nil)
         #expect(!model.isWorking)
         #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
             "POST /api/users/7/workout-sessions",
             "POST /api/users/7/workout-sessions/12/entries",
             "POST /api/users/7/workout-sessions/12/entries",
         ])
-        let sent = try server.requests.dropFirst(before).map {
+        // The bodies of the three writes, after the read of the open session.
+        let sent = try server.requests.dropFirst(before + 1).map {
             try #require(try JSONSerialization.jsonObject(with: $0.body) as? [String: Any])
         }
         #expect(sent[0]["planId"] as? Int == 5)
@@ -1385,7 +1388,8 @@ struct AppModelTests {
         let model = await workoutModel(server, inProgress: false)
         let empty = sessionJSON()
         server.respond { request in
-            request.path.hasSuffix("/entries") ? .json(500, #"{"status":500,"detail":"Unexpected error"}"#) : .json(201, empty)
+            if request.path.hasSuffix("/open") { return StubResponse(status: 204) }
+            return request.path.hasSuffix("/entries") ? .json(500, #"{"status":500,"detail":"Unexpected error"}"#) : .json(201, empty)
         }
 
         await model.startWorkout()
@@ -1393,6 +1397,100 @@ struct AppModelTests {
         #expect(model.activeSession?.id == 12)
         #expect(model.activeSession?.exerciseEntries.isEmpty == true)
         #expect(model.errorMessage == "Unexpected error")
+    }
+
+    @Test("a workout already open, such as one started on the watch, is resumed instead of starting another")
+    func startWorkoutResumesOpen() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        let open = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench)).replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        server.respond { request in
+            request.path.hasSuffix("/open") ? .json(200, open) : .json(500, #"{"status":500,"detail":"Unexpected error"}"#)
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 44)
+        #expect(model.activeSession?.orderedEntries.map(\.exercise.name) == ["Barbell Bench Press"])
+        #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == ["GET /api/users/7/workout-sessions/open"])
+    }
+
+    @Test("a 409 on start resumes the session the server names")
+    func startWorkoutConflictResumes() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        let named = sessionJSON().replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        server.respond { request in
+            if request.path.hasSuffix("/open") { return StubResponse(status: 204) }
+            if request.method == "POST" {
+                return .json(409, #"{"status":409,"title":"Open Session Exists","properties":{"openSessionId":44}}"#)
+            }
+            return .json(200, named)
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 44)
+        #expect(model.errorMessage == nil)
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "POST /api/users/7/workout-sessions",
+            "GET /api/users/7/workout-sessions/44",
+        ])
+    }
+
+    @Test("a server without the open route answers it with an error, and start works as before", arguments: [404, 400])
+    func startWorkoutOnOlderServer(status: Int) async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        let withBench = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+        server.respond { request in
+            if request.path.hasSuffix("/open") {
+                return .json(status, #"{"status":\#(status),"title":"Bad Request","detail":"No such route"}"#)
+            }
+            return request.path.hasSuffix("/entries") ? .json(200, withBench) : .json(201, withBench)
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 12)
+        #expect(model.errorMessage == nil)
+        #expect(Array(calls(server, after: before).prefix(2)) == [
+            "GET /api/users/7/workout-sessions/open",
+            "POST /api/users/7/workout-sessions",
+        ])
+    }
+
+    @Test("no connection on the open route stops the start and says so")
+    func startWorkoutOpenOffline() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        server.respond(nil)
+
+        await model.startWorkout()
+
+        #expect(model.activeSession == nil)
+        #expect(model.isOffline)
+        #expect(calls(server, after: before) == ["GET /api/users/7/workout-sessions/open"])
+    }
+
+    @Test("a 401 on the open route that cannot be renewed ends the session")
+    func startWorkoutOpenUnauthorized() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        server.respond { _ in StubResponse(status: 401) }
+
+        await model.startWorkout()
+
+        #expect(model.phase == .signedOut)
+        #expect(!calls(server, after: before).contains("POST /api/users/7/workout-sessions"))
     }
 
     @Test("starting does nothing while a workout is already in progress")
@@ -1793,6 +1891,7 @@ struct AppModelTests {
         let withBench = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
         server.respond { request in
             if request.path.hasSuffix("/next-lift") { return .json(200, next) }
+            if request.path.hasSuffix("/open") { return StubResponse(status: 204) }
             return request.path.hasSuffix("/entries") ? .json(200, withBench) : .json(201, empty)
         }
         await model.loadNextLift()

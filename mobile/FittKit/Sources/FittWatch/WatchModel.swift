@@ -150,14 +150,39 @@ public final class WatchModel {
     /// Starts a session for the day the server says is next and adds that day's
     /// exercises to it. If an exercise fails to add, the session that was made
     /// is kept and shown, so nothing is started twice.
+    ///
+    /// The server keeps one open workout per user. One already open, such as a
+    /// workout started on the phone after Today loaded, is resumed as it stands
+    /// instead of starting another.
     public func startWorkout() async {
         guard let userId, let backend, !isStarting, activeSession == nil,
               let next = nextLift, let day = next.day else { return }
         isStarting = true
         defer { isStarting = false }
         do {
-            var session = try await backend.startSession(
-                NewWorkoutSession(startedAt: now(), planId: next.planId), userId: userId)
+            let open: WorkoutSession?
+            do {
+                open = try await backend.openSession(userId: userId)
+            } catch let error as BackendError where error != .unauthorized && error != .transport {
+                // A server older than the open-session route answers it with an
+                // error status. Start then works as it did before the route.
+                open = nil
+            }
+            if let open {
+                activeSession = open
+                todayProblem = nil
+                return
+            }
+            var session: WorkoutSession
+            do {
+                session = try await backend.startSession(
+                    NewWorkoutSession(startedAt: now(), planId: next.planId), userId: userId)
+            } catch BackendError.openSessionExists(let openSessionId) {
+                // The phone started one between the two calls above.
+                activeSession = try await backend.session(openSessionId, userId: userId)
+                todayProblem = nil
+                return
+            }
             activeSession = session
             for item in day.orderedExercises {
                 session = try await backend.addEntry(exerciseId: item.exercise.id, sessionId: session.id, userId: userId)
