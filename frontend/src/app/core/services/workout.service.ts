@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import {forkJoin, Observable, of, switchMap} from 'rxjs';
+import {catchError, forkJoin, Observable, of, switchMap, throwError} from 'rxjs';
 import {
   AddExerciseEntryRequest,
   CreateExerciseRequest,
@@ -126,7 +126,33 @@ export class WorkoutService {
       startedAt: new Date().toISOString(),
       planId
     }).pipe(
-      switchMap(session => this.completeSessionForDay(userId, planId, session, day))
+      switchMap(session => this.addDayExercises(userId, session, day))
+    );
+  }
+
+  // The one Start path for every web screen. It asks for the open workout
+  // first and resumes it. With none open it starts the day as before. If the
+  // start still meets an open workout, the 409 names it and that one resumes.
+  // A server without the /open route answers 400, 404 or 405, which reads as
+  // none open so Start works as before. Unauthorized and no connection fail.
+  startOrResumeForDay(userId: number, planId: number, day: WorkoutPlanDayResponse): Observable<WorkoutSessionResponse> {
+    return this.getOpenSession(userId).pipe(
+      catchError(err => {
+        const status = err instanceof HttpErrorResponse ? err.status : 0;
+        return status === 0 || status === 401 ? throwError(() => err) : of(null);
+      }),
+      switchMap(open => open !== null
+        ? this.resumeSessionForDay(userId, planId, open, day)
+        : this.startSessionForDay(userId, planId, day).pipe(
+            catchError(err => {
+              const openId = openSessionIdFrom(err);
+              return openId === null
+                ? throwError(() => err)
+                : this.getSession(userId, openId).pipe(
+                    switchMap(found => this.resumeSessionForDay(userId, planId, found, day))
+                  );
+            })
+          ))
     );
   }
 
@@ -134,7 +160,7 @@ export class WorkoutService {
   // the session. A start that failed partway leaves an open session with some
   // entries missing, so resuming it fills them in. A session from another plan
   // is left as it is.
-  completeSessionForDay(
+  private resumeSessionForDay(
     userId: number,
     planId: number,
     session: WorkoutSessionResponse,
@@ -143,18 +169,25 @@ export class WorkoutService {
     if (session.planId !== planId) {
       return of(session);
     }
-
     const present = new Set(session.exerciseEntries.map(entry => entry.exercise.id));
-    const entries = day.exercises
-      .filter(ex => !present.has(ex.exercise.id))
-      .map(ex => this.addExerciseEntry(userId, session.id, { exerciseId: ex.exercise.id }));
+    return this.addDayExercises(userId, session, {
+      ...day,
+      exercises: day.exercises.filter(ex => !present.has(ex.exercise.id))
+    });
+  }
 
-    // Nothing missing, or a day with no exercises, keeps the session as it is.
+  // Adds an entry for each of the day's exercises in parallel, then emits the
+  // session itself. A day with no exercises keeps the session as it is.
+  private addDayExercises(
+    userId: number,
+    session: WorkoutSessionResponse,
+    day: WorkoutPlanDayResponse
+  ): Observable<WorkoutSessionResponse> {
+    const entries = day.exercises
+      .map(ex => this.addExerciseEntry(userId, session.id, { exerciseId: ex.exercise.id }));
     if (entries.length === 0) {
       return of(session);
     }
-
-    // Add all missing entries in parallel, then emit the session itself.
     return forkJoin(entries).pipe(map(() => session));
   }
 

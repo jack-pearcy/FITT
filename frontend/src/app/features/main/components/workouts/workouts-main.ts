@@ -162,7 +162,8 @@ export class WorkoutsMainComponent implements OnInit {
     this.actionLoading.set(true);
 
     this.workouts.getTodaysDay(userId, plan).pipe(
-      switchMap(day => this.workouts.startSessionForDay(userId, plan.id, day)),
+      // The server allows one open workout, so Start resumes it when there is one.
+      switchMap(day => this.workouts.startOrResumeForDay(userId, plan.id, day)),
       takeUntilDestroyed(this.destroyRef)
     ).subscribe({
       next: session => {
