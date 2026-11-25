@@ -47,6 +47,9 @@ public final class AppModel {
     public private(set) var activeSession: WorkoutSession?
     /// Finished workouts, newest first. Nil until loaded.
     public private(set) var history: [WorkoutSession]?
+    /// True while the workout screen's read of the history is out, so a second
+    /// visit does not send another.
+    @ObservationIgnored private var isLoadingHistory = false
     /// The model the server uses for suggestions. Nil until loaded.
     public private(set) var progressionModel: ProgressionModel?
     /// What to do next for an exercise, by exercise id. An exercise is missing
@@ -527,6 +530,23 @@ public final class AppModel {
             self.activeSession = sessions.first { !$0.isFinished }
             self.history = SessionHistory.finished(sessions)
         }
+    }
+
+    /// Reads the finished workouts for the workout screen, which fills sets and
+    /// shows last time from them. Only when they are not loaded yet, and only
+    /// one read at a time. History is help here, not a step of the workout: a
+    /// failure leaves it unloaded with no message, nothing waits on it, and the
+    /// workout in progress is left as it is so a set saved meanwhile is kept.
+    public func loadHistoryForWorkout() async {
+        guard case .signedIn(let userId) = phase, history == nil, !isLoadingHistory else { return }
+        isLoadingHistory = true
+        defer { isLoadingHistory = false }
+        // A failure is not shown: the screen then has no last time, which is
+        // what a user with no history sees too.
+        guard let sessions = try? await backend.sessions(userId: userId) else { return }
+        // The answer is dropped if the user signed out while it was on its way.
+        guard case .signedIn(userId) = phase, history == nil else { return }
+        history = SessionHistory.finished(sessions)
     }
 
     /// Deletes a finished workout. Returns true when it is gone, so the screen
