@@ -31,42 +31,47 @@ struct HistoryView: View {
                             description: Text("A workout shows up here once you finish it.")
                         )
                     } else {
-                        List(history) { session in
-                            NavigationLink {
-                                SessionDetailView(session: session, planName: planName(for: session))
-                            } label: {
-                                HStack(spacing: Theme.Space.m) {
-                                    VStack(alignment: .leading, spacing: Theme.Space.xs) {
-                                        Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
-                                            .font(.headline)
-                                            .foregroundStyle(Theme.textPrimary)
-                                        Text([planName(for: session), session.contentText]
-                                            .compactMap { $0 }
-                                            .joined(separator: " · "))
-                                            .font(.footnote)
-                                            .foregroundStyle(Theme.textSecondary)
+                        List {
+                            RecordsSection(records: ExerciseStats.records(history, limit: 3), units: model.units)
+                            ForEach(history) { session in
+                                NavigationLink {
+                                    SessionDetailView(session: session, planName: planName(for: session))
+                                } label: {
+                                    HStack(spacing: Theme.Space.m) {
+                                        VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                                            Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
+                                                .font(.headline)
+                                                .foregroundStyle(Theme.textPrimary)
+                                            Text([planName(for: session), session.contentText]
+                                                .compactMap { $0 }
+                                                .joined(separator: " · "))
+                                                .font(.footnote)
+                                                .foregroundStyle(Theme.textSecondary)
+                                        }
+                                        Spacer(minLength: 0)
+                                        if let durationText = session.durationText {
+                                            Text(durationText)
+                                                .font(.footnote.weight(.medium))
+                                                .metric()
+                                                .foregroundStyle(Theme.textSecondary)
+                                                .padding(.horizontal, Theme.Space.s)
+                                                .padding(.vertical, 3)
+                                                .background(Theme.well, in: Capsule())
+                                        }
                                     }
-                                    Spacer(minLength: 0)
-                                    if let durationText = session.durationText {
-                                        Text(durationText)
-                                            .font(.footnote.weight(.medium))
-                                            .metric()
-                                            .foregroundStyle(Theme.textSecondary)
-                                            .padding(.horizontal, Theme.Space.s)
-                                            .padding(.vertical, 3)
-                                            .background(Theme.well, in: Capsule())
-                                    }
+                                    .padding(.vertical, Theme.Space.xs)
                                 }
-                                .padding(.vertical, Theme.Space.xs)
+                                .accessibilityIdentifier("session.\(session.id)")
+                                .listRowBackground(Theme.card)
                             }
-                            .accessibilityIdentifier("session.\(session.id)")
-                            .listRowBackground(Theme.card)
                         }
                         .themedScroll()
                         // A finished workout slides in at the top, and a deleted one slides out.
                         .motion(value: history)
                         .refreshable { await load() }
                     }
+                } else if model.isOffline {
+                    OfflineView { await load() }
                 } else if let message = model.errorMessage {
                     LoadFailedView(message: message) { await load() }
                 } else {
@@ -137,6 +142,13 @@ private struct SessionDetailView: View {
 
             ForEach(session.orderedEntries) { entry in
                 LabeledSection(entry.exercise.name) {
+                    NavigationLink {
+                        ExerciseStatsView(exercise: entry.exercise)
+                    } label: {
+                        Label("Records and progress", systemImage: "chart.line.uptrend.xyaxis")
+                    }
+                    .accessibilityLabel("\(entry.exercise.name), records and progress")
+                    .accessibilityIdentifier("exerciseStats.\(entry.exercise.id)")
                     if entry.sets.isEmpty {
                         Text("No sets logged")
                             .foregroundStyle(Theme.textSecondary)

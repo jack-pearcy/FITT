@@ -23,6 +23,8 @@ public final class AppModel {
     public private(set) var units = UnitsPreference.metric
     public private(set) var isWorking = false
     public private(set) var errorMessage: String?
+    /// True when the last error was that the server could not be reached.
+    public private(set) var isOffline = false
     /// Something that went right and is worth saying once, such as "Your account
     /// was deleted." It is not an error and `clearErrors()` leaves it alone:
     /// screens clear errors when they appear, disappear and on every keystroke,
@@ -743,6 +745,7 @@ public final class AppModel {
     private func load(_ work: (Int64) async throws -> Void) async {
         guard case .signedIn(let userId) = phase else { return }
         errorMessage = nil
+        isOffline = false
         do {
             try await work(userId)
         } catch let error as BackendError {
@@ -754,6 +757,7 @@ public final class AppModel {
 
     public func clearErrors() {
         errorMessage = nil
+        isOffline = false
         fieldErrors = [:]
     }
 
@@ -831,6 +835,7 @@ public final class AppModel {
             errorMessage = problem.fieldErrors.isEmpty ? (problem.detail ?? "The request was rejected.") : nil
         case .transport:
             errorMessage = "Cannot reach the server. Check the connection."
+            isOffline = true
         case .unexpectedStatus, .undecodableResponse:
             errorMessage = "The server gave an unexpected answer. Try again."
         }
