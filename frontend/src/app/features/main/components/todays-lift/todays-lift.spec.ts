@@ -146,6 +146,33 @@ describe('TodaysLift', () => {
     expect(component.starting()).toBe(false);
   });
 
+  it('keeps the start error when the /open call has no connection', () => {
+    component.startSession();
+
+    // HttpTestingController reports a ProgressEvent error as status 0.
+    http.expectOne(`${BASE}/open`).error(new ProgressEvent('error'));
+    http.expectNone(r => r.method === 'POST' && r.url === BASE);
+
+    expect(mockRouter.navigate).not.toHaveBeenCalled();
+    expect(component.error()).toBe('Could not start your session. Try again.');
+    expect(component.starting()).toBe(false);
+  });
+
+  it('shows the start error when a 409 on the start names no open session', () => {
+    component.startSession();
+
+    http.expectOne(`${BASE}/open`).flush(null, { status: 204, statusText: 'No Content' });
+    http.expectOne(r => r.method === 'POST' && r.url === BASE).flush(
+      { title: 'Conflict', status: 409 },
+      { status: 409, statusText: 'Conflict' }
+    );
+    http.expectNone(r => r.method === 'GET' && r.url.startsWith(`${BASE}/`));
+
+    expect(mockRouter.navigate).not.toHaveBeenCalled();
+    expect(component.error()).toBe('Could not start your session. Try again.');
+    expect(component.starting()).toBe(false);
+  });
+
   it('adds the missing exercises to an open workout before resuming it', () => {
     component.todayDay.set(pushDay);
     component.startSession();
