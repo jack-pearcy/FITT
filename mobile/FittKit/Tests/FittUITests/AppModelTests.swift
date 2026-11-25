@@ -10,9 +10,13 @@ struct AppModelTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
     private let onboardingDone = #"{"biometricsComplete":true,"goalsComplete":true,"onboardingComplete":true}"#
 
-    private func model(_ server: StubServer, store: InMemoryTokenStore = InMemoryTokenStore()) -> AppModel {
+    private func model(
+        _ server: StubServer,
+        store: InMemoryTokenStore = InMemoryTokenStore(),
+        pause: @escaping @Sendable (Duration) async -> Void = { _ in }
+    ) -> AppModel {
         let now = now
-        return AppModel(backend: server.backend(tokenStore: store), tokenStore: store, now: { now }, pause: { _ in })
+        return AppModel(backend: server.backend(tokenStore: store), tokenStore: store, now: { now }, pause: pause)
     }
 
     @Test("a successful sign in stores the token and moves to signed in")
@@ -284,11 +288,16 @@ struct AppModelTests {
     }
 
     /// A signed-in model whose server reports the given steps as done until told otherwise.
-    private func signedInModel(_ server: StubServer, biometrics: Bool, goals: Bool) async -> AppModel {
+    private func signedInModel(
+        _ server: StubServer,
+        biometrics: Bool,
+        goals: Bool,
+        pause: @escaping @Sendable (Duration) async -> Void = { _ in }
+    ) async -> AppModel {
         let initial = status(biometrics: biometrics, goals: goals)
         server.respond { _ in .json(200, initial) }
         let store = InMemoryTokenStore(token: makeToken(userId: 7, expiresAt: now.addingTimeInterval(600)))
-        let model = model(server, store: store)
+        let model = model(server, store: store, pause: pause)
         await model.start()
         return model
     }
@@ -1308,8 +1317,12 @@ struct AppModelTests {
     }
 
     /// A signed-in model with next lift loaded and, optionally, a session in progress.
-    private func workoutModel(_ server: StubServer, inProgress: Bool) async -> AppModel {
-        let model = await signedInModel(server, biometrics: true, goals: true)
+    private func workoutModel(
+        _ server: StubServer,
+        inProgress: Bool,
+        pause: @escaping @Sendable (Duration) async -> Void = { _ in }
+    ) async -> AppModel {
+        let model = await signedInModel(server, biometrics: true, goals: true, pause: pause)
         let next = nextLiftWithDay
         let session = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
         server.respond { request in
@@ -1503,6 +1516,69 @@ struct AppModelTests {
             "GET /api/users/7/workout-sessions/44",
             "GET /api/users/7/workout-sessions/44",
             "GET /api/users/7/workout-sessions/44",
+        ])
+    }
+
+    @Test("a reread made before a set was logged does not take the set off the screen")
+    func startWorkoutSettleKeepsLoggedSet() async {
+        let server = StubServer()
+        let wait = OneTimeAction()
+        let model = await workoutModel(server, inProgress: false, pause: { _ in await wait.run() })
+        let before = server.requests.count
+        let both = [entryJSON(id: 30, order: 0, exercise: bench), entryJSON(id: 31, order: 1, exercise: squat)]
+        let set = #"{"id":101,"setNumber":1,"reps":8,"weight":100.00,"rpe":null,"completed":true}"#
+        let withSet = [entryJSON(id: 30, order: 0, exercise: bench, sets: set), entryJSON(id: 31, order: 1, exercise: squat)]
+        let empty = sessionJSON().replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let stale = sessionJSON(entries: both.joined(separator: ","))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let logged = sessionJSON(entries: withSet.joined(separator: ","))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        // The first read left before the set was saved, so it does not have it.
+        let reads = Locked([stale, logged])
+        server.respond { request in
+            if request.path.hasSuffix("/open") { return .json(200, empty) }
+            if request.method == "POST" { return .json(200, logged) }
+            return .json(200, reads.withLock { $0.count > 1 ? $0.removeFirst() : $0[0] })
+        }
+        wait.action = { _ = await model.logSet(SetDraft(weight: "100", reps: "8"), entryId: 30) }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 44)
+        #expect(model.activeSession?.loggedSetCount == 1)
+        #expect(model.activeSession?.orderedEntries.map(\.exercise.name) == ["Barbell Bench Press", "Back Squat"])
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "POST /api/users/7/workout-sessions/44/entries/30/sets",
+            "GET /api/users/7/workout-sessions/44",
+            "GET /api/users/7/workout-sessions/44",
+        ])
+    }
+
+    @Test("a resumed workout discarded during the wait is not read again or brought back")
+    func startWorkoutSettleStopsWhenDiscarded() async {
+        let server = StubServer()
+        let wait = OneTimeAction()
+        let model = await workoutModel(server, inProgress: false, pause: { _ in await wait.run() })
+        let before = server.requests.count
+        let empty = sessionJSON().replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let withBench = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        server.respond { request in
+            if request.path.hasSuffix("/open") { return .json(200, empty) }
+            if request.method == "DELETE" { return StubResponse(status: 204) }
+            return .json(200, withBench)
+        }
+        wait.action = { await model.discardWorkout() }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession == nil)
+        #expect(model.errorMessage == nil)
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "DELETE /api/users/7/workout-sessions/44",
         ])
     }
 
@@ -2568,5 +2644,18 @@ struct AppModelTests {
         )
         #expect(suggestion.targetText(units: .metric) == "102.06 kg × 8, 3 sets")
         #expect(suggestion.targetText(units: .imperial) == "225 lb × 8, 3 sets")
+    }
+}
+
+/// Runs an action the first time the model waits between rereads, standing in
+/// for what the user does in that second. Later waits return at once.
+@MainActor
+final class OneTimeAction {
+    var action: (@MainActor () async -> Void)?
+
+    func run() async {
+        let action = action
+        self.action = nil
+        await action?()
     }
 }

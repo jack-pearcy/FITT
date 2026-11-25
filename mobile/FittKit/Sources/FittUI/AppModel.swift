@@ -665,21 +665,26 @@ public final class AppModel {
 
     /// Reads a resumed workout again, about one and three seconds later, while
     /// the device that started it may still be adding its exercises. Stops once
-    /// it has every exercise of the day or a read finds no new ones. A read is
-    /// dropped if the user has left the workout or is saving a change to it,
-    /// and a failed read only ends the rereads: the workout on screen stays.
+    /// it has every exercise of the day or a read finds no new ones. The rereads
+    /// stop if the user has left the workout, and a failed read only ends them:
+    /// the workout on screen stays. A read is dropped if the workout on screen
+    /// changed between the wait and its answer, since a set logged or deleted,
+    /// or notes saved, in that time came back from the server after the read
+    /// may have been made.
     private func settle(_ resumed: WorkoutSession, expectedEntries: Int) async {
         var seen = resumed.exerciseEntries.count
         for delay in [Duration.seconds(1), .seconds(2)] {
             guard seen < expectedEntries else { return }
+            let before = activeSession
             await pause(delay)
             guard case .signedIn(let userId) = phase, activeSession?.id == resumed.id,
                   let fresh = try? await backend.session(resumed.id, userId: userId)
             else { return }
-            guard case .signedIn(userId) = phase, activeSession?.id == resumed.id else { return }
-            if !isWorking {
-                activeSession = fresh
-            }
+            guard case .signedIn(userId) = phase else { return }
+            // A write still out returns the whole workout when it lands, and
+            // that answer is at least as new as this read.
+            guard activeSession == before else { continue }
+            activeSession = fresh
             guard fresh.exerciseEntries.count > seen else { return }
             seen = fresh.exerciseEntries.count
         }

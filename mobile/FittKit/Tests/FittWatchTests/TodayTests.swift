@@ -8,13 +8,17 @@ import Testing
 @Suite struct TodayTests {
     private let startedAt = Date(timeIntervalSince1970: 1_800_000_000)
 
-    private func connectedModel(_ backend: FakeBackend, userId: Int64 = 7) -> WatchModel {
+    private func connectedModel(
+        _ backend: FakeBackend,
+        userId: Int64 = 7,
+        pause: @escaping @Sendable (Duration) async -> Void = { _ in }
+    ) -> WatchModel {
         let token = makeWatchToken(userId: userId, expiresAt: Date().addingTimeInterval(3600))
         let model = WatchModel(
             tokenStore: InMemoryTokenStore(token: token, refreshToken: "refresh"),
             backend: backend,
             now: { [startedAt] in startedAt },
-            pause: { _ in })
+            pause: pause)
         model.start()
         return model
     }
@@ -181,6 +185,53 @@ import Testing
         #expect(backend.started.isEmpty)
         #expect(backend.addedExercises.isEmpty)
         #expect(model.todayProblem == nil)
+        #expect(model.isStarting == false)
+    }
+
+    @Test("a resumed workout finished on the phone during the wait is not read again")
+    func resumedSettleStopsWhenGone() async {
+        let backend = FakeBackend()
+        backend.next = Fixtures.nextLift()
+        let wait = OneTimeAction()
+        let model = connectedModel(backend, pause: { _ in await wait.run() })
+        await model.loadToday()
+
+        let pullUp = ExerciseEntry(id: 1, orderIndex: 0, exercise: Fixtures.pullUp, sets: [])
+        backend.openResult = .success(Fixtures.session(id: 44, finished: false))
+        backend.laterReads = [Fixtures.session(id: 44, finished: false, entries: [pullUp])]
+        wait.action = {
+            backend.sessionList = [Fixtures.session(id: 44, finished: true)]
+            await model.loadToday()
+        }
+        await model.startWorkout()
+
+        #expect(model.activeSession == nil)
+        #expect(!backend.calls.contains("session 44"))
+        #expect(model.isStarting == false)
+    }
+
+    @Test("a reread that lands after the workout on screen changed is dropped")
+    func resumedSettleDropsReadForOtherWorkout() async {
+        let backend = FakeBackend()
+        backend.next = Fixtures.nextLift()
+        let model = connectedModel(backend)
+        await model.loadToday()
+
+        let pullUp = ExerciseEntry(id: 1, orderIndex: 0, exercise: Fixtures.pullUp, sets: [])
+        backend.openResult = .success(Fixtures.session(id: 44, finished: false))
+        backend.laterReads = [Fixtures.session(id: 44, finished: false, entries: [pullUp])]
+        let during = OneTimeAction()
+        during.action = {
+            backend.sessionList = [
+                Fixtures.session(id: 44, finished: true), Fixtures.session(id: 45, finished: false),
+            ]
+            await model.loadToday()
+        }
+        backend.duringSessionRead = { await during.run() }
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 45)
+        #expect(backend.calls.filter { $0 == "session 44" }.count == 1)
         #expect(model.isStarting == false)
     }
 
@@ -403,8 +454,16 @@ final class FakeBackend: WatchBackend, @unchecked Sendable {
     }
     private var _laterReads: [WorkoutSession] = []
 
+    /// Runs while a read of one session by id is out, before it answers.
+    var duringSessionRead: (@Sendable () async -> Void)? {
+        get { lock.withLock { _duringSessionRead } }
+        set { lock.withLock { _duringSessionRead = newValue } }
+    }
+    private var _duringSessionRead: (@Sendable () async -> Void)?
+
     func session(_ sessionId: Int64, userId: Int64) async throws -> WorkoutSession {
         try record("session \(sessionId)")
+        await duringSessionRead?()
         let queued: WorkoutSession? = lock.withLock {
             guard let first = _laterReads.first, first.id == sessionId else { return nil }
             return _laterReads.removeFirst()
@@ -453,4 +512,18 @@ func makeWatchToken(userId: Int64, expiresAt: Date) -> String {
     }
     let payload = "{\"uid\":\(userId),\"exp\":\(Int(expiresAt.timeIntervalSince1970))}"
     return [segment("{\"alg\":\"HS256\"}"), segment(payload), segment("signature")].joined(separator: ".")
+}
+
+
+/// Runs an action once, standing in for what happens on another device while
+/// the watch waits or reads. Later runs return at once.
+@MainActor
+final class OneTimeAction {
+    var action: (@MainActor () async -> Void)?
+
+    func run() async {
+        let action = action
+        self.action = nil
+        await action?()
+    }
 }
