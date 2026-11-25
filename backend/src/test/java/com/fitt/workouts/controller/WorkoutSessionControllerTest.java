@@ -2,6 +2,7 @@ package com.fitt.workouts.controller;
 
 import com.fitt.workouts.dto.WorkoutSessionResponse;
 import com.fitt.workouts.service.WorkoutSessionService;
+import com.fitt.workouts.service.exception.OpenSessionExistsException;
 import com.fitt.workouts.service.exception.WorkoutSessionNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -25,6 +27,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -76,6 +79,56 @@ class WorkoutSessionControllerTest {
                 .andExpect(jsonPath("$.id").value(SESSION_ID))
                 .andExpect(jsonPath("$.planId").value(PLAN_ID))
                 .andExpect(jsonPath("$.notes").value("Test session"));
+    }
+
+    @Test
+    void createSession_withAnOpenSession_returns409WithItsId() throws Exception {
+        when(workoutSessionService.createSession(eq(USER_ID), any()))
+                .thenThrow(new OpenSessionExistsException(SESSION_ID));
+
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions", USER_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(CREATE_BODY))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Open Session Exists"))
+                // Problem properties arrive under "properties", as the "errors" map
+                // of a validation failure does.
+                .andExpect(jsonPath("$.properties.openSessionId").value(SESSION_ID));
+    }
+
+    @Test
+    void getOpenSession_withOneOpen_returns200WithIt() throws Exception {
+        when(workoutSessionService.getOpenSession(USER_ID)).thenReturn(Optional.of(sampleSession()));
+
+        mockMvc.perform(get("/api/users/{userId}/workout-sessions/open", USER_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(SESSION_ID))
+                .andExpect(jsonPath("$.finishedAt").doesNotExist());
+    }
+
+    @Test
+    void getOpenSession_withNoneOpen_returns204() throws Exception {
+        when(workoutSessionService.getOpenSession(USER_ID)).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/users/{userId}/workout-sessions/open", USER_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID))))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+    }
+
+    // The stage 0 contract test row says 404 for a foreign user. This route answers
+    // 403, as every other route under /api/users/{userId}/workout-sessions does on
+    // a path user mismatch; one route alone answering 404 would be inconsistent.
+    @Test
+    void getOpenSession_ofAnotherUser_returns403AndReadsNothing() throws Exception {
+        mockMvc.perform(get("/api/users/{userId}/workout-sessions/open", USER_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", OTHER_USER_ID))))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(workoutSessionService);
     }
 
     @Test
