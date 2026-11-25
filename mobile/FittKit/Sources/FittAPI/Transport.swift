@@ -56,6 +56,11 @@ struct Transport: Sendable {
         case 429:
             return .rateLimited(retryAfter: headers.value(forHTTPHeaderField: "Retry-After").flatMap(Int.init))
         default:
+            // Only the start of a workout answers 409 with an open session's id.
+            // Other 409s, such as an exercise still in use, stay problems.
+            if status == 409, let conflict = try? JSONDecoder().decode(OpenSessionConflict.self, from: body) {
+                return .openSessionExists(openSessionId: conflict.openSessionId)
+            }
             if let problem = try? JSONDecoder().decode(APIProblem.self, from: body) {
                 return .problem(status: status, problem)
             }

@@ -68,17 +68,22 @@ public final class AppModel {
     /// Unsaved forms kept on the device. Nil keeps nothing, which is what the
     /// tests and previews get unless they pass a store.
     private let drafts: DraftStore?
+    /// Waits between the reads that follow a resumed workout. The tests pass
+    /// one that returns at once.
+    private let pause: @Sendable (Duration) async -> Void
 
     public init(
         backend: Backend,
         tokenStore: any TokenStore,
         drafts: DraftStore? = nil,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        pause: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     ) {
         self.backend = backend
         self.tokenStore = tokenStore
         self.drafts = drafts
         self.now = now
+        self.pause = pause
     }
 
     /// Restores the session from the Keychain on launch.
@@ -609,21 +614,79 @@ public final class AppModel {
     /// Starts a session for the day the server says is next, then adds that
     /// day's exercises to it. The session is stored after every step, so if an
     /// exercise fails to add, what was created is still shown.
+    ///
+    /// The server keeps one open workout per user. One already open, such as a
+    /// workout started on the watch after this screen loaded, is resumed as it
+    /// stands instead of starting another. The other device may still be adding
+    /// its exercises then, so a resumed workout is read again until it settles.
     public func startWorkout() async {
         guard case .signedIn = phase, !isWorking, activeSession == nil,
               let next = nextLift, let day = next.day
         else { return }
         isWorking = true
-        defer { isWorking = false }
         let startedAt = now()
+        var resumed: WorkoutSession?
         await load { userId in
-            var session = try await self.backend.startSession(
-                NewWorkoutSession(startedAt: startedAt, planId: next.planId), userId: userId)
+            let open: WorkoutSession?
+            do {
+                open = try await self.backend.openSession(userId: userId)
+            } catch let error as BackendError where error != .unauthorized && error != .transport {
+                // A server older than the open-session route answers it with an
+                // error status. Start then works as it did before the route.
+                open = nil
+            }
+            if let open {
+                self.activeSession = open
+                resumed = open
+                return
+            }
+            var session: WorkoutSession
+            do {
+                session = try await self.backend.startSession(
+                    NewWorkoutSession(startedAt: startedAt, planId: next.planId), userId: userId)
+            } catch BackendError.openSessionExists(let openSessionId) {
+                // Another device started one between the two calls above.
+                let named = try await self.backend.session(openSessionId, userId: userId)
+                self.activeSession = named
+                resumed = named
+                return
+            }
             self.activeSession = session
             for item in day.orderedExercises {
                 session = try await self.backend.addEntry(exerciseId: item.exercise.id, sessionId: session.id, userId: userId)
                 self.activeSession = session
             }
+        }
+        isWorking = false
+        if let resumed {
+            await settle(resumed, expectedEntries: day.exercises.count)
+        }
+    }
+
+    /// Reads a resumed workout again, about one and three seconds later, while
+    /// the device that started it may still be adding its exercises. Stops once
+    /// it has every exercise of the day or a read finds no new ones. The rereads
+    /// stop if the user has left the workout, and a failed read only ends them:
+    /// the workout on screen stays. A read is dropped if the workout on screen
+    /// changed between the wait and its answer, since a set logged or deleted,
+    /// or notes saved, in that time came back from the server after the read
+    /// may have been made.
+    private func settle(_ resumed: WorkoutSession, expectedEntries: Int) async {
+        var seen = resumed.exerciseEntries.count
+        for delay in [Duration.seconds(1), .seconds(2)] {
+            guard seen < expectedEntries else { return }
+            let before = activeSession
+            await pause(delay)
+            guard case .signedIn(let userId) = phase, activeSession?.id == resumed.id,
+                  let fresh = try? await backend.session(resumed.id, userId: userId)
+            else { return }
+            guard case .signedIn(userId) = phase else { return }
+            // A write still out returns the whole workout when it lands, and
+            // that answer is at least as new as this read.
+            guard activeSession == before else { continue }
+            activeSession = fresh
+            guard fresh.exerciseEntries.count > seen else { return }
+            seen = fresh.exerciseEntries.count
         }
     }
 
@@ -838,6 +901,8 @@ public final class AppModel {
             isOffline = true
         case .unexpectedStatus, .undecodableResponse:
             errorMessage = "The server gave an unexpected answer. Try again."
+        case .openSessionExists:
+            errorMessage = "A workout is already in progress."
         }
     }
 }
