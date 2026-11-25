@@ -2,6 +2,7 @@ package com.fitt.workouts.controller;
 
 import com.fitt.workouts.domain.ProgressionModel;
 import com.fitt.workouts.dto.ProgressionSuggestionResponse;
+import com.fitt.workouts.progression.SuggestionReason;
 import com.fitt.workouts.service.ProgressionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +13,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -42,7 +44,8 @@ class ProgressionControllerTest {
     @Test
     void getSuggestion_jwtMatchesPathUserId_returns200WithSuggestion() throws Exception {
         ProgressionSuggestionResponse response = new ProgressionSuggestionResponse(
-                EXERCISE_ID, ProgressionModel.LINEAR_PERIODIZATION, "102.5", 8, 3, "test reasoning");
+                EXERCISE_ID, ProgressionModel.LINEAR_PERIODIZATION, "102.5", 8, 3, "test reasoning",
+                SuggestionReason.WEEK_STEP, "100", 8, null, 2);
         when(progressionService.getSuggestion(USER_ID, EXERCISE_ID)).thenReturn(response);
 
         mockMvc.perform(get("/api/users/{userId}/progression/suggestions", USER_ID)
@@ -54,7 +57,12 @@ class ProgressionControllerTest {
                 .andExpect(jsonPath("$.suggestedWeight").value("102.5"))
                 .andExpect(jsonPath("$.suggestedReps").value(8))
                 .andExpect(jsonPath("$.suggestedSets").value(3))
-                .andExpect(jsonPath("$.reasoning").value("test reasoning"));
+                .andExpect(jsonPath("$.reasoning").value("test reasoning"))
+                .andExpect(jsonPath("$.reasonCode").value("WEEK_STEP"))
+                .andExpect(jsonPath("$.previousWeightKg").value("100"))
+                .andExpect(jsonPath("$.targetReps").value(8))
+                .andExpect(jsonPath("$.averageRpe").value(nullValue()))
+                .andExpect(jsonPath("$.weekInCycle").value(2));
     }
 
     @Test

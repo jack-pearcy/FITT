@@ -114,6 +114,86 @@ class RpeAutoregulationStrategyTest {
         assertThat(suggestion.reasoning()).contains("above");
     }
 
+    @Test
+    void suggest_noSessionHistory_setsNoHistoryReasonAndKeepsText() {
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of()));
+
+        assertThat(suggestion.reasonCode()).isEqualTo(SuggestionReason.NO_HISTORY);
+        assertThat(suggestion.previousWeightKg()).isNull();
+        assertThat(suggestion.targetReps()).isEqualTo(8);
+        assertThat(suggestion.averageRpe()).isNull();
+        assertThat(suggestion.weekInCycle()).isNull();
+        assertThat(suggestion.reasoning()).isEqualTo(
+                "No session history. Start light and rate each set using RPE.");
+    }
+
+    @Test
+    void suggest_setsWithoutRpe_setsNoRpeDataReasonAndKeepsText() {
+        ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
+        WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 8, null, 3);
+
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session)));
+
+        assertThat(suggestion.reasonCode()).isEqualTo(SuggestionReason.NO_RPE_DATA);
+        assertThat(suggestion.previousWeightKg()).isNull();
+        assertThat(suggestion.targetReps()).isEqualTo(8);
+        assertThat(suggestion.averageRpe()).isNull();
+        assertThat(suggestion.weekInCycle()).isNull();
+        assertThat(suggestion.reasoning()).isEqualTo(
+                "No RPE data found. Log RPE on your sets to enable autoregulation.");
+    }
+
+    @Test
+    void suggest_avgRpeBelowTarget_setsRpeLowReasonAndKeepsText() {
+        ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
+        WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 9, new BigDecimal("5.0"), 3);
+
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session)));
+
+        assertThat(suggestion.reasonCode()).isEqualTo(SuggestionReason.RPE_LOW);
+        assertThat(suggestion.previousWeightKg()).isEqualByComparingTo("100");
+        assertThat(suggestion.targetReps()).isEqualTo(9);
+        assertThat(suggestion.averageRpe()).isEqualByComparingTo("5.0");
+        assertThat(suggestion.weekInCycle()).isNull();
+        assertThat(suggestion.reasoning()).isEqualTo(
+                "Average RPE was 5.0 which is below the target zone (7.0 to 8.5). "
+                        + "Increase weight to 102.5.");
+    }
+
+    @Test
+    void suggest_avgRpeAboveTarget_setsRpeHighReasonAndKeepsText() {
+        ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
+        WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 6, new BigDecimal("9.5"), 3);
+
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session)));
+
+        assertThat(suggestion.reasonCode()).isEqualTo(SuggestionReason.RPE_HIGH);
+        assertThat(suggestion.previousWeightKg()).isEqualByComparingTo("100");
+        assertThat(suggestion.targetReps()).isEqualTo(6);
+        assertThat(suggestion.averageRpe()).isEqualByComparingTo("9.5");
+        assertThat(suggestion.weekInCycle()).isNull();
+        assertThat(suggestion.reasoning()).isEqualTo(
+                "Average RPE was 9.5 which is above the target zone. "
+                        + "Consider reducing weight to 97.5 to stay in the productive training range.");
+    }
+
+    @Test
+    void suggest_avgRpeInTarget_setsHoldReasonAndKeepsText() {
+        ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
+        WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 8, new BigDecimal("8.0"), 3);
+
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session)));
+
+        assertThat(suggestion.reasonCode()).isEqualTo(SuggestionReason.HOLD);
+        assertThat(suggestion.previousWeightKg()).isEqualByComparingTo("100");
+        assertThat(suggestion.targetReps()).isEqualTo(8);
+        assertThat(suggestion.averageRpe()).isEqualByComparingTo("8.0");
+        assertThat(suggestion.weekInCycle()).isNull();
+        assertThat(suggestion.reasoning()).isEqualTo(
+                "Average RPE was 8.0 which is right in the target zone. "
+                        + "Keep the current weight and focus on quality reps.");
+    }
+
     // JPA assigns id on save. No setter, so reflection.
     private ExerciseEntity exerciseWithId(long id) {
         ExerciseEntity exercise = new ExerciseEntity(null, "Back Squat", "Legs", false);
