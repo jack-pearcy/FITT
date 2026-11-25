@@ -1,4 +1,5 @@
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
+import { RESUME_FILL_RECHECK_MS } from '../../../../core/services/workout.service';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import {
@@ -20,8 +21,9 @@ import {
 // status codes drive each path: 200 resumes, 204 starts, a 409 from the start
 // resumes the session it names, and a server without the /open route (400,
 // 404) still starts as before. Resuming keeps the open workout as it is,
-// except an empty one of this plan started over a minute ago, which gets the
-// day's exercises. The day and plan signals are set directly so each test
+// except an empty one of this plan that is still empty when read again after
+// a short wait, which gets the day's exercises. Those cases run on fake
+// timers so the wait passes at once. The day and plan signals are set directly so each test
 // begins at the Start tap without replaying the plan load.
 describe('TodaysLift', () => {
 
@@ -50,7 +52,8 @@ describe('TodaysLift', () => {
     ]
   };
 
-  // Started five minutes ago, so an empty one counts as a start that failed.
+  // Started five minutes ago by the clock of the device that sent it. The fill
+  // never trusts that clock, so the age alone settles nothing.
   const session = (id: number): WorkoutSessionResponse => ({
     id, ownerUserId: USER_ID, planId: PLAN_ID,
     startedAt: new Date(Date.now() - 5 * 60_000).toISOString(), finishedAt: null,
@@ -88,7 +91,14 @@ describe('TodaysLift', () => {
 
   afterEach(() => {
     http.verify();
+    vi.useRealTimers();
   });
+
+  // Lets the resume wait pass, then answers the read of the session again.
+  const recheck = (latest: WorkoutSessionResponse) => {
+    vi.advanceTimersByTime(RESUME_FILL_RECHECK_MS);
+    http.expectOne(r => r.method === 'GET' && r.url === `${BASE}/${latest.id}`).flush(latest);
+  };
 
   it('resumes the open workout instead of starting another', () => {
     component.startSession();
@@ -177,10 +187,16 @@ describe('TodaysLift', () => {
   });
 
   it('adds the day\'s exercises to an empty open workout before resuming it', () => {
+    vi.useFakeTimers();
     component.todayDay.set(pushDay);
     component.startSession();
 
     http.expectOne(`${BASE}/open`).flush(session(55));
+    // Nothing is added before the wait, in case another device is still filling it.
+    http.expectNone(r => r.method === 'POST');
+    vi.advanceTimersByTime(RESUME_FILL_RECHECK_MS - 1);
+    http.expectNone(`${BASE}/55`);
+    recheck(session(55));
     const adds = http.match(r => r.method === 'POST' && r.url === `${BASE}/55/entries`);
     expect(adds.map(a => a.request.body.exerciseId)).toEqual([11, 12]);
     expect(mockRouter.navigate).not.toHaveBeenCalled();
@@ -221,12 +237,46 @@ describe('TodaysLift', () => {
     expect(mockRouter.navigate).toHaveBeenCalledWith(['/session', 55]);
   });
 
-  it('leaves an empty open workout started seconds ago as it is', () => {
+  it('leaves an empty open workout that gains an exercise during the wait as it is', () => {
+    vi.useFakeTimers();
     component.todayDay.set(pushDay);
     component.startSession();
 
-    // Another device may still be adding this session's exercises.
-    http.expectOne(`${BASE}/open`).flush({ ...session(55), startedAt: new Date().toISOString() });
+    // The phone's clock reads five minutes behind this browser, so by startedAt
+    // the session looks old. It is still filling: its first entry lands during
+    // the wait, and the read after the wait sees it.
+    http.expectOne(`${BASE}/open`).flush(session(55));
+    expect(mockRouter.navigate).not.toHaveBeenCalled();
+    recheck({ ...session(55), exerciseEntries: [{ id: 81, orderIndex: 0, exercise: bench, sets: [] }] });
+    http.expectNone(r => r.method === 'POST');
+
+    expect(mockRouter.navigate).toHaveBeenCalledWith(['/session', 55]);
+    expect(component.starting()).toBe(false);
+  });
+
+  it('waits on an empty open workout whose startedAt is in the future', () => {
+    vi.useFakeTimers();
+    component.todayDay.set(pushDay);
+    component.startSession();
+
+    // A device clock running ahead sends a startedAt later than now here.
+    http.expectOne(`${BASE}/open`).flush({ ...session(55), startedAt: new Date(Date.now() + 10 * 60_000).toISOString() });
+    http.expectNone(r => r.method === 'POST');
+    recheck(session(55));
+    const adds = http.match(r => r.method === 'POST' && r.url === `${BASE}/55/entries`);
+    expect(adds.length).toBe(2);
+    adds.forEach(a => a.flush(session(55)));
+
+    expect(mockRouter.navigate).toHaveBeenCalledWith(['/session', 55]);
+  });
+
+  it('leaves an empty open workout finished during the wait as it is', () => {
+    vi.useFakeTimers();
+    component.todayDay.set(pushDay);
+    component.startSession();
+
+    http.expectOne(`${BASE}/open`).flush(session(55));
+    recheck({ ...session(55), finishedAt: new Date().toISOString() });
     http.expectNone(r => r.method === 'POST');
 
     expect(mockRouter.navigate).toHaveBeenCalledWith(['/session', 55]);
@@ -243,6 +293,7 @@ describe('TodaysLift', () => {
   });
 
   it('adds the missing exercises to the session a 409 names before resuming it', () => {
+    vi.useFakeTimers();
     component.todayDay.set(pushDay);
     component.startSession();
 
@@ -252,6 +303,7 @@ describe('TodaysLift', () => {
       { status: 409, statusText: 'Conflict' }
     );
     http.expectOne(`${BASE}/55`).flush(session(55));
+    recheck(session(55));
     const adds = http.match(r => r.method === 'POST' && r.url === `${BASE}/55/entries`);
     expect(adds.length).toBe(2);
     adds.forEach(a => a.flush(session(55)));
@@ -260,11 +312,31 @@ describe('TodaysLift', () => {
     expect(component.error()).toBeNull();
   });
 
+  it('shows the start error when the session a 409 names fails to load', () => {
+    component.startSession();
+
+    // The open workout was finished or deleted on another device between the
+    // start and the read, so the read of the id the 409 named is a 404.
+    http.expectOne(`${BASE}/open`).flush(null, { status: 204, statusText: 'No Content' });
+    http.expectOne(r => r.method === 'POST' && r.url === BASE).flush(
+      { title: 'Open Session Exists', status: 409, properties: { openSessionId: 55 } },
+      { status: 409, statusText: 'Conflict' }
+    );
+    http.expectOne(`${BASE}/55`).flush({ title: 'Not Found' }, { status: 404, statusText: 'Not Found' });
+    http.expectNone(r => r.method === 'POST');
+
+    expect(mockRouter.navigate).not.toHaveBeenCalled();
+    expect(component.error()).toBe('Could not start your session. Try again.');
+    expect(component.starting()).toBe(false);
+  });
+
   it('shows the start error when filling in an open workout fails', () => {
+    vi.useFakeTimers();
     component.todayDay.set(pushDay);
     component.startSession();
 
     http.expectOne(`${BASE}/open`).flush(session(55));
+    recheck(session(55));
     const adds = http.match(r => r.method === 'POST' && r.url === `${BASE}/55/entries`);
     adds[0].flush({ title: 'Server Error' }, { status: 500, statusText: 'Server Error' });
     // forkJoin cancels the sibling request once one fails.

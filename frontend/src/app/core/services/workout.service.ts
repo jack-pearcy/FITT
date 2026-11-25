@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import {catchError, forkJoin, Observable, of, switchMap, throwError} from 'rxjs';
+import {catchError, forkJoin, Observable, of, switchMap, throwError, timer} from 'rxjs';
 import {
   AddExerciseEntryRequest,
   CreateExerciseRequest,
@@ -27,9 +27,11 @@ export function openSessionIdFrom(error: unknown): number | null {
   return typeof id === 'number' ? id : null;
 }
 
-// An empty open workout younger than this may still be getting its exercises
-// from the device that started it, so resuming leaves it alone.
-export const RESUME_FILL_MIN_AGE_MS = 60_000;
+// How long resuming waits before it reads an empty open workout again. The
+// device that started it adds its exercises right after the start, so a
+// session still empty after this wait is a start that failed. The wait uses
+// only this browser's clock, never the startedAt the other device sent.
+export const RESUME_FILL_RECHECK_MS = 3_000;
 
 @Injectable({ providedIn: 'root' })
 export class WorkoutService {
@@ -161,23 +163,27 @@ export class WorkoutService {
   }
 
   // Resumes the open workout as it is. The one exception is a start that
-  // failed before adding any exercise: a session of this plan with no entries,
-  // started over a minute ago, gets the day's exercises. A session with any
-  // entry may have had exercises removed on purpose or belong to another day,
-  // and a younger empty one may still be filling on another device, so those
-  // are left alone and any gaps are fixed on the session screen.
+  // failed before adding any exercise: a session of this plan with no entries
+  // is read again after a short wait, and gets the day's exercises only if it
+  // is still empty. A session with any entry may have had exercises removed on
+  // purpose or belong to another day, and an empty one that gains entries
+  // during the wait was still filling on another device, so those are left
+  // alone and any gaps are fixed on the session screen.
   private resumeSessionForDay(
     userId: number,
     planId: number,
     session: WorkoutSessionResponse,
     day: WorkoutPlanDayResponse
   ): Observable<WorkoutSessionResponse> {
-    const startedAt = Date.parse(session.startedAt);
-    const settled = Date.now() - startedAt >= RESUME_FILL_MIN_AGE_MS;
-    if (session.planId !== planId || session.exerciseEntries.length > 0 || !settled) {
+    if (session.planId !== planId || session.exerciseEntries.length > 0 || day.exercises.length === 0) {
       return of(session);
     }
-    return this.addDayExercises(userId, session, day);
+    return timer(RESUME_FILL_RECHECK_MS).pipe(
+      switchMap(() => this.getSession(userId, session.id)),
+      switchMap(latest => latest.exerciseEntries.length > 0 || latest.finishedAt !== null
+        ? of(latest)
+        : this.addDayExercises(userId, latest, day))
+    );
   }
 
   // Adds an entry for each of the day's exercises in parallel, then emits the
