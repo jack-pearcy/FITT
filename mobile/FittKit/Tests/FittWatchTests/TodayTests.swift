@@ -13,7 +13,8 @@ import Testing
         let model = WatchModel(
             tokenStore: InMemoryTokenStore(token: token, refreshToken: "refresh"),
             backend: backend,
-            now: { [startedAt] in startedAt })
+            now: { [startedAt] in startedAt },
+            pause: { _ in })
         model.start()
         return model
     }
@@ -121,7 +122,9 @@ import Testing
         await model.startWorkout()
 
         #expect(model.activeSession?.id == 45)
-        #expect(backend.calls.suffix(3) == ["open 7", "start 7", "session 45"])
+        // The named session is read, then read once more because the day has
+        // two exercises; that read finds nothing new, so the rereads stop.
+        #expect(Array(backend.calls.drop { $0 != "open 7" }) == ["open 7", "start 7", "session 45", "session 45"])
         #expect(backend.addedExercises.isEmpty)
         #expect(model.todayProblem == nil)
     }
@@ -154,6 +157,53 @@ import Testing
         #expect(backend.started.isEmpty)
         #expect(model.activeSession == nil)
         #expect(model.todayProblem == .offline)
+    }
+
+    @Test("a resumed workout the phone is still filling is read again until it has the day's exercises")
+    func resumedSettles() async {
+        let backend = FakeBackend()
+        backend.next = Fixtures.nextLift()
+        let model = connectedModel(backend)
+        await model.loadToday()
+
+        let pullUp = ExerciseEntry(id: 1, orderIndex: 0, exercise: Fixtures.pullUp, sets: [])
+        let deadlift = ExerciseEntry(id: 2, orderIndex: 1, exercise: Fixtures.deadlift, sets: [])
+        backend.openResult = .success(Fixtures.session(id: 44, finished: false))
+        backend.laterReads = [
+            Fixtures.session(id: 44, finished: false, entries: [pullUp]),
+            Fixtures.session(id: 44, finished: false, entries: [pullUp, deadlift]),
+        ]
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 44)
+        #expect(model.activeSession?.exerciseEntries.map(\.exercise.id) == [20, 10])
+        #expect(Array(backend.calls.drop { $0 != "open 7" }) == ["open 7", "session 44", "session 44"])
+        #expect(backend.started.isEmpty)
+        #expect(backend.addedExercises.isEmpty)
+        #expect(model.todayProblem == nil)
+        #expect(model.isStarting == false)
+    }
+
+    @Test("a 401 on the open route stops the start and sends the watch back to connecting")
+    func openUnauthorized() async {
+        let store = InMemoryTokenStore(
+            token: makeWatchToken(userId: 7, expiresAt: Date().addingTimeInterval(3600)), refreshToken: "refresh")
+        let backend = FakeBackend()
+        backend.next = Fixtures.nextLift()
+        let model = WatchModel(tokenStore: store, backend: backend, pause: { _ in })
+        model.start()
+        await model.loadToday()
+
+        // The client clears the store when a refresh is refused, then throws.
+        store.clear()
+        backend.openResult = .failure(.unauthorized)
+        await model.startWorkout()
+
+        #expect(backend.started.isEmpty)
+        #expect(!backend.calls.contains("start 7"))
+        #expect(model.activeSession == nil)
+        #expect(model.phase == .notConnected)
+        #expect(model.isStarting == false)
     }
 
     @Test("start does nothing with no plan day")
@@ -345,8 +395,21 @@ final class FakeBackend: WatchBackend, @unchecked Sendable {
         return try openResult.get()
     }
 
+    /// What the next reads of one session by id answer, in order, before
+    /// falling back to the session a 409 names.
+    var laterReads: [WorkoutSession] {
+        get { lock.withLock { _laterReads } }
+        set { lock.withLock { _laterReads = newValue } }
+    }
+    private var _laterReads: [WorkoutSession] = []
+
     func session(_ sessionId: Int64, userId: Int64) async throws -> WorkoutSession {
         try record("session \(sessionId)")
+        let queued: WorkoutSession? = lock.withLock {
+            guard let first = _laterReads.first, first.id == sessionId else { return nil }
+            return _laterReads.removeFirst()
+        }
+        if let queued { return queued }
         guard let named = conflictOnStart, named.id == sessionId else { throw BackendError.unexpectedStatus(404) }
         return named
     }

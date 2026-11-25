@@ -12,7 +12,7 @@ struct AppModelTests {
 
     private func model(_ server: StubServer, store: InMemoryTokenStore = InMemoryTokenStore()) -> AppModel {
         let now = now
-        return AppModel(backend: server.backend(tokenStore: store), tokenStore: store, now: { now })
+        return AppModel(backend: server.backend(tokenStore: store), tokenStore: store, now: { now }, pause: { _ in })
     }
 
     @Test("a successful sign in stores the token and moves to signed in")
@@ -1415,7 +1415,59 @@ struct AppModelTests {
         #expect(model.activeSession?.orderedEntries.map(\.exercise.name) == ["Barbell Bench Press"])
         #expect(model.errorMessage == nil)
         #expect(!model.isWorking)
-        #expect(calls(server, after: before) == ["GET /api/users/7/workout-sessions/open"])
+        // The day has two exercises, so the workout is read again. That read
+        // fails here, which keeps the workout as it was and shows no error.
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "GET /api/users/7/workout-sessions/44",
+        ])
+    }
+
+    @Test("a resumed workout the other device is still filling is read again until it has the day's exercises")
+    func startWorkoutResumedSettles() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        let empty = sessionJSON().replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let withBench = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let withBoth = sessionJSON(entries: [entryJSON(id: 30, order: 0, exercise: bench), entryJSON(id: 31, order: 1, exercise: squat)].joined(separator: ","))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let reads = Locked([withBench, withBoth])
+        server.respond { request in
+            if request.path.hasSuffix("/open") { return .json(200, empty) }
+            return .json(200, reads.withLock { $0.count > 1 ? $0.removeFirst() : $0[0] })
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 44)
+        #expect(model.activeSession?.orderedEntries.map(\.exercise.name) == ["Barbell Bench Press", "Back Squat"])
+        #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "GET /api/users/7/workout-sessions/44",
+            "GET /api/users/7/workout-sessions/44",
+        ])
+    }
+
+    @Test("a resumed workout is read again only until a read finds nothing new")
+    func startWorkoutSettleStopsWhenUnchanged() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        let withBench = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        server.respond { _ in .json(200, withBench) }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.orderedEntries.map(\.exercise.name) == ["Barbell Bench Press"])
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "GET /api/users/7/workout-sessions/44",
+        ])
     }
 
     @Test("a 409 on start resumes the session the server names")
@@ -1423,22 +1475,33 @@ struct AppModelTests {
         let server = StubServer()
         let model = await workoutModel(server, inProgress: false)
         let before = server.requests.count
+        // The watch's start landed first and it is still adding its exercises:
+        // each read of the session finds one more.
         let named = sessionJSON().replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let withBench = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let withBoth = sessionJSON(entries: [entryJSON(id: 30, order: 0, exercise: bench), entryJSON(id: 31, order: 1, exercise: squat)].joined(separator: ","))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let reads = Locked([named, withBench, withBoth])
         server.respond { request in
             if request.path.hasSuffix("/open") { return StubResponse(status: 204) }
             if request.method == "POST" {
                 return .json(409, #"{"status":409,"title":"Open Session Exists","properties":{"openSessionId":44}}"#)
             }
-            return .json(200, named)
+            return .json(200, reads.withLock { $0.count > 1 ? $0.removeFirst() : $0[0] })
         }
 
         await model.startWorkout()
 
         #expect(model.activeSession?.id == 44)
+        #expect(model.activeSession?.orderedEntries.map(\.exercise.name) == ["Barbell Bench Press", "Back Squat"])
         #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
         #expect(calls(server, after: before) == [
             "GET /api/users/7/workout-sessions/open",
             "POST /api/users/7/workout-sessions",
+            "GET /api/users/7/workout-sessions/44",
+            "GET /api/users/7/workout-sessions/44",
             "GET /api/users/7/workout-sessions/44",
         ])
     }

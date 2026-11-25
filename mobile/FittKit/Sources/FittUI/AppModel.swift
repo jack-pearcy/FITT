@@ -68,17 +68,22 @@ public final class AppModel {
     /// Unsaved forms kept on the device. Nil keeps nothing, which is what the
     /// tests and previews get unless they pass a store.
     private let drafts: DraftStore?
+    /// Waits between the reads that follow a resumed workout. The tests pass
+    /// one that returns at once.
+    private let pause: @Sendable (Duration) async -> Void
 
     public init(
         backend: Backend,
         tokenStore: any TokenStore,
         drafts: DraftStore? = nil,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        pause: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     ) {
         self.backend = backend
         self.tokenStore = tokenStore
         self.drafts = drafts
         self.now = now
+        self.pause = pause
     }
 
     /// Restores the session from the Keychain on launch.
@@ -612,14 +617,15 @@ public final class AppModel {
     ///
     /// The server keeps one open workout per user. One already open, such as a
     /// workout started on the watch after this screen loaded, is resumed as it
-    /// stands instead of starting another.
+    /// stands instead of starting another. The other device may still be adding
+    /// its exercises then, so a resumed workout is read again until it settles.
     public func startWorkout() async {
         guard case .signedIn = phase, !isWorking, activeSession == nil,
               let next = nextLift, let day = next.day
         else { return }
         isWorking = true
-        defer { isWorking = false }
         let startedAt = now()
+        var resumed: WorkoutSession?
         await load { userId in
             let open: WorkoutSession?
             do {
@@ -631,6 +637,7 @@ public final class AppModel {
             }
             if let open {
                 self.activeSession = open
+                resumed = open
                 return
             }
             var session: WorkoutSession
@@ -639,7 +646,9 @@ public final class AppModel {
                     NewWorkoutSession(startedAt: startedAt, planId: next.planId), userId: userId)
             } catch BackendError.openSessionExists(let openSessionId) {
                 // Another device started one between the two calls above.
-                self.activeSession = try await self.backend.session(openSessionId, userId: userId)
+                let named = try await self.backend.session(openSessionId, userId: userId)
+                self.activeSession = named
+                resumed = named
                 return
             }
             self.activeSession = session
@@ -647,6 +656,32 @@ public final class AppModel {
                 session = try await self.backend.addEntry(exerciseId: item.exercise.id, sessionId: session.id, userId: userId)
                 self.activeSession = session
             }
+        }
+        isWorking = false
+        if let resumed {
+            await settle(resumed, expectedEntries: day.exercises.count)
+        }
+    }
+
+    /// Reads a resumed workout again, about one and three seconds later, while
+    /// the device that started it may still be adding its exercises. Stops once
+    /// it has every exercise of the day or a read finds no new ones. A read is
+    /// dropped if the user has left the workout or is saving a change to it,
+    /// and a failed read only ends the rereads: the workout on screen stays.
+    private func settle(_ resumed: WorkoutSession, expectedEntries: Int) async {
+        var seen = resumed.exerciseEntries.count
+        for delay in [Duration.seconds(1), .seconds(2)] {
+            guard seen < expectedEntries else { return }
+            await pause(delay)
+            guard case .signedIn(let userId) = phase, activeSession?.id == resumed.id,
+                  let fresh = try? await backend.session(resumed.id, userId: userId)
+            else { return }
+            guard case .signedIn(userId) = phase, activeSession?.id == resumed.id else { return }
+            if !isWorking {
+                activeSession = fresh
+            }
+            guard fresh.exerciseEntries.count > seen else { return }
+            seen = fresh.exerciseEntries.count
         }
     }
 

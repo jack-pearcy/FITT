@@ -60,6 +60,9 @@ public final class WatchModel {
     private let phone: (any PhoneLink)?
     private let backend: (any WatchBackend)?
     private let now: @Sendable () -> Date
+    /// Waits between the reads that follow a resumed workout. The tests pass
+    /// one that returns at once.
+    private let pause: @Sendable (Duration) async -> Void
 
     /// - Parameters:
     ///   - phone: the link to the paired phone. Nil leaves the watch unable to
@@ -69,12 +72,14 @@ public final class WatchModel {
         tokenStore: any TokenStore,
         phone: (any PhoneLink)? = nil,
         backend: (any WatchBackend)? = nil,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        pause: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     ) {
         self.tokenStore = tokenStore
         self.phone = phone
         self.backend = backend
         self.now = now
+        self.pause = pause
     }
 
     private var userId: Int64? {
@@ -153,12 +158,13 @@ public final class WatchModel {
     ///
     /// The server keeps one open workout per user. One already open, such as a
     /// workout started on the phone after Today loaded, is resumed as it stands
-    /// instead of starting another.
+    /// instead of starting another. The phone may still be adding its exercises
+    /// then, so a resumed workout is read again until it settles.
     public func startWorkout() async {
         guard let userId, let backend, !isStarting, activeSession == nil,
               let next = nextLift, let day = next.day else { return }
         isStarting = true
-        defer { isStarting = false }
+        var resumed: WorkoutSession?
         do {
             let open: WorkoutSession?
             do {
@@ -170,27 +176,52 @@ public final class WatchModel {
             }
             if let open {
                 activeSession = open
+                resumed = open
                 todayProblem = nil
-                return
             }
-            var session: WorkoutSession
-            do {
-                session = try await backend.startSession(
-                    NewWorkoutSession(startedAt: now(), planId: next.planId), userId: userId)
-            } catch BackendError.openSessionExists(let openSessionId) {
-                // The phone started one between the two calls above.
-                activeSession = try await backend.session(openSessionId, userId: userId)
+            if resumed == nil {
+                do {
+                    var session = try await backend.startSession(
+                        NewWorkoutSession(startedAt: now(), planId: next.planId), userId: userId)
+                    activeSession = session
+                    for item in day.orderedExercises {
+                        session = try await backend.addEntry(exerciseId: item.exercise.id, sessionId: session.id, userId: userId)
+                        activeSession = session
+                    }
+                } catch BackendError.openSessionExists(let openSessionId) {
+                    // The phone started one between the two calls above.
+                    let named = try await backend.session(openSessionId, userId: userId)
+                    activeSession = named
+                    resumed = named
+                }
                 todayProblem = nil
-                return
             }
-            activeSession = session
-            for item in day.orderedExercises {
-                session = try await backend.addEntry(exerciseId: item.exercise.id, sessionId: session.id, userId: userId)
-                activeSession = session
-            }
-            todayProblem = nil
         } catch {
             handle(error)
+        }
+        isStarting = false
+        if let resumed {
+            await settle(resumed, expectedEntries: day.exercises.count, backend: backend)
+        }
+    }
+
+    /// Reads a resumed workout again, about one and three seconds later, while
+    /// the phone may still be adding its exercises. Stops once it has every
+    /// exercise of the day or a read finds no new ones. A read is dropped if the
+    /// workout is no longer the one on screen, and a failed read only ends the
+    /// rereads: the workout on screen stays.
+    private func settle(_ resumed: WorkoutSession, expectedEntries: Int, backend: any WatchBackend) async {
+        var seen = resumed.exerciseEntries.count
+        for delay in [Duration.seconds(1), .seconds(2)] {
+            guard seen < expectedEntries else { return }
+            await pause(delay)
+            guard let userId, activeSession?.id == resumed.id,
+                  let fresh = try? await backend.session(resumed.id, userId: userId)
+            else { return }
+            guard self.userId == userId, activeSession?.id == resumed.id else { return }
+            activeSession = fresh
+            guard fresh.exerciseEntries.count > seen else { return }
+            seen = fresh.exerciseEntries.count
         }
     }
 
