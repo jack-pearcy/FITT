@@ -79,7 +79,8 @@ export class TodaysLift implements OnInit {
 
     this.starting.set(true);
 
-    this.workouts.startSessionForDay(userId, planId, day).pipe(
+    // The server allows one open workout, so Start resumes it when there is one.
+    this.workouts.startOrResumeForDay(userId, planId, day).pipe(
       takeUntilDestroyed(this.destroyRef)
     ).subscribe({
       next: session => {
