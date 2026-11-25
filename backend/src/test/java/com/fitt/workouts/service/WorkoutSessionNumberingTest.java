@@ -38,6 +38,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class WorkoutSessionNumberingTest {
 
     private static final long USER_ID = 301L;
+    // A second user for the entry test, because a user may have only one open
+    // session and both tests leave theirs open.
+    private static final long ENTRY_USER_ID = 302L;
 
     @Autowired
     private WorkoutSessionService service;
@@ -78,13 +81,13 @@ class WorkoutSessionNumberingTest {
     void addExerciseEntry_manyRequestsAtOnce_giveEveryEntryItsOwnIndex() throws Exception {
         ExerciseEntity row = exerciseRepository.save(new ExerciseEntity(null, "Numbering Row", "BACK", false));
         WorkoutSessionResponse session = service.createSession(
-                USER_ID, new CreateWorkoutSessionRequest(Instant.now(), null, null));
+                ENTRY_USER_ID, new CreateWorkoutSessionRequest(Instant.now(), null, null));
 
         int requests = 6;
         ExecutorService pool = Executors.newFixedThreadPool(requests);
         try {
             Callable<WorkoutSessionResponse> addOne = () -> service.addExerciseEntry(
-                    USER_ID, session.id(), new AddExerciseEntryRequest(row.getId()));
+                    ENTRY_USER_ID, session.id(), new AddExerciseEntryRequest(row.getId()));
             for (Future<WorkoutSessionResponse> result : pool.invokeAll(java.util.Collections.nCopies(requests, addOne))) {
                 result.get();
             }
@@ -92,7 +95,7 @@ class WorkoutSessionNumberingTest {
             pool.shutdown();
         }
 
-        assertThat(service.getSession(USER_ID, session.id()).exerciseEntries())
+        assertThat(service.getSession(ENTRY_USER_ID, session.id()).exerciseEntries())
                 .extracting(ExerciseEntryResponse::orderIndex)
                 .containsExactlyInAnyOrder(0, 1, 2, 3, 4, 5);
     }

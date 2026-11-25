@@ -28,6 +28,11 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSessionEn
     Optional<WorkoutSessionEntity> findFirstByOwnerUserIdAndPlanIdAndFinishedAtIsNotNullOrderByFinishedAtDesc(
             Long ownerUserId, Long planId);
 
+    // The user's unfinished session. V12 allows only one, so the order only picks
+    // a stable row if that rule is ever broken.
+    Optional<WorkoutSessionEntity> findFirstByOwnerUserIdAndFinishedAtIsNullOrderByStartedAtDescIdDesc(
+            Long ownerUserId);
+
     // Ownership-safe single session fetch. Returns empty if the session exists
     // but belongs to a different user, prevents cross-user data access.
     Optional<WorkoutSessionEntity> findByIdAndOwnerUserId(Long id, Long ownerUserId);

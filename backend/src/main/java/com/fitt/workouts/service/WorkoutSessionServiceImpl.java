@@ -17,17 +17,23 @@ import com.fitt.workouts.repository.ExerciseRepository;
 import com.fitt.workouts.repository.WorkoutPlanRepository;
 import com.fitt.workouts.repository.WorkoutSessionRepository;
 import com.fitt.workouts.service.exception.ExerciseNotFoundException;
+import com.fitt.workouts.service.exception.OpenSessionExistsException;
 import com.fitt.workouts.service.exception.WorkoutPlanNotFoundException;
 import com.fitt.workouts.service.exception.WorkoutSessionNotFoundException;
 import org.springframework.security.access.AccessDeniedException;
 import com.fitt.workouts.service.exception.ExerciseEntryNotFoundException;
 import com.fitt.workouts.service.exception.SetEntryNotFoundException;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @Transactional(readOnly = true)
@@ -36,18 +42,46 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     private final WorkoutSessionRepository sessionRepository;
     private final ExerciseRepository exerciseRepository;
     private final WorkoutPlanRepository planRepository;
+    private final TransactionTemplate writeTransaction;
 
     public WorkoutSessionServiceImpl(WorkoutSessionRepository sessionRepository,
                                      ExerciseRepository exerciseRepository,
-                                     WorkoutPlanRepository planRepository) {
+                                     WorkoutPlanRepository planRepository,
+                                     PlatformTransactionManager transactionManager) {
         this.sessionRepository = sessionRepository;
         this.exerciseRepository = exerciseRepository;
         this.planRepository = planRepository;
+        this.writeTransaction = new TransactionTemplate(transactionManager);
     }
 
+    // Not one transaction around the whole call. The insert commits or rolls back
+    // inside the template, so when the unique key on open_owner_id refuses it, the
+    // read that follows runs in a fresh transaction and sees the session that won.
+    // Inside the failed transaction MySQL would still show the snapshot from
+    // before the other insert committed.
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.SUPPORTS)
     public WorkoutSessionResponse createSession(Long ownerUserId, CreateWorkoutSessionRequest request) {
+        try {
+            return writeTransaction.execute(status -> insertSession(ownerUserId, request));
+        } catch (DataIntegrityViolationException ex) {
+            Optional<WorkoutSessionEntity> winner = sessionRepository
+                    .findFirstByOwnerUserIdAndFinishedAtIsNullOrderByStartedAtDescIdDesc(ownerUserId);
+            if (winner.isPresent()) {
+                throw new OpenSessionExistsException(winner.get().getId());
+            }
+            throw ex;
+        }
+    }
+
+    private WorkoutSessionResponse insertSession(Long ownerUserId, CreateWorkoutSessionRequest request) {
+        // One unfinished session per user. The client resumes the one named in the
+        // refusal. V12's unique key backs this check when two starts race.
+        sessionRepository.findFirstByOwnerUserIdAndFinishedAtIsNullOrderByStartedAtDescIdDesc(ownerUserId)
+                .ifPresent(open -> {
+                    throw new OpenSessionExistsException(open.getId());
+                });
+
         // A session may only point at one of the caller's own plans. Reading as not
         // found, not forbidden, so another user's plan ids are not confirmable.
         Integer planDayIndex = null;
@@ -67,6 +101,12 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         session.setPlanId(request.planId());
         session.setPlanDayIndex(planDayIndex);
         return toResponse(sessionRepository.save(session));
+    }
+
+    @Override
+    public Optional<WorkoutSessionResponse> getOpenSession(Long ownerUserId) {
+        return sessionRepository.findFirstByOwnerUserIdAndFinishedAtIsNullOrderByStartedAtDescIdDesc(ownerUserId)
+                .map(this::toResponse);
     }
 
     @Override

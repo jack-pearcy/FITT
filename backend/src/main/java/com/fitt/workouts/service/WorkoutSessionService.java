@@ -6,6 +6,7 @@ import com.fitt.workouts.dto.LogSetRequest;
 import com.fitt.workouts.dto.UpdateSessionNotesRequest;
 import com.fitt.workouts.dto.WorkoutSessionResponse;
 import java.util.List;
+import java.util.Optional;
 
 public interface WorkoutSessionService {
 
@@ -14,6 +15,9 @@ public interface WorkoutSessionService {
     List<WorkoutSessionResponse> listSessions(Long ownerUserId);
 
     WorkoutSessionResponse getSession(Long ownerUserId, Long sessionId);
+
+    // The session the user started and has not finished, if there is one.
+    Optional<WorkoutSessionResponse> getOpenSession(Long ownerUserId);
 
     WorkoutSessionResponse finishSession(Long ownerUserId, Long sessionId);
 

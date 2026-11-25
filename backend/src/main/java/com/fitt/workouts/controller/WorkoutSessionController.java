@@ -49,6 +49,19 @@ public class WorkoutSessionController {
         return workoutSessionService.listSessions(userId);
     }
 
+    // The session started and not yet finished, so a client can resume it, even
+    // one started on another device. 204 when there is none.
+    @GetMapping("/open")
+    public ResponseEntity<WorkoutSessionResponse> getOpenSession(
+            @PathVariable Long userId,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        enforceOwnership(userId, currentUserId(jwt));
+        return workoutSessionService.getOpenSession(userId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
     // Returns the number of completed sessions for a given plan.
     // The frontend uses this to determine which plan day comes next.
     @GetMapping("/count")

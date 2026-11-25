@@ -15,6 +15,7 @@ import com.fitt.workouts.repository.ExerciseRepository;
 import com.fitt.workouts.repository.WorkoutPlanRepository;
 import com.fitt.workouts.repository.WorkoutSessionRepository;
 import com.fitt.workouts.service.exception.ExerciseNotFoundException;
+import com.fitt.workouts.service.exception.OpenSessionExistsException;
 import com.fitt.workouts.service.exception.WorkoutPlanNotFoundException;
 import com.fitt.workouts.service.exception.WorkoutSessionNotFoundException;
 import org.junit.jupiter.api.Test;
@@ -23,7 +24,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -66,6 +69,11 @@ class WorkoutSessionServiceImplTest {
     @Mock
     private WorkoutPlanRepository planRepository;
 
+    // A mock manager is enough: the template asks it for a transaction, runs the
+    // work, then commits or rolls back on the mock.
+    @Mock
+    private PlatformTransactionManager transactionManager;
+
     @InjectMocks
     private WorkoutSessionServiceImpl service;
 
@@ -94,6 +102,67 @@ class WorkoutSessionServiceImplTest {
         assertThat(saved.getPlanDayIndex()).isEqualTo(0);
         // New session has no entries yet. toResponse maps an empty list.
         assertThat(response.exerciseEntries()).isEmpty();
+    }
+
+    @Test
+    void createSession_withAnOpenSession_refusesWithItsIdAndSavesNothing() {
+        WorkoutSessionEntity open = sessionWithId(SESSION_ID);
+        when(sessionRepository.findFirstByOwnerUserIdAndFinishedAtIsNullOrderByStartedAtDescIdDesc(OWNER_USER_ID))
+                .thenReturn(Optional.of(open));
+
+        assertThatThrownBy(() -> service.createSession(OWNER_USER_ID,
+                new CreateWorkoutSessionRequest(Instant.parse("2026-05-26T18:00:00Z"), null, null)))
+                .isInstanceOf(OpenSessionExistsException.class)
+                .extracting(ex -> ((OpenSessionExistsException) ex).getOpenSessionId())
+                .isEqualTo(SESSION_ID);
+
+        verify(sessionRepository, never()).save(any(WorkoutSessionEntity.class));
+    }
+
+    @Test
+    void createSession_whenTheUniqueKeyRefusesTheInsert_refusesWithTheSessionThatWon() {
+        // Two starts at the same moment both see no open session. The database key
+        // lets one insert through and refuses the other, which then reads the winner.
+        WorkoutSessionEntity winner = sessionWithId(SESSION_ID);
+        when(sessionRepository.findFirstByOwnerUserIdAndFinishedAtIsNullOrderByStartedAtDescIdDesc(OWNER_USER_ID))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(winner));
+        when(sessionRepository.save(any(WorkoutSessionEntity.class)))
+                .thenThrow(new DataIntegrityViolationException("Duplicate entry for key uk_workout_sessions_open_owner"));
+
+        assertThatThrownBy(() -> service.createSession(OWNER_USER_ID,
+                new CreateWorkoutSessionRequest(Instant.parse("2026-05-26T18:00:00Z"), null, null)))
+                .isInstanceOf(OpenSessionExistsException.class)
+                .extracting(ex -> ((OpenSessionExistsException) ex).getOpenSessionId())
+                .isEqualTo(SESSION_ID);
+    }
+
+    @Test
+    void createSession_whenTheInsertFailsForAnotherReason_passesTheErrorOn() {
+        DataIntegrityViolationException failure = new DataIntegrityViolationException("Some other key");
+        when(sessionRepository.save(any(WorkoutSessionEntity.class))).thenThrow(failure);
+
+        assertThatThrownBy(() -> service.createSession(OWNER_USER_ID,
+                new CreateWorkoutSessionRequest(Instant.parse("2026-05-26T18:00:00Z"), null, null)))
+                .isSameAs(failure);
+    }
+
+    @Test
+    void getOpenSession_returnsTheNewestOpenSession() {
+        when(sessionRepository.findFirstByOwnerUserIdAndFinishedAtIsNullOrderByStartedAtDescIdDesc(OWNER_USER_ID))
+                .thenReturn(Optional.of(sessionWithId(SESSION_ID)));
+
+        assertThat(service.getOpenSession(OWNER_USER_ID))
+                .map(WorkoutSessionResponse::id)
+                .contains(SESSION_ID);
+    }
+
+    @Test
+    void getOpenSession_withNoOpenSession_isEmpty() {
+        when(sessionRepository.findFirstByOwnerUserIdAndFinishedAtIsNullOrderByStartedAtDescIdDesc(OWNER_USER_ID))
+                .thenReturn(Optional.empty());
+
+        assertThat(service.getOpenSession(OWNER_USER_ID)).isEmpty();
     }
 
     @Test
