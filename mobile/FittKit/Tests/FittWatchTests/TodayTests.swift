@@ -107,6 +107,7 @@ import Testing
         ])
         backend.openResult = .success(fromPhone)
         await model.startWorkout()
+        await model.settleTask?.value
 
         #expect(model.activeSession == fromPhone)
         #expect(backend.started.isEmpty)
@@ -124,6 +125,7 @@ import Testing
 
         backend.conflictOnStart = Fixtures.session(id: 45, finished: false)
         await model.startWorkout()
+        await model.settleTask?.value
 
         #expect(model.activeSession?.id == 45)
         // The named session is read, then read once more because the day has
@@ -178,6 +180,7 @@ import Testing
             Fixtures.session(id: 44, finished: false, entries: [pullUp, deadlift]),
         ]
         await model.startWorkout()
+        await model.settleTask?.value
 
         #expect(model.activeSession?.id == 44)
         #expect(model.activeSession?.exerciseEntries.map(\.exercise.id) == [20, 10])
@@ -204,6 +207,7 @@ import Testing
             await model.loadToday()
         }
         await model.startWorkout()
+        await model.settleTask?.value
 
         #expect(model.activeSession == nil)
         #expect(!backend.calls.contains("session 44"))
@@ -229,10 +233,37 @@ import Testing
         }
         backend.duringSessionRead = { await during.run() }
         await model.startWorkout()
+        await model.settleTask?.value
 
         #expect(model.activeSession?.id == 45)
         #expect(backend.calls.filter { $0 == "session 44" }.count == 1)
         #expect(model.isStarting == false)
+    }
+
+    @Test("the workout is ready to open before the rereads of a resumed workout finish")
+    func resumedSettleDoesNotHoldStart() async {
+        let backend = FakeBackend()
+        backend.next = Fixtures.nextLift()
+        let gate = Gate()
+        let model = connectedModel(backend, pause: { _ in await gate.wait() })
+        await model.loadToday()
+
+        let pullUp = ExerciseEntry(id: 1, orderIndex: 0, exercise: Fixtures.pullUp, sets: [])
+        let deadlift = ExerciseEntry(id: 2, orderIndex: 1, exercise: Fixtures.deadlift, sets: [])
+        backend.openResult = .success(Fixtures.session(id: 44, finished: false))
+        backend.laterReads = [Fixtures.session(id: 44, finished: false, entries: [pullUp, deadlift])]
+        await model.startWorkout()
+
+        // startWorkout has returned while the first wait is still held.
+        #expect(model.activeSession?.id == 44)
+        #expect(model.activeSession?.exerciseEntries.isEmpty == true)
+        #expect(model.isStarting == false)
+        #expect(!backend.calls.contains("session 44"))
+
+        gate.open()
+        await model.settleTask?.value
+        #expect(model.activeSession?.exerciseEntries.map(\.exercise.id) == [20, 10])
+        #expect(backend.calls.filter { $0 == "session 44" }.count == 1)
     }
 
     @Test("a 401 on the open route stops the start and sends the watch back to connecting")
@@ -525,5 +556,24 @@ final class OneTimeAction {
         let action = action
         self.action = nil
         await action?()
+    }
+}
+
+/// Holds every wait until opened, standing in for time that has not passed yet.
+@MainActor
+final class Gate {
+    private var isOpen = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        let resumed = waiting
+        waiting = []
+        for continuation in resumed { continuation.resume() }
     }
 }
