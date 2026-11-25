@@ -1,11 +1,11 @@
 import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting
 } from '@angular/common/http/testing';
-import { WorkoutService } from './workout.service';
+import { openSessionIdFrom, WorkoutService } from './workout.service';
 import {
   AddExerciseEntryRequest,
   CreateExerciseRequest,
@@ -14,6 +14,7 @@ import {
   LogSetRequest,
   ProgressionSuggestionResponse,
   UpdateProgressionPreferenceRequest,
+  WorkoutPlanDayResponse,
   WorkoutPlanResponse,
   WorkoutSessionResponse
 } from '../../features/workouts/models/workout.model';
@@ -173,6 +174,69 @@ describe('WorkoutService', () => {
       req.flush(mockResponse);
 
       expect(received).toEqual(mockResponse);
+    });
+
+    it('getOpenSession maps a 200 to the open session', () => {
+      const open: WorkoutSessionResponse = {
+        id: 55, ownerUserId: USER_ID, planId: 7,
+        startedAt: '2026-11-25T18:00:00Z', finishedAt: null,
+        notes: null, exerciseEntries: []
+      };
+
+      let received: WorkoutSessionResponse | null | undefined;
+      service.getOpenSession(USER_ID).subscribe(r => received = r);
+
+      const req = controller.expectOne(`/api/users/${USER_ID}/workout-sessions/open`);
+      expect(req.request.method).toBe('GET');
+      req.flush(open);
+
+      expect(received).toEqual(open);
+    });
+
+    it('getOpenSession maps a 204 to null', () => {
+      let received: WorkoutSessionResponse | null | undefined;
+      service.getOpenSession(USER_ID).subscribe(r => received = r);
+
+      controller.expectOne(`/api/users/${USER_ID}/workout-sessions/open`)
+        .flush(null, { status: 204, statusText: 'No Content' });
+
+      expect(received).toBeNull();
+    });
+
+    it('openSessionIdFrom reads the id from properties, then the top level, and only on a 409', () => {
+      const conflict = (body: unknown) =>
+        new HttpErrorResponse({ status: 409, statusText: 'Conflict', error: body });
+
+      expect(openSessionIdFrom(conflict({ title: 'Open Session Exists', properties: { openSessionId: 55 } }))).toBe(55);
+      expect(openSessionIdFrom(conflict({ title: 'Open Session Exists', openSessionId: 56 }))).toBe(56);
+      expect(openSessionIdFrom(conflict({ title: 'Conflict' }))).toBeNull();
+      expect(openSessionIdFrom(new HttpErrorResponse({ status: 400, error: { openSessionId: 55 } }))).toBeNull();
+    });
+
+    it('startSessionForDay creates the session, then adds an entry per exercise', () => {
+      const day: WorkoutPlanDayResponse = {
+        id: 3, orderIndex: 0, dayLabel: 'Push',
+        exercises: [
+          { id: 21, orderIndex: 0, sets: 3, reps: 8, exercise: { id: 11, name: 'Bench Press', muscleGroup: 'CHEST', custom: false } },
+          { id: 22, orderIndex: 1, sets: 3, reps: 10, exercise: { id: 12, name: 'Overhead Press', muscleGroup: 'SHOULDERS', custom: false } }
+        ]
+      };
+      const created: WorkoutSessionResponse = {
+        id: 60, ownerUserId: USER_ID, planId: 7,
+        startedAt: '2026-11-25T18:00:00Z', finishedAt: null,
+        notes: null, exerciseEntries: []
+      };
+
+      let received: WorkoutSessionResponse | undefined;
+      service.startSessionForDay(USER_ID, 7, day).subscribe(r => received = r);
+
+      controller.expectOne(r => r.method === 'POST' && r.url === `/api/users/${USER_ID}/workout-sessions`)
+        .flush(created);
+      const adds = controller.match(`/api/users/${USER_ID}/workout-sessions/60/entries`);
+      expect(adds.map(a => a.request.body.exerciseId)).toEqual([11, 12]);
+      adds.forEach(a => a.flush(created));
+
+      expect(received).toEqual(created);
     });
 
     it('listSessions GETs the sessions URL', () => {
