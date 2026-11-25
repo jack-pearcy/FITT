@@ -266,6 +266,44 @@ import Testing
         #expect(backend.calls.filter { $0 == "session 44" }.count == 1)
     }
 
+    @Test("a resumed workout that already has every exercise of the day is not read again")
+    func resumedFullNotReread() async {
+        let backend = FakeBackend()
+        backend.next = Fixtures.nextLift()
+        let model = connectedModel(backend)
+        await model.loadToday()
+
+        let pullUp = ExerciseEntry(id: 1, orderIndex: 0, exercise: Fixtures.pullUp, sets: [])
+        let deadlift = ExerciseEntry(id: 2, orderIndex: 1, exercise: Fixtures.deadlift, sets: [])
+        let full = Fixtures.session(id: 44, finished: false, entries: [pullUp, deadlift])
+        backend.openResult = .success(full)
+        await model.startWorkout()
+        await model.settleTask?.value
+
+        #expect(model.activeSession == full)
+        #expect(Array(backend.calls.drop { $0 != "open 7" }) == ["open 7"])
+    }
+
+    @Test("a 409 on start whose named workout cannot be read shows the problem and starts nothing more")
+    func conflictReadFails() async {
+        let backend = FakeBackend()
+        backend.next = Fixtures.nextLift()
+        let model = connectedModel(backend)
+        await model.loadToday()
+
+        backend.conflictOnStart = Fixtures.session(id: 45, finished: false)
+        backend.sessionReadError = .transport
+        await model.startWorkout()
+        await model.settleTask?.value
+
+        #expect(model.todayProblem == .offline)
+        #expect(model.activeSession == nil)
+        #expect(backend.calls.filter { $0 == "start 7" }.count == 1)
+        #expect(Array(backend.calls.drop { $0 != "open 7" }) == ["open 7", "start 7", "session 45"])
+        #expect(backend.addedExercises.isEmpty)
+        #expect(model.isStarting == false)
+    }
+
     @Test("a 401 on the open route stops the start and sends the watch back to connecting")
     func openUnauthorized() async {
         let store = InMemoryTokenStore(
@@ -492,8 +530,16 @@ final class FakeBackend: WatchBackend, @unchecked Sendable {
     }
     private var _duringSessionRead: (@Sendable () async -> Void)?
 
+    /// When set, every read of one session by id fails with this.
+    var sessionReadError: BackendError? {
+        get { lock.withLock { _sessionReadError } }
+        set { lock.withLock { _sessionReadError = newValue } }
+    }
+    private var _sessionReadError: BackendError?
+
     func session(_ sessionId: Int64, userId: Int64) async throws -> WorkoutSession {
         try record("session \(sessionId)")
+        if let sessionReadError { throw sessionReadError }
         await duringSessionRead?()
         let queued: WorkoutSession? = lock.withLock {
             guard let first = _laterReads.first, first.id == sessionId else { return nil }

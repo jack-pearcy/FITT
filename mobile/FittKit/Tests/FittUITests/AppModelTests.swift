@@ -1519,6 +1519,77 @@ struct AppModelTests {
         ])
     }
 
+    @Test("a resumed workout that already has every exercise of the day is not read again")
+    func startWorkoutResumedFullNotReread() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        let withBoth = sessionJSON(entries: [entryJSON(id: 30, order: 0, exercise: bench), entryJSON(id: 31, order: 1, exercise: squat)].joined(separator: ","))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        server.respond { request in
+            request.path.hasSuffix("/open") ? .json(200, withBoth) : .json(500, #"{"status":500,"detail":"Unexpected error"}"#)
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 44)
+        #expect(model.activeSession?.orderedEntries.map(\.exercise.name) == ["Barbell Bench Press", "Back Squat"])
+        #expect(model.errorMessage == nil)
+        #expect(calls(server, after: before) == ["GET /api/users/7/workout-sessions/open"])
+    }
+
+    @Test("a 409 on start whose named workout cannot be read shows the error and starts nothing more")
+    func startWorkoutConflictReadFails() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        server.respond { request in
+            if request.path.hasSuffix("/open") { return StubResponse(status: 204) }
+            if request.method == "POST" {
+                return .json(409, #"{"status":409,"title":"Open Session Exists","properties":{"openSessionId":44}}"#)
+            }
+            return .json(500, #"{"status":500,"detail":"Unexpected error"}"#)
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession == nil)
+        #expect(model.errorMessage == "Unexpected error")
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "POST /api/users/7/workout-sessions",
+            "GET /api/users/7/workout-sessions/44",
+        ])
+    }
+
+    @Test("a 409 on start whose named workout cannot be reached says the phone is offline")
+    func startWorkoutConflictReadOffline() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        server.respond { request in
+            if request.path.hasSuffix("/open") { return StubResponse(status: 204) }
+            if request.method == "POST" {
+                // The connection drops once the 409 is in.
+                server.respond(nil)
+                return .json(409, #"{"status":409,"title":"Open Session Exists","properties":{"openSessionId":44}}"#)
+            }
+            return .json(200, "{}")
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession == nil)
+        #expect(model.isOffline)
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "POST /api/users/7/workout-sessions",
+            "GET /api/users/7/workout-sessions/44",
+        ])
+    }
+
     @Test("a reread made before a set was logged does not take the set off the screen")
     func startWorkoutSettleKeepsLoggedSet() async {
         let server = StubServer()
