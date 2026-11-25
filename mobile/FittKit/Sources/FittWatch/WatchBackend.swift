@@ -7,6 +7,8 @@ public protocol WatchBackend: Sendable {
     func redeemDeviceLink(code: String) async throws -> SessionTokens
     func nextLift(userId: Int64) async throws -> NextLift
     func sessions(userId: Int64) async throws -> [WorkoutSession]
+    func openSession(userId: Int64) async throws -> WorkoutSession?
+    func session(_ sessionId: Int64, userId: Int64) async throws -> WorkoutSession
     func startSession(_ session: NewWorkoutSession, userId: Int64) async throws -> WorkoutSession
     func addEntry(exerciseId: Int64, sessionId: Int64, userId: Int64) async throws -> WorkoutSession
 }

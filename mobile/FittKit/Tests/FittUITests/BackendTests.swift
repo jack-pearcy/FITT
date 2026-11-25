@@ -602,6 +602,77 @@ struct BackendTests {
         #expect(request.body["planId"] as? Int == 5)
     }
 
+    @Test("the open session is read from its own route")
+    func readsOpenSession() async throws {
+        let server = StubServer()
+        let sessionBody = sessionBody
+        server.respond { _ in .json(200, sessionBody) }
+
+        let open = try await server.backend().openSession(userId: 10)
+
+        #expect(open?.id == 12)
+        #expect(open?.isFinished == false)
+        #expect(try sent(server).line == "GET /api/users/10/workout-sessions/open")
+    }
+
+    @Test("a 204 from the open route means nothing is open")
+    func noOpenSession() async throws {
+        let server = StubServer()
+        server.respond { _ in StubResponse(status: 204) }
+
+        #expect(try await server.backend().openSession(userId: 10) == nil)
+    }
+
+    @Test("a 401 on the open route becomes unauthorized")
+    func openSessionUnauthorized() async {
+        let server = StubServer()
+        server.respond { _ in StubResponse(status: 401) }
+
+        await #expect(throws: BackendError.unauthorized) { try await server.backend().openSession(userId: 10) }
+    }
+
+    @Test("a session is read by its id")
+    func readsSessionById() async throws {
+        let server = StubServer()
+        let sessionBody = sessionBody
+        server.respond { _ in .json(200, sessionBody) }
+
+        #expect(try await server.backend().session(12, userId: 10).id == 12)
+        #expect(try sent(server).line == "GET /api/users/10/workout-sessions/12")
+    }
+
+    @Test("a 409 on start names the open session from the problem properties")
+    func startConflictNestedId() async {
+        let server = StubServer()
+        server.respond { _ in
+            .json(409, #"{"status":409,"title":"Open Session Exists","detail":"A workout is already open","properties":{"openSessionId":44}}"#)
+        }
+
+        await #expect(throws: BackendError.openSessionExists(openSessionId: 44)) {
+            try await server.backend().startSession(NewWorkoutSession(startedAt: Date(), planId: 5), userId: 10)
+        }
+    }
+
+    @Test("a 409 on start with the id at the top level is read too")
+    func startConflictTopLevelId() async {
+        let server = StubServer()
+        server.respond { _ in .json(409, #"{"status":409,"title":"Open Session Exists","openSessionId":45}"#) }
+
+        await #expect(throws: BackendError.openSessionExists(openSessionId: 45)) {
+            try await server.backend().startSession(NewWorkoutSession(startedAt: Date(), planId: 5), userId: 10)
+        }
+    }
+
+    @Test("a 409 with no open session id stays a problem")
+    func otherConflictStaysProblem() async {
+        let server = StubServer()
+        server.respond { _ in .json(409, #"{"status":409,"title":"Conflict","detail":"Exercise is in use"}"#) }
+
+        await #expect(throws: BackendError.problem(status: 409, APIProblem(status: 409, title: "Conflict", detail: "Exercise is in use"))) {
+            try await server.backend().deleteExercise(3, userId: 10)
+        }
+    }
+
     @Test("adding an entry posts the exercise id")
     func addsEntry() async throws {
         let server = StubServer()
