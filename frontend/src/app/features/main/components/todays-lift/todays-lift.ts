@@ -2,11 +2,12 @@
 // with its exercises, sets and reps, plus a button to start the session.
 import {Component, DestroyRef, inject, OnInit, signal} from '@angular/core';
 import {Router} from '@angular/router';
-import {WorkoutPlanDayResponse} from '../../../workouts/models/workout.model';
+import {WorkoutPlanDayResponse, WorkoutSessionResponse} from '../../../workouts/models/workout.model';
 import {AuthService} from '../../../../core/services/auth.service';
-import {WorkoutService} from '../../../../core/services/workout.service';
+import {openSessionIdFrom, WorkoutService} from '../../../../core/services/workout.service';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
-import {EMPTY, switchMap} from 'rxjs';
+import {HttpErrorResponse} from '@angular/common/http';
+import {catchError, EMPTY, Observable, of, switchMap, throwError} from 'rxjs';
 
 @Component({
   selector: 'app-todays-lift',
@@ -71,6 +72,18 @@ export class TodaysLift implements OnInit {
     void this.router.navigate(['/home/workouts']);
   }
 
+  // Asks for the open workout before starting one. A server without the /open
+  // route answers 400, 404 or 405, which reads as none open so Start works as
+  // before. Unauthorized and no connection still fail the start.
+  private findOpenSession(userId: number): Observable<WorkoutSessionResponse | null> {
+    return this.workouts.getOpenSession(userId).pipe(
+      catchError(err => {
+        const status = err instanceof HttpErrorResponse ? err.status : 0;
+        return status === 0 || status === 401 ? throwError(() => err) : of(null);
+      })
+    );
+  }
+
   startSession(): void {
     const userId = this.auth.getUserId();
     const day    = this.todayDay();
@@ -79,7 +92,16 @@ export class TodaysLift implements OnInit {
 
     this.starting.set(true);
 
-    this.workouts.startSessionForDay(userId, planId, day).pipe(
+    this.findOpenSession(userId).pipe(
+      switchMap(open => open !== null
+        ? of(open)
+        : this.workouts.startSessionForDay(userId, planId, day).pipe(
+            // The server allows one open workout. A 409 names it, so resume that one.
+            catchError(err => {
+              const openId = openSessionIdFrom(err);
+              return openId === null ? throwError(() => err) : this.workouts.getSession(userId, openId);
+            })
+          )),
       takeUntilDestroyed(this.destroyRef)
     ).subscribe({
       next: session => {

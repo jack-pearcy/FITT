@@ -1,5 +1,5 @@
 import { inject, Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import {forkJoin, Observable, of, switchMap} from 'rxjs';
 import {
   AddExerciseEntryRequest,
@@ -16,6 +16,16 @@ import {
   WorkoutSessionResponse
 } from '../../features/workouts/models/workout.model';
 import {map} from 'rxjs/operators';
+
+// Reads the open workout id from a 409 "Open Session Exists" problem. Spring Boot
+// nests problem properties under "properties", so that comes first, with a
+// top-level openSessionId as the fallback. Null for any other error.
+export function openSessionIdFrom(error: unknown): number | null {
+  if (!(error instanceof HttpErrorResponse) || error.status !== 409) return null;
+  const body = error.error as { openSessionId?: unknown; properties?: { openSessionId?: unknown } } | null;
+  const id = body?.properties?.openSessionId ?? body?.openSessionId;
+  return typeof id === 'number' ? id : null;
+}
 
 @Injectable({ providedIn: 'root' })
 export class WorkoutService {
@@ -79,6 +89,15 @@ export class WorkoutService {
       `/api/users/${userId}/workout-sessions`,
       request
     );
+  }
+
+  // The workout started and not yet finished, so Start can resume it instead of
+  // starting another. The server answers 204 with no body when none is open.
+  getOpenSession(userId: number): Observable<WorkoutSessionResponse | null> {
+    return this.http.get<WorkoutSessionResponse>(
+      `/api/users/${userId}/workout-sessions/open`,
+      { observe: 'response' }
+    ).pipe(map(response => response.status === 204 ? null : response.body));
   }
 
   listSessions(userId: number): Observable<WorkoutSessionResponse[]> {
