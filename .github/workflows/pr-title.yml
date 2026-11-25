@@ -21,9 +21,15 @@ name: PR title
 permissions:
   pull-requests: read
 
+# A newer edit or push to the same PR replaces the older check.
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   validate-title:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       # Pinned to the v6.1.1 commit, not the @v6 tag, the same rule the Trivy
       # step in ci.yml spells out: a tag can be moved or hijacked, a commit

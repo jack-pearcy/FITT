@@ -26,10 +26,20 @@ permissions:
 env:
   REGISTRY: ghcr.io
 
+# A new push to a pull request cancels that PR's older run, which can no longer
+# merge anyway. Runs on main are never cancelled, so every merge commit gets its
+# full test, scan and publish.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # CI gate. Nothing downstream runs unless these tests pass.
   test:
     runs-on: ubuntu-latest
+    # A hung run ends itself instead of holding the runner for GitHub's default
+    # six hours. A normal run takes about two minutes.
+    timeout-minutes: 20
     steps:
       - name: Check out the code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
@@ -84,6 +94,8 @@ jobs:
   # does not wait on this job, because the images contain no Swift code.
   mobile-test:
     runs-on: macos-26
+    # A normal run takes about two minutes; a cold cache takes longer.
+    timeout-minutes: 30
     steps:
       - name: Check out the code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
@@ -103,6 +115,8 @@ jobs:
   build-and-push:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # A normal run takes about four minutes, building both images and scanning them.
+    timeout-minutes: 30
     needs: test
     # The default token can read packages but not write them. Grant package
     # write access so the push to ghcr.io succeeds.
