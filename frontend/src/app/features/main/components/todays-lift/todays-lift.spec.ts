@@ -19,8 +19,10 @@ import {
 // The real WorkoutService runs against HttpTestingController so the HTTP
 // status codes drive each path: 200 resumes, 204 starts, a 409 from the start
 // resumes the session it names, and a server without the /open route (400,
-// 404) still starts as before. The day and plan signals are set directly so
-// each test begins at the Start tap without replaying the plan load.
+// 404) still starts as before. Resuming keeps the open workout as it is,
+// except an empty one of this plan started over a minute ago, which gets the
+// day's exercises. The day and plan signals are set directly so each test
+// begins at the Start tap without replaying the plan load.
 describe('TodaysLift', () => {
 
   const USER_ID = 42;
@@ -48,9 +50,10 @@ describe('TodaysLift', () => {
     ]
   };
 
+  // Started five minutes ago, so an empty one counts as a start that failed.
   const session = (id: number): WorkoutSessionResponse => ({
     id, ownerUserId: USER_ID, planId: PLAN_ID,
-    startedAt: '2026-11-25T18:00:00Z', finishedAt: null,
+    startedAt: new Date(Date.now() - 5 * 60_000).toISOString(), finishedAt: null,
     notes: null, exerciseEntries: []
   });
 
@@ -173,7 +176,7 @@ describe('TodaysLift', () => {
     expect(component.starting()).toBe(false);
   });
 
-  it('adds the missing exercises to an open workout before resuming it', () => {
+  it('adds the day\'s exercises to an empty open workout before resuming it', () => {
     component.todayDay.set(pushDay);
     component.startSession();
 
@@ -187,18 +190,44 @@ describe('TodaysLift', () => {
     expect(component.starting()).toBe(false);
   });
 
-  it('adds only the exercises a half-built workout lacks', () => {
+  it('leaves an open workout with an exercise removed as it is', () => {
     component.todayDay.set(pushDay);
     component.startSession();
 
-    const partial: WorkoutSessionResponse = {
+    // The user removed Overhead Press on the phone. Resuming must not add it back.
+    const trimmed: WorkoutSessionResponse = {
       ...session(55),
       exerciseEntries: [{ id: 81, orderIndex: 0, exercise: bench, sets: [] }]
     };
-    http.expectOne(`${BASE}/open`).flush(partial);
-    const add = http.expectOne(r => r.method === 'POST' && r.url === `${BASE}/55/entries`);
-    expect(add.request.body.exerciseId).toBe(12);
-    add.flush(session(55));
+    http.expectOne(`${BASE}/open`).flush(trimmed);
+    http.expectNone(r => r.method === 'POST');
+
+    expect(mockRouter.navigate).toHaveBeenCalledWith(['/session', 55]);
+  });
+
+  it('leaves an open workout from another day of the same plan as it is', () => {
+    component.todayDay.set(pushDay);
+    component.startSession();
+
+    // The phone moved on to a pull day after this page loaded the push day.
+    const row: ExerciseResponse = { id: 13, name: 'Barbell Row', muscleGroup: 'BACK', custom: false };
+    const pullSession: WorkoutSessionResponse = {
+      ...session(55),
+      exerciseEntries: [{ id: 91, orderIndex: 0, exercise: row, sets: [] }]
+    };
+    http.expectOne(`${BASE}/open`).flush(pullSession);
+    http.expectNone(r => r.method === 'POST');
+
+    expect(mockRouter.navigate).toHaveBeenCalledWith(['/session', 55]);
+  });
+
+  it('leaves an empty open workout started seconds ago as it is', () => {
+    component.todayDay.set(pushDay);
+    component.startSession();
+
+    // Another device may still be adding this session's exercises.
+    http.expectOne(`${BASE}/open`).flush({ ...session(55), startedAt: new Date().toISOString() });
+    http.expectNone(r => r.method === 'POST');
 
     expect(mockRouter.navigate).toHaveBeenCalledWith(['/session', 55]);
   });
