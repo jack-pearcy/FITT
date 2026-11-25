@@ -10,9 +10,13 @@ struct AppModelTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
     private let onboardingDone = #"{"biometricsComplete":true,"goalsComplete":true,"onboardingComplete":true}"#
 
-    private func model(_ server: StubServer, store: InMemoryTokenStore = InMemoryTokenStore()) -> AppModel {
+    private func model(
+        _ server: StubServer,
+        store: InMemoryTokenStore = InMemoryTokenStore(),
+        pause: @escaping @Sendable (Duration) async -> Void = { _ in }
+    ) -> AppModel {
         let now = now
-        return AppModel(backend: server.backend(tokenStore: store), tokenStore: store, now: { now })
+        return AppModel(backend: server.backend(tokenStore: store), tokenStore: store, now: { now }, pause: pause)
     }
 
     @Test("a successful sign in stores the token and moves to signed in")
@@ -284,11 +288,16 @@ struct AppModelTests {
     }
 
     /// A signed-in model whose server reports the given steps as done until told otherwise.
-    private func signedInModel(_ server: StubServer, biometrics: Bool, goals: Bool) async -> AppModel {
+    private func signedInModel(
+        _ server: StubServer,
+        biometrics: Bool,
+        goals: Bool,
+        pause: @escaping @Sendable (Duration) async -> Void = { _ in }
+    ) async -> AppModel {
         let initial = status(biometrics: biometrics, goals: goals)
         server.respond { _ in .json(200, initial) }
         let store = InMemoryTokenStore(token: makeToken(userId: 7, expiresAt: now.addingTimeInterval(600)))
-        let model = model(server, store: store)
+        let model = model(server, store: store, pause: pause)
         await model.start()
         return model
     }
@@ -1308,8 +1317,12 @@ struct AppModelTests {
     }
 
     /// A signed-in model with next lift loaded and, optionally, a session in progress.
-    private func workoutModel(_ server: StubServer, inProgress: Bool) async -> AppModel {
-        let model = await signedInModel(server, biometrics: true, goals: true)
+    private func workoutModel(
+        _ server: StubServer,
+        inProgress: Bool,
+        pause: @escaping @Sendable (Duration) async -> Void = { _ in }
+    ) async -> AppModel {
+        let model = await signedInModel(server, biometrics: true, goals: true, pause: pause)
         let next = nextLiftWithDay
         let session = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
         server.respond { request in
@@ -1357,7 +1370,8 @@ struct AppModelTests {
         let empty = sessionJSON()
         let withBoth = sessionJSON(entries: [entryJSON(id: 30, order: 0, exercise: bench), entryJSON(id: 31, order: 1, exercise: squat)].joined(separator: ","))
         server.respond { request in
-            request.path.hasSuffix("/entries") ? .json(200, withBoth) : .json(201, empty)
+            if request.path.hasSuffix("/open") { return StubResponse(status: 204) }
+            return request.path.hasSuffix("/entries") ? .json(200, withBoth) : .json(201, empty)
         }
 
         await model.startWorkout()
@@ -1366,11 +1380,13 @@ struct AppModelTests {
         #expect(model.errorMessage == nil)
         #expect(!model.isWorking)
         #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
             "POST /api/users/7/workout-sessions",
             "POST /api/users/7/workout-sessions/12/entries",
             "POST /api/users/7/workout-sessions/12/entries",
         ])
-        let sent = try server.requests.dropFirst(before).map {
+        // The bodies of the three writes, after the read of the open session.
+        let sent = try server.requests.dropFirst(before + 1).map {
             try #require(try JSONSerialization.jsonObject(with: $0.body) as? [String: Any])
         }
         #expect(sent[0]["planId"] as? Int == 5)
@@ -1385,7 +1401,8 @@ struct AppModelTests {
         let model = await workoutModel(server, inProgress: false)
         let empty = sessionJSON()
         server.respond { request in
-            request.path.hasSuffix("/entries") ? .json(500, #"{"status":500,"detail":"Unexpected error"}"#) : .json(201, empty)
+            if request.path.hasSuffix("/open") { return StubResponse(status: 204) }
+            return request.path.hasSuffix("/entries") ? .json(500, #"{"status":500,"detail":"Unexpected error"}"#) : .json(201, empty)
         }
 
         await model.startWorkout()
@@ -1393,6 +1410,297 @@ struct AppModelTests {
         #expect(model.activeSession?.id == 12)
         #expect(model.activeSession?.exerciseEntries.isEmpty == true)
         #expect(model.errorMessage == "Unexpected error")
+    }
+
+    @Test("a workout already open, such as one started on the watch, is resumed instead of starting another")
+    func startWorkoutResumesOpen() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        let open = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench)).replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        server.respond { request in
+            request.path.hasSuffix("/open") ? .json(200, open) : .json(500, #"{"status":500,"detail":"Unexpected error"}"#)
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 44)
+        #expect(model.activeSession?.orderedEntries.map(\.exercise.name) == ["Barbell Bench Press"])
+        #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
+        // The day has two exercises, so the workout is read again. That read
+        // fails here, which keeps the workout as it was and shows no error.
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "GET /api/users/7/workout-sessions/44",
+        ])
+    }
+
+    @Test("a resumed workout the other device is still filling is read again until it has the day's exercises")
+    func startWorkoutResumedSettles() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        let empty = sessionJSON().replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let withBench = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let withBoth = sessionJSON(entries: [entryJSON(id: 30, order: 0, exercise: bench), entryJSON(id: 31, order: 1, exercise: squat)].joined(separator: ","))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let reads = Locked([withBench, withBoth])
+        server.respond { request in
+            if request.path.hasSuffix("/open") { return .json(200, empty) }
+            return .json(200, reads.withLock { $0.count > 1 ? $0.removeFirst() : $0[0] })
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 44)
+        #expect(model.activeSession?.orderedEntries.map(\.exercise.name) == ["Barbell Bench Press", "Back Squat"])
+        #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "GET /api/users/7/workout-sessions/44",
+            "GET /api/users/7/workout-sessions/44",
+        ])
+    }
+
+    @Test("a resumed workout is read again only until a read finds nothing new")
+    func startWorkoutSettleStopsWhenUnchanged() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        let withBench = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        server.respond { _ in .json(200, withBench) }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.orderedEntries.map(\.exercise.name) == ["Barbell Bench Press"])
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "GET /api/users/7/workout-sessions/44",
+        ])
+    }
+
+    @Test("a 409 on start resumes the session the server names")
+    func startWorkoutConflictResumes() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        // The watch's start landed first and it is still adding its exercises:
+        // each read of the session finds one more.
+        let named = sessionJSON().replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let withBench = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let withBoth = sessionJSON(entries: [entryJSON(id: 30, order: 0, exercise: bench), entryJSON(id: 31, order: 1, exercise: squat)].joined(separator: ","))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let reads = Locked([named, withBench, withBoth])
+        server.respond { request in
+            if request.path.hasSuffix("/open") { return StubResponse(status: 204) }
+            if request.method == "POST" {
+                return .json(409, #"{"status":409,"title":"Open Session Exists","properties":{"openSessionId":44}}"#)
+            }
+            return .json(200, reads.withLock { $0.count > 1 ? $0.removeFirst() : $0[0] })
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 44)
+        #expect(model.activeSession?.orderedEntries.map(\.exercise.name) == ["Barbell Bench Press", "Back Squat"])
+        #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "POST /api/users/7/workout-sessions",
+            "GET /api/users/7/workout-sessions/44",
+            "GET /api/users/7/workout-sessions/44",
+            "GET /api/users/7/workout-sessions/44",
+        ])
+    }
+
+    @Test("a resumed workout that already has every exercise of the day is not read again")
+    func startWorkoutResumedFullNotReread() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        let withBoth = sessionJSON(entries: [entryJSON(id: 30, order: 0, exercise: bench), entryJSON(id: 31, order: 1, exercise: squat)].joined(separator: ","))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        server.respond { request in
+            request.path.hasSuffix("/open") ? .json(200, withBoth) : .json(500, #"{"status":500,"detail":"Unexpected error"}"#)
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 44)
+        #expect(model.activeSession?.orderedEntries.map(\.exercise.name) == ["Barbell Bench Press", "Back Squat"])
+        #expect(model.errorMessage == nil)
+        #expect(calls(server, after: before) == ["GET /api/users/7/workout-sessions/open"])
+    }
+
+    @Test("a 409 on start whose named workout cannot be read shows the error and starts nothing more")
+    func startWorkoutConflictReadFails() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        server.respond { request in
+            if request.path.hasSuffix("/open") { return StubResponse(status: 204) }
+            if request.method == "POST" {
+                return .json(409, #"{"status":409,"title":"Open Session Exists","properties":{"openSessionId":44}}"#)
+            }
+            return .json(500, #"{"status":500,"detail":"Unexpected error"}"#)
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession == nil)
+        #expect(model.errorMessage == "Unexpected error")
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "POST /api/users/7/workout-sessions",
+            "GET /api/users/7/workout-sessions/44",
+        ])
+    }
+
+    @Test("a 409 on start whose named workout cannot be reached says the phone is offline")
+    func startWorkoutConflictReadOffline() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        server.respond { request in
+            if request.path.hasSuffix("/open") { return StubResponse(status: 204) }
+            if request.method == "POST" {
+                // The connection drops once the 409 is in.
+                server.respond(nil)
+                return .json(409, #"{"status":409,"title":"Open Session Exists","properties":{"openSessionId":44}}"#)
+            }
+            return .json(200, "{}")
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession == nil)
+        #expect(model.isOffline)
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "POST /api/users/7/workout-sessions",
+            "GET /api/users/7/workout-sessions/44",
+        ])
+    }
+
+    @Test("a reread made before a set was logged does not take the set off the screen")
+    func startWorkoutSettleKeepsLoggedSet() async {
+        let server = StubServer()
+        let wait = OneTimeAction()
+        let model = await workoutModel(server, inProgress: false, pause: { _ in await wait.run() })
+        let before = server.requests.count
+        let both = [entryJSON(id: 30, order: 0, exercise: bench), entryJSON(id: 31, order: 1, exercise: squat)]
+        let set = #"{"id":101,"setNumber":1,"reps":8,"weight":100.00,"rpe":null,"completed":true}"#
+        let withSet = [entryJSON(id: 30, order: 0, exercise: bench, sets: set), entryJSON(id: 31, order: 1, exercise: squat)]
+        let empty = sessionJSON().replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let stale = sessionJSON(entries: both.joined(separator: ","))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let logged = sessionJSON(entries: withSet.joined(separator: ","))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        // The first read left before the set was saved, so it does not have it.
+        let reads = Locked([stale, logged])
+        server.respond { request in
+            if request.path.hasSuffix("/open") { return .json(200, empty) }
+            if request.method == "POST" { return .json(200, logged) }
+            return .json(200, reads.withLock { $0.count > 1 ? $0.removeFirst() : $0[0] })
+        }
+        wait.action = { _ = await model.logSet(SetDraft(weight: "100", reps: "8"), entryId: 30) }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 44)
+        #expect(model.activeSession?.loggedSetCount == 1)
+        #expect(model.activeSession?.orderedEntries.map(\.exercise.name) == ["Barbell Bench Press", "Back Squat"])
+        #expect(!model.isWorking)
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "POST /api/users/7/workout-sessions/44/entries/30/sets",
+            "GET /api/users/7/workout-sessions/44",
+            "GET /api/users/7/workout-sessions/44",
+        ])
+    }
+
+    @Test("a resumed workout discarded during the wait is not read again or brought back")
+    func startWorkoutSettleStopsWhenDiscarded() async {
+        let server = StubServer()
+        let wait = OneTimeAction()
+        let model = await workoutModel(server, inProgress: false, pause: { _ in await wait.run() })
+        let before = server.requests.count
+        let empty = sessionJSON().replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        let withBench = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+            .replacingOccurrences(of: #""id":12"#, with: #""id":44"#)
+        server.respond { request in
+            if request.path.hasSuffix("/open") { return .json(200, empty) }
+            if request.method == "DELETE" { return StubResponse(status: 204) }
+            return .json(200, withBench)
+        }
+        wait.action = { await model.discardWorkout() }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession == nil)
+        #expect(model.errorMessage == nil)
+        #expect(calls(server, after: before) == [
+            "GET /api/users/7/workout-sessions/open",
+            "DELETE /api/users/7/workout-sessions/44",
+        ])
+    }
+
+    @Test("a server without the open route answers it with an error, and start works as before", arguments: [404, 400])
+    func startWorkoutOnOlderServer(status: Int) async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        let withBench = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+        server.respond { request in
+            if request.path.hasSuffix("/open") {
+                return .json(status, #"{"status":\#(status),"title":"Bad Request","detail":"No such route"}"#)
+            }
+            return request.path.hasSuffix("/entries") ? .json(200, withBench) : .json(201, withBench)
+        }
+
+        await model.startWorkout()
+
+        #expect(model.activeSession?.id == 12)
+        #expect(model.errorMessage == nil)
+        #expect(Array(calls(server, after: before).prefix(2)) == [
+            "GET /api/users/7/workout-sessions/open",
+            "POST /api/users/7/workout-sessions",
+        ])
+    }
+
+    @Test("no connection on the open route stops the start and says so")
+    func startWorkoutOpenOffline() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        server.respond(nil)
+
+        await model.startWorkout()
+
+        #expect(model.activeSession == nil)
+        #expect(model.isOffline)
+        #expect(calls(server, after: before) == ["GET /api/users/7/workout-sessions/open"])
+    }
+
+    @Test("a 401 on the open route that cannot be renewed ends the session")
+    func startWorkoutOpenUnauthorized() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: false)
+        let before = server.requests.count
+        server.respond { _ in StubResponse(status: 401) }
+
+        await model.startWorkout()
+
+        #expect(model.phase == .signedOut)
+        #expect(!calls(server, after: before).contains("POST /api/users/7/workout-sessions"))
     }
 
     @Test("starting does nothing while a workout is already in progress")
@@ -1663,6 +1971,48 @@ struct AppModelTests {
 
         #expect(model.history == nil)
         #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+        #expect(model.isOffline)
+    }
+
+    @Test("a load that reaches the server clears the offline flag")
+    func offlineClearsOnRetry() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond(nil)
+        await model.loadSessions()
+        server.respond { _ in .json(200, "[]") }
+
+        await model.loadSessions()
+
+        #expect(!model.isOffline)
+        #expect(model.history == [])
+    }
+
+    @Test("clearing errors also clears the offline flag")
+    func clearErrorsClearsOffline() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond(nil)
+        await model.loadSessions()
+        #expect(model.isOffline)
+
+        model.clearErrors()
+
+        #expect(!model.isOffline)
+        #expect(model.errorMessage == nil)
+    }
+
+    @Test("a server error is not reported as offline")
+    func serverErrorIsNotOffline() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in .json(500, #"{"status":500}"#) }
+
+        await model.loadSessions()
+
+        #expect(model.history == nil)
+        #expect(model.errorMessage != nil)
+        #expect(!model.isOffline)
     }
 
     @Test("a finished workout goes to the top of a loaded history")
@@ -1737,6 +2087,110 @@ struct AppModelTests {
 
         await model.signOut()
 
+        #expect(model.history == nil)
+    }
+
+    // MARK: History for the workout screen
+
+    /// A workout started on a model that has not read its sessions, as when
+    /// the launch read failed, so the history is still unloaded.
+    private func startedWithoutHistory(_ server: StubServer) async -> AppModel {
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let next = nextLiftWithDay
+        let empty = sessionJSON()
+        let withBench = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench))
+        server.respond { request in
+            if request.path.hasSuffix("/next-lift") { return .json(200, next) }
+            if request.path.hasSuffix("/open") { return StubResponse(status: 204) }
+            return request.path.hasSuffix("/entries") ? .json(200, withBench) : .json(201, empty)
+        }
+        await model.loadNextLift()
+        await model.startWorkout()
+        return model
+    }
+
+    @Test("the workout screen reads the history once when it is missing")
+    func workoutLoadsHistoryOnce() async {
+        let server = StubServer()
+        let model = await startedWithoutHistory(server)
+        #expect(model.history == nil)
+        let before = server.requests.count
+        let older = historyJSON(id: 10, startedAt: "2026-11-10T05:00:00Z")
+        let newer = historyJSON(id: 11, startedAt: "2026-11-14T05:00:00Z")
+        let open = historyJSON(id: 12, startedAt: "2026-11-16T05:20:32Z", finished: false)
+        server.respond { _ in .json(200, "[\(older),\(open),\(newer)]") }
+
+        async let first: Void = model.loadHistoryForWorkout()
+        async let second: Void = model.loadHistoryForWorkout()
+        _ = await (first, second)
+        await model.loadHistoryForWorkout()
+
+        #expect(model.history?.map(\.id) == [11, 10])
+        #expect(model.activeSession?.exerciseEntries.map(\.id) == [30])
+        #expect(calls(server, after: before) == ["GET /api/users/7/workout-sessions"])
+    }
+
+    @Test("a history already loaded is not read again for the workout screen")
+    func workoutKeepsLoadedHistory() async {
+        let server = StubServer()
+        let model = await workoutModel(server, inProgress: true)
+        let before = server.requests.count
+
+        await model.loadHistoryForWorkout()
+
+        #expect(model.history == [])
+        #expect(server.requests.count == before)
+    }
+
+    @Test("a history that cannot load says nothing, logging still works, and the next visit tries again")
+    func workoutHistoryFailsQuietly() async {
+        let server = StubServer()
+        let model = await startedWithoutHistory(server)
+        server.respond(nil)
+
+        await model.loadHistoryForWorkout()
+
+        #expect(model.history == nil)
+        #expect(model.errorMessage == nil)
+        #expect(!model.isWorking)
+
+        let updated = sessionJSON(entries: entryJSON(id: 30, order: 0, exercise: bench, sets: #"{"id":101,"setNumber":1,"reps":8,"weight":100.00,"rpe":null,"completed":true}"#))
+        server.respond { _ in .json(200, updated) }
+        let saved = await model.logSet(SetDraft(weight: "100", reps: "8"), entryId: 30)
+        #expect(saved)
+
+        let finished = historyJSON(id: 10, startedAt: "2026-11-10T05:00:00Z")
+        server.respond { _ in .json(200, "[\(finished)]") }
+        await model.loadHistoryForWorkout()
+        #expect(model.history?.map(\.id) == [10])
+    }
+
+    @Test("a history that arrives after sign out is dropped")
+    func workoutHistoryAfterSignOut() async {
+        let server = StubServer()
+        let model = await startedWithoutHistory(server)
+        let finished = historyJSON(id: 10, startedAt: "2026-11-10T05:00:00Z")
+        // The history answer is held until the test lets it go, so sign out
+        // lands while the request is on its way, not before it is sent.
+        let release = DispatchSemaphore(value: 0)
+        server.respond { request in
+            if request.method == "GET", request.path.hasSuffix("/workout-sessions") { release.wait() }
+            return .json(200, "[\(finished)]")
+        }
+        let before = server.requests.count
+
+        let load = Task { await model.loadHistoryForWorkout() }
+        while !server.requests.dropFirst(before).contains(where: { $0.path.hasSuffix("/workout-sessions") }) {
+            await Task.yield()
+        }
+        #expect(calls(server, after: before) == ["GET /api/users/7/workout-sessions"])
+        // Sign out clears the session before its first suspension, and the main
+        // actor is held from here to there, so the answer cannot land first.
+        release.signal()
+        await model.signOut()
+        await load.value
+
+        #expect(model.phase == .signedOut)
         #expect(model.history == nil)
     }
 
@@ -2261,5 +2715,18 @@ struct AppModelTests {
         )
         #expect(suggestion.targetText(units: .metric) == "102.06 kg × 8, 3 sets")
         #expect(suggestion.targetText(units: .imperial) == "225 lb × 8, 3 sets")
+    }
+}
+
+/// Runs an action the first time the model waits between rereads, standing in
+/// for what the user does in that second. Later waits return at once.
+@MainActor
+final class OneTimeAction {
+    var action: (@MainActor () async -> Void)?
+
+    func run() async {
+        let action = action
+        self.action = nil
+        await action?()
     }
 }

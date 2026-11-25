@@ -50,6 +50,7 @@ struct MeasurementTests {
         #expect(units.shown(kilograms: Decimal(string: "102.5")!) == Decimal(string: "102.5"))
         #expect(units.kilograms(typed: Decimal(string: "102.5")!) == Decimal(string: "102.5"))
         #expect(units.bodyWeightText(kilograms: Decimal(string: "82.44")!) == "82.4 kg")
+        #expect(units.weightText(kilograms: Decimal(string: "102.56")!) == "102.6 kg")
     }
 
     @Test("an imperial user sees pounds and sends kilograms")
@@ -59,6 +60,7 @@ struct MeasurementTests {
         #expect(units.shown(kilograms: Decimal(string: "102.06")!) == 225)
         #expect(units.kilograms(typed: 225) == Decimal(string: "102.06"))
         #expect(units.bodyWeightText(kilograms: Decimal(string: "81.83")!) == "180.4 lb")
+        #expect(units.weightText(kilograms: Decimal(string: "102.06")!) == "225 lb")
     }
 
     @Test("every tenth of a pound survives the trip to kilograms and back")

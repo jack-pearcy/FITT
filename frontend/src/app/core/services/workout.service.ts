@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import {forkJoin, Observable, of, switchMap} from 'rxjs';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import {catchError, forkJoin, Observable, of, switchMap, throwError, timer} from 'rxjs';
 import {
   AddExerciseEntryRequest,
   CreateExerciseRequest,
@@ -16,6 +16,22 @@ import {
   WorkoutSessionResponse
 } from '../../features/workouts/models/workout.model';
 import {map} from 'rxjs/operators';
+
+// Reads the open workout id from a 409 "Open Session Exists" problem. Spring Boot
+// nests problem properties under "properties", so that comes first, with a
+// top-level openSessionId as the fallback. Null for any other error.
+export function openSessionIdFrom(error: unknown): number | null {
+  if (!(error instanceof HttpErrorResponse) || error.status !== 409) return null;
+  const body = error.error as { openSessionId?: unknown; properties?: { openSessionId?: unknown } } | null;
+  const id = body?.properties?.openSessionId ?? body?.openSessionId;
+  return typeof id === 'number' ? id : null;
+}
+
+// How long resuming waits before it reads an empty open workout again. The
+// device that started it adds its exercises right after the start, so a
+// session still empty after this wait is a start that failed. The wait uses
+// only this browser's clock, never the startedAt the other device sent.
+export const RESUME_FILL_RECHECK_MS = 3_000;
 
 @Injectable({ providedIn: 'root' })
 export class WorkoutService {
@@ -81,6 +97,15 @@ export class WorkoutService {
     );
   }
 
+  // The workout started and not yet finished, so Start can resume it instead of
+  // starting another. The server answers 204 with no body when none is open.
+  getOpenSession(userId: number): Observable<WorkoutSessionResponse | null> {
+    return this.http.get<WorkoutSessionResponse>(
+      `/api/users/${userId}/workout-sessions/open`,
+      { observe: 'response' }
+    ).pipe(map(response => response.status === 204 ? null : response.body));
+  }
+
   listSessions(userId: number): Observable<WorkoutSessionResponse[]> {
     return this.http.get<WorkoutSessionResponse[]>(`/api/users/${userId}/workout-sessions`);
   }
@@ -107,20 +132,73 @@ export class WorkoutService {
       startedAt: new Date().toISOString(),
       planId
     }).pipe(
-      switchMap(session => {
-        const entries = day.exercises.map(ex =>
-          this.addExerciseEntry(userId, session.id, { exerciseId: ex.exercise.id })
-        );
-
-        // A day with no exercises still produces a valid empty session.
-        if (entries.length === 0) {
-          return of(session);
-        }
-
-        // Add all entries in parallel, then emit the session itself.
-        return forkJoin(entries).pipe(map(() => session));
-      })
+      switchMap(session => this.addDayExercises(userId, session, day))
     );
+  }
+
+  // The one Start path for every web screen. It asks for the open workout
+  // first and resumes it. With none open it starts the day as before. If the
+  // start still meets an open workout, the 409 names it and that one resumes.
+  // A server without the /open route answers 400, 404 or 405, which reads as
+  // none open so Start works as before. Unauthorized and no connection fail.
+  startOrResumeForDay(userId: number, planId: number, day: WorkoutPlanDayResponse): Observable<WorkoutSessionResponse> {
+    return this.getOpenSession(userId).pipe(
+      catchError(err => {
+        const status = err instanceof HttpErrorResponse ? err.status : 0;
+        return status === 0 || status === 401 ? throwError(() => err) : of(null);
+      }),
+      switchMap(open => open !== null
+        ? this.resumeSessionForDay(userId, planId, open, day)
+        : this.startSessionForDay(userId, planId, day).pipe(
+            catchError(err => {
+              const openId = openSessionIdFrom(err);
+              return openId === null
+                ? throwError(() => err)
+                : this.getSession(userId, openId).pipe(
+                    switchMap(found => this.resumeSessionForDay(userId, planId, found, day))
+                  );
+            })
+          ))
+    );
+  }
+
+  // Resumes the open workout as it is. The one exception is a start that
+  // failed before adding any exercise: a session of this plan with no entries
+  // is read again after a short wait, and gets the day's exercises only if it
+  // is still empty. A session with any entry may have had exercises removed on
+  // purpose or belong to another day, and an empty one that gains entries
+  // during the wait was still filling on another device, so those are left
+  // alone and any gaps are fixed on the session screen.
+  private resumeSessionForDay(
+    userId: number,
+    planId: number,
+    session: WorkoutSessionResponse,
+    day: WorkoutPlanDayResponse
+  ): Observable<WorkoutSessionResponse> {
+    if (session.planId !== planId || session.exerciseEntries.length > 0 || day.exercises.length === 0) {
+      return of(session);
+    }
+    return timer(RESUME_FILL_RECHECK_MS).pipe(
+      switchMap(() => this.getSession(userId, session.id)),
+      switchMap(latest => latest.exerciseEntries.length > 0 || latest.finishedAt !== null
+        ? of(latest)
+        : this.addDayExercises(userId, latest, day))
+    );
+  }
+
+  // Adds an entry for each of the day's exercises in parallel, then emits the
+  // session itself. A day with no exercises keeps the session as it is.
+  private addDayExercises(
+    userId: number,
+    session: WorkoutSessionResponse,
+    day: WorkoutPlanDayResponse
+  ): Observable<WorkoutSessionResponse> {
+    const entries = day.exercises
+      .map(ex => this.addExerciseEntry(userId, session.id, { exerciseId: ex.exercise.id }));
+    if (entries.length === 0) {
+      return of(session);
+    }
+    return forkJoin(entries).pipe(map(() => session));
   }
 
   // Reusable method that calculates today's current session

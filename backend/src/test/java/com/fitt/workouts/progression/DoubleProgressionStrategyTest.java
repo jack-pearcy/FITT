@@ -88,6 +88,70 @@ class DoubleProgressionStrategyTest {
         assertThat(suggestion.suggestedSets()).isEqualTo(3);
     }
 
+    @Test
+    void suggest_noSessionHistory_setsNoHistoryReasonAndKeepsText() {
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of()));
+
+        assertThat(suggestion.reasonCode()).isEqualTo(SuggestionReason.NO_HISTORY);
+        assertThat(suggestion.previousWeightKg()).isNull();
+        assertThat(suggestion.targetReps()).isEqualTo(8);
+        assertThat(suggestion.averageRpe()).isNull();
+        assertThat(suggestion.weekInCycle()).isNull();
+        assertThat(suggestion.reasoning()).isEqualTo(
+                "No session history found. Start with a comfortable weight for 8 reps.");
+    }
+
+    @Test
+    void suggest_noSetsLoggedForExercise_setsNoSetsReasonAndKeepsText() {
+        ExerciseEntity otherExercise = exerciseWithId(OTHER_EXERCISE_ID);
+        WorkoutSessionEntity session = sessionWith(otherExercise, new BigDecimal("100"), 10, 3);
+
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session)));
+
+        assertThat(suggestion.reasonCode()).isEqualTo(SuggestionReason.NO_SETS);
+        assertThat(suggestion.previousWeightKg()).isNull();
+        assertThat(suggestion.targetReps()).isEqualTo(8);
+        assertThat(suggestion.averageRpe()).isNull();
+        assertThat(suggestion.weekInCycle()).isNull();
+        assertThat(suggestion.reasoning()).isEqualTo(
+                "No completed sets found for this exercise in recent sessions.");
+    }
+
+    @Test
+    void suggest_twoSessionsAtTopReps_setsIncreaseWeightReasonAndKeepsText() {
+        ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
+        WorkoutSessionEntity recent = sessionWith(squat, new BigDecimal("100"), 12, 3);
+        WorkoutSessionEntity previous = sessionWith(squat, new BigDecimal("100"), 12, 3);
+
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(recent, previous)));
+
+        assertThat(suggestion.reasonCode()).isEqualTo(SuggestionReason.INCREASE_WEIGHT);
+        assertThat(suggestion.previousWeightKg()).isEqualByComparingTo("100");
+        assertThat(suggestion.targetReps()).isEqualTo(8);
+        assertThat(suggestion.averageRpe()).isNull();
+        assertThat(suggestion.weekInCycle()).isNull();
+        assertThat(suggestion.reasoning()).isEqualTo(
+                "You hit 12 reps on all sets for 2 sessions in a row. "
+                        + "Increase weight to 102.5 and reset to 8 reps.");
+    }
+
+    @Test
+    void suggest_belowTopReps_setsAddRepsReasonAndKeepsText() {
+        ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
+        WorkoutSessionEntity recent = sessionWith(squat, new BigDecimal("100"), 10, 3);
+        WorkoutSessionEntity previous = sessionWith(squat, new BigDecimal("100"), 10, 3);
+
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(recent, previous)));
+
+        assertThat(suggestion.reasonCode()).isEqualTo(SuggestionReason.ADD_REPS);
+        assertThat(suggestion.previousWeightKg()).isEqualByComparingTo("100");
+        assertThat(suggestion.targetReps()).isEqualTo(12);
+        assertThat(suggestion.averageRpe()).isNull();
+        assertThat(suggestion.weekInCycle()).isNull();
+        assertThat(suggestion.reasoning()).isEqualTo(
+                "Keep 100 and work toward 12 reps on every set before increasing weight.");
+    }
+
     // JPA assigns id on save. No setter, so reflection.
     private ExerciseEntity exerciseWithId(long id) {
         ExerciseEntity exercise = new ExerciseEntity(null, "Back Squat", "Legs", false);

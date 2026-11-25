@@ -29,7 +29,8 @@ public class LinearPeriodizationStrategy implements ProgressionStrategy {
         if (recentSessions.isEmpty()) {
             return new ProgressionSuggestion(
                     exerciseId, BigDecimal.ZERO, 10, 3,
-                    "No session history. Start with a weight you can control for 10 reps.");
+                    "No session history. Start with a weight you can control for 10 reps.",
+                    SuggestionReason.NO_HISTORY, null, 10, null, null);
         }
 
         WorkoutSessionEntity latestSession = recentSessions.getFirst();
@@ -38,7 +39,8 @@ public class LinearPeriodizationStrategy implements ProgressionStrategy {
         if (sets.isEmpty()) {
             return new ProgressionSuggestion(
                     exerciseId, BigDecimal.ZERO, 10, 3,
-                    "No completed sets for this exercise in recent sessions.");
+                    "No completed sets for this exercise in recent sessions.",
+                    SuggestionReason.NO_SETS, null, 10, null, null);
         }
 
         BigDecimal lastWeight = findLastWeight(sets);
@@ -57,7 +59,8 @@ public class LinearPeriodizationStrategy implements ProgressionStrategy {
             return new ProgressionSuggestion(
                     exerciseId, deloadWeight, 12, setCount,
                     "Deload week. Reduce to " + deloadWeight
-                            + " at higher reps to recover before the next cycle.");
+                            + " at higher reps to recover before the next cycle.",
+                    SuggestionReason.DELOAD, lastWeight, 12, null, weekInCycle);
         }
 
         BigDecimal increase = lastWeight.multiply(WEEKLY_INCREASE_PERCENT)
@@ -75,7 +78,8 @@ public class LinearPeriodizationStrategy implements ProgressionStrategy {
         return new ProgressionSuggestion(
                 exerciseId, newWeight, targetReps, setCount,
                 "Week " + weekInCycle + " of " + CYCLE_LENGTH + ". "
-                        + "Increase weight to " + newWeight + " for " + targetReps + " reps.");
+                        + "Increase weight to " + newWeight + " for " + targetReps + " reps.",
+                SuggestionReason.WEEK_STEP, lastWeight, targetReps, null, weekInCycle);
     }
 
     private List<SetEntryEntity> extractCompletedSets(WorkoutSessionEntity session, Long exerciseId) {

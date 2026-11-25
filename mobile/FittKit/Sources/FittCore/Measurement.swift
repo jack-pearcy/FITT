@@ -56,9 +56,15 @@ extension UnitsPreference {
         }
     }
 
+    /// Any stored weight for display, a lift or a body weight, to one decimal
+    /// place with its unit: "180.4 lb".
+    public func weightText(kilograms: Decimal) -> String {
+        "\(shown(kilograms: kilograms).rounded(scale: 1).formatted()) \(weightLabel)"
+    }
+
     /// A body weight for display, to one decimal place with its unit: "180.4 lb".
     public func bodyWeightText(kilograms: Decimal) -> String {
-        "\(shown(kilograms: kilograms).rounded(scale: 1).formatted()) \(weightLabel)"
+        weightText(kilograms: kilograms)
     }
 
     /// A typed weight in kilograms. Pounds become kilograms to two decimal

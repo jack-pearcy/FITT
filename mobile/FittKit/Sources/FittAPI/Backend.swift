@@ -15,6 +15,32 @@ public enum BackendError: Error, Equatable, Sendable {
     case undecodableResponse
     /// The request never got an HTTP response (offline, timeout, TLS failure).
     case transport
+    /// 409 on start: a workout is already open, on this device or another, and
+    /// the server names it so the caller can resume it instead.
+    case openSessionExists(openSessionId: Int64)
+}
+
+/// The id a 409 on start carries. The server writes problem properties under
+/// `properties`; a top-level `openSessionId` is read too, in case that changes.
+struct OpenSessionConflict: Decodable {
+    let openSessionId: Int64
+
+    private enum CodingKeys: String, CodingKey {
+        case openSessionId, properties
+    }
+
+    private struct Properties: Decodable {
+        let openSessionId: Int64?
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let nested = try container.decodeIfPresent(Properties.self, forKey: .properties)?.openSessionId {
+            openSessionId = nested
+        } else {
+            openSessionId = try container.decode(Int64.self, forKey: .openSessionId)
+        }
+    }
 }
 
 /// Every call the app makes to the FITT API goes through this type.
@@ -199,13 +225,29 @@ public struct Backend: Sendable {
 
     // MARK: Sessions
 
-    /// Every session of this user, newest first. The API has no route for just
-    /// the unfinished one, so the caller filters.
+    /// Every session of this user, newest first.
     public func sessions(userId: Int64) async throws -> [WorkoutSession] {
         try await get("/api/users/\(userId)/workout-sessions")
     }
 
+    /// The session started and not yet finished, on any device, or nil when the
+    /// server answers 204 because there is none.
+    public func openSession(userId: Int64) async throws -> WorkoutSession? {
+        let data = try await perform("GET", "/api/users/\(userId)/workout-sessions/open", body: nil as NoBody?, authenticated: true)
+        guard !data.isEmpty else { return nil }
+        do {
+            return try JSONDecoder().decode(WorkoutSession.self, from: data)
+        } catch {
+            throw BackendError.undecodableResponse
+        }
+    }
+
+    public func session(_ sessionId: Int64, userId: Int64) async throws -> WorkoutSession {
+        try await get("/api/users/\(userId)/workout-sessions/\(sessionId)")
+    }
+
     /// Creates an empty session. Its exercises are added one by one with `addEntry`.
+    /// Throws `openSessionExists` when the server already has one open.
     public func startSession(_ session: NewWorkoutSession, userId: Int64) async throws -> WorkoutSession {
         try await send("POST", "/api/users/\(userId)/workout-sessions", body: session, authenticated: true)
     }
