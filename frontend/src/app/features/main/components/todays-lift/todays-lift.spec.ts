@@ -9,6 +9,7 @@ import { Router } from '@angular/router';
 import { TodaysLift } from './todays-lift';
 import { AuthService } from '../../../../core/services/auth.service';
 import {
+  ExerciseResponse,
   WorkoutPlanDayResponse,
   WorkoutSessionResponse
 } from '../../../workouts/models/workout.model';
@@ -31,6 +32,20 @@ describe('TodaysLift', () => {
     dayLabel: 'Push',
     orderIndex: 0,
     exercises: []
+  };
+
+  const bench: ExerciseResponse = { id: 11, name: 'Bench Press', muscleGroup: 'CHEST', custom: false };
+  const press: ExerciseResponse = { id: 12, name: 'Overhead Press', muscleGroup: 'SHOULDERS', custom: false };
+
+  // A day with two exercises, for the cases that fill in a half-built session.
+  const pushDay: WorkoutPlanDayResponse = {
+    id: 3,
+    dayLabel: 'Push',
+    orderIndex: 0,
+    exercises: [
+      { id: 21, orderIndex: 0, sets: 3, reps: 8, exercise: bench },
+      { id: 22, orderIndex: 1, sets: 3, reps: 10, exercise: press }
+    ]
   };
 
   const session = (id: number): WorkoutSessionResponse => ({
@@ -125,6 +140,79 @@ describe('TodaysLift', () => {
 
     http.expectOne(`${BASE}/open`).flush(null, { status: 401, statusText: 'Unauthorized' });
     http.expectNone(r => r.method === 'POST' && r.url === BASE);
+
+    expect(mockRouter.navigate).not.toHaveBeenCalled();
+    expect(component.error()).toBe('Could not start your session. Try again.');
+    expect(component.starting()).toBe(false);
+  });
+
+  it('adds the missing exercises to an open workout before resuming it', () => {
+    component.todayDay.set(pushDay);
+    component.startSession();
+
+    http.expectOne(`${BASE}/open`).flush(session(55));
+    const adds = http.match(r => r.method === 'POST' && r.url === `${BASE}/55/entries`);
+    expect(adds.map(a => a.request.body.exerciseId)).toEqual([11, 12]);
+    expect(mockRouter.navigate).not.toHaveBeenCalled();
+    adds.forEach(a => a.flush(session(55)));
+
+    expect(mockRouter.navigate).toHaveBeenCalledWith(['/session', 55]);
+    expect(component.starting()).toBe(false);
+  });
+
+  it('adds only the exercises a half-built workout lacks', () => {
+    component.todayDay.set(pushDay);
+    component.startSession();
+
+    const partial: WorkoutSessionResponse = {
+      ...session(55),
+      exerciseEntries: [{ id: 81, orderIndex: 0, exercise: bench, sets: [] }]
+    };
+    http.expectOne(`${BASE}/open`).flush(partial);
+    const add = http.expectOne(r => r.method === 'POST' && r.url === `${BASE}/55/entries`);
+    expect(add.request.body.exerciseId).toBe(12);
+    add.flush(session(55));
+
+    expect(mockRouter.navigate).toHaveBeenCalledWith(['/session', 55]);
+  });
+
+  it('leaves an open workout from another plan as it is', () => {
+    component.todayDay.set(pushDay);
+    component.startSession();
+
+    http.expectOne(`${BASE}/open`).flush({ ...session(55), planId: PLAN_ID + 1 });
+    http.expectNone(r => r.method === 'POST');
+
+    expect(mockRouter.navigate).toHaveBeenCalledWith(['/session', 55]);
+  });
+
+  it('adds the missing exercises to the session a 409 names before resuming it', () => {
+    component.todayDay.set(pushDay);
+    component.startSession();
+
+    http.expectOne(`${BASE}/open`).flush(null, { status: 204, statusText: 'No Content' });
+    http.expectOne(r => r.method === 'POST' && r.url === BASE).flush(
+      { title: 'Open Session Exists', status: 409, properties: { openSessionId: 55 } },
+      { status: 409, statusText: 'Conflict' }
+    );
+    http.expectOne(`${BASE}/55`).flush(session(55));
+    const adds = http.match(r => r.method === 'POST' && r.url === `${BASE}/55/entries`);
+    expect(adds.length).toBe(2);
+    adds.forEach(a => a.flush(session(55)));
+
+    expect(mockRouter.navigate).toHaveBeenCalledWith(['/session', 55]);
+    expect(component.error()).toBeNull();
+  });
+
+  it('shows the start error when filling in an open workout fails', () => {
+    component.todayDay.set(pushDay);
+    component.startSession();
+
+    http.expectOne(`${BASE}/open`).flush(session(55));
+    const adds = http.match(r => r.method === 'POST' && r.url === `${BASE}/55/entries`);
+    adds[0].flush({ title: 'Server Error' }, { status: 500, statusText: 'Server Error' });
+    // forkJoin cancels the sibling request once one fails.
+    expect(adds[1].cancelled).toBe(true);
 
     expect(mockRouter.navigate).not.toHaveBeenCalled();
     expect(component.error()).toBe('Could not start your session. Try again.');

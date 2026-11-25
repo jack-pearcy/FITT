@@ -14,6 +14,7 @@ import {
   LogSetRequest,
   ProgressionSuggestionResponse,
   UpdateProgressionPreferenceRequest,
+  WorkoutPlanDayResponse,
   WorkoutPlanResponse,
   WorkoutSessionResponse
 } from '../../features/workouts/models/workout.model';
@@ -210,6 +211,32 @@ describe('WorkoutService', () => {
       expect(openSessionIdFrom(conflict({ title: 'Open Session Exists', openSessionId: 56 }))).toBe(56);
       expect(openSessionIdFrom(conflict({ title: 'Conflict' }))).toBeNull();
       expect(openSessionIdFrom(new HttpErrorResponse({ status: 400, error: { openSessionId: 55 } }))).toBeNull();
+    });
+
+    it('startSessionForDay creates the session, then adds an entry per exercise', () => {
+      const day: WorkoutPlanDayResponse = {
+        id: 3, orderIndex: 0, dayLabel: 'Push',
+        exercises: [
+          { id: 21, orderIndex: 0, sets: 3, reps: 8, exercise: { id: 11, name: 'Bench Press', muscleGroup: 'CHEST', custom: false } },
+          { id: 22, orderIndex: 1, sets: 3, reps: 10, exercise: { id: 12, name: 'Overhead Press', muscleGroup: 'SHOULDERS', custom: false } }
+        ]
+      };
+      const created: WorkoutSessionResponse = {
+        id: 60, ownerUserId: USER_ID, planId: 7,
+        startedAt: '2026-11-25T18:00:00Z', finishedAt: null,
+        notes: null, exerciseEntries: []
+      };
+
+      let received: WorkoutSessionResponse | undefined;
+      service.startSessionForDay(USER_ID, 7, day).subscribe(r => received = r);
+
+      controller.expectOne(r => r.method === 'POST' && r.url === `/api/users/${USER_ID}/workout-sessions`)
+        .flush(created);
+      const adds = controller.match(`/api/users/${USER_ID}/workout-sessions/60/entries`);
+      expect(adds.map(a => a.request.body.exerciseId)).toEqual([11, 12]);
+      adds.forEach(a => a.flush(created));
+
+      expect(received).toEqual(created);
     });
 
     it('listSessions GETs the sessions URL', () => {

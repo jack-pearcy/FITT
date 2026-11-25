@@ -126,20 +126,36 @@ export class WorkoutService {
       startedAt: new Date().toISOString(),
       planId
     }).pipe(
-      switchMap(session => {
-        const entries = day.exercises.map(ex =>
-          this.addExerciseEntry(userId, session.id, { exerciseId: ex.exercise.id })
-        );
-
-        // A day with no exercises still produces a valid empty session.
-        if (entries.length === 0) {
-          return of(session);
-        }
-
-        // Add all entries in parallel, then emit the session itself.
-        return forkJoin(entries).pipe(map(() => session));
-      })
+      switchMap(session => this.completeSessionForDay(userId, planId, session, day))
     );
+  }
+
+  // Adds an entry for each of the day's exercises the session lacks, then emits
+  // the session. A start that failed partway leaves an open session with some
+  // entries missing, so resuming it fills them in. A session from another plan
+  // is left as it is.
+  completeSessionForDay(
+    userId: number,
+    planId: number,
+    session: WorkoutSessionResponse,
+    day: WorkoutPlanDayResponse
+  ): Observable<WorkoutSessionResponse> {
+    if (session.planId !== planId) {
+      return of(session);
+    }
+
+    const present = new Set(session.exerciseEntries.map(entry => entry.exercise.id));
+    const entries = day.exercises
+      .filter(ex => !present.has(ex.exercise.id))
+      .map(ex => this.addExerciseEntry(userId, session.id, { exerciseId: ex.exercise.id }));
+
+    // Nothing missing, or a day with no exercises, keeps the session as it is.
+    if (entries.length === 0) {
+      return of(session);
+    }
+
+    // Add all missing entries in parallel, then emit the session itself.
+    return forkJoin(entries).pipe(map(() => session));
   }
 
   // Reusable method that calculates today's current session

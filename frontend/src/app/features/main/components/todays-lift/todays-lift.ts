@@ -92,14 +92,20 @@ export class TodaysLift implements OnInit {
 
     this.starting.set(true);
 
+    // A resumed session may come from a start that failed partway, so any of
+    // the day's exercises it lacks are added before routing to it.
     this.findOpenSession(userId).pipe(
       switchMap(open => open !== null
-        ? of(open)
+        ? this.workouts.completeSessionForDay(userId, planId, open, day)
         : this.workouts.startSessionForDay(userId, planId, day).pipe(
             // The server allows one open workout. A 409 names it, so resume that one.
             catchError(err => {
               const openId = openSessionIdFrom(err);
-              return openId === null ? throwError(() => err) : this.workouts.getSession(userId, openId);
+              return openId === null
+                ? throwError(() => err)
+                : this.workouts.getSession(userId, openId).pipe(
+                    switchMap(found => this.workouts.completeSessionForDay(userId, planId, found, day))
+                  );
             })
           )),
       takeUntilDestroyed(this.destroyRef)
