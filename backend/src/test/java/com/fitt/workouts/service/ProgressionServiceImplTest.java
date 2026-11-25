@@ -9,6 +9,7 @@ import com.fitt.workouts.progression.ProgressionContext;
 import com.fitt.workouts.progression.ProgressionStrategy;
 import com.fitt.workouts.progression.ProgressionStrategyResolver;
 import com.fitt.workouts.progression.ProgressionSuggestion;
+import com.fitt.workouts.progression.SuggestionReason;
 import com.fitt.workouts.repository.UserProgressionPreferenceRepository;
 import com.fitt.workouts.repository.WorkoutPlanRepository;
 import com.fitt.workouts.repository.WorkoutSessionRepository;
@@ -59,7 +60,8 @@ class ProgressionServiceImplTest {
                 new UserProgressionPreferenceEntity(USER_ID, ProgressionModel.LINEAR_PERIODIZATION);
         ProgressionStrategy strategy = mock(ProgressionStrategy.class);
         ProgressionSuggestion suggestion = new ProgressionSuggestion(
-                EXERCISE_ID, new BigDecimal("102.5"), 8, 3, "test reasoning");
+                EXERCISE_ID, new BigDecimal("102.5"), 8, 3, "test reasoning",
+                SuggestionReason.WEEK_STEP, new BigDecimal("100"), 8, null, 2);
 
         when(preferenceRepository.findByOwnerUserId(USER_ID)).thenReturn(Optional.of(preference));
         when(strategyResolver.resolve(ProgressionModel.LINEAR_PERIODIZATION)).thenReturn(strategy);
@@ -76,6 +78,58 @@ class ProgressionServiceImplTest {
         assertThat(response.suggestedReps()).isEqualTo(8);
         assertThat(response.suggestedSets()).isEqualTo(3);
         assertThat(response.reasoning()).isEqualTo("test reasoning");
+        assertThat(response.reasonCode()).isEqualTo(SuggestionReason.WEEK_STEP);
+        assertThat(response.previousWeightKg()).isEqualTo("100");
+        assertThat(response.targetReps()).isEqualTo(8);
+        assertThat(response.averageRpe()).isNull();
+        assertThat(response.weekInCycle()).isEqualTo(2);
+    }
+
+    @Test
+    void getSuggestion_rpeSuggestion_formatsAverageRpeAsPlainString() {
+        ProgressionStrategy strategy = mock(ProgressionStrategy.class);
+        ProgressionSuggestion suggestion = new ProgressionSuggestion(
+                EXERCISE_ID, new BigDecimal("102.5"), 8, 3, "rpe reasoning",
+                SuggestionReason.RPE_LOW, new BigDecimal("100.0"), 8, new BigDecimal("6.5"), null);
+
+        when(preferenceRepository.findByOwnerUserId(USER_ID)).thenReturn(Optional.empty());
+        when(strategyResolver.resolve(ProgressionModel.DOUBLE_PROGRESSION)).thenReturn(strategy);
+        when(sessionRepository.findCompletedSessionsByExercise(eq(USER_ID), eq(EXERCISE_ID), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(planRepository.findByOwnerUserIdAndIsActiveTrue(USER_ID)).thenReturn(Optional.empty());
+        when(strategy.suggest(any(ProgressionContext.class))).thenReturn(suggestion);
+
+        ProgressionSuggestionResponse response = service.getSuggestion(USER_ID, EXERCISE_ID);
+
+        assertThat(response.reasonCode()).isEqualTo(SuggestionReason.RPE_LOW);
+        assertThat(response.previousWeightKg()).isEqualTo("100.0");
+        assertThat(response.averageRpe()).isEqualTo("6.5");
+        assertThat(response.weekInCycle()).isNull();
+        assertThat(response.reasoning()).isEqualTo("rpe reasoning");
+    }
+
+    @Test
+    void getSuggestion_noHistorySuggestion_leavesNumbersNull() {
+        ProgressionStrategy strategy = mock(ProgressionStrategy.class);
+        ProgressionSuggestion suggestion = new ProgressionSuggestion(
+                EXERCISE_ID, BigDecimal.ZERO, 8, 3, "no history",
+                SuggestionReason.NO_HISTORY, null, 8, null, null);
+
+        when(preferenceRepository.findByOwnerUserId(USER_ID)).thenReturn(Optional.empty());
+        when(strategyResolver.resolve(ProgressionModel.DOUBLE_PROGRESSION)).thenReturn(strategy);
+        when(sessionRepository.findCompletedSessionsByExercise(eq(USER_ID), eq(EXERCISE_ID), any(Pageable.class)))
+                .thenReturn(List.of());
+        when(planRepository.findByOwnerUserIdAndIsActiveTrue(USER_ID)).thenReturn(Optional.empty());
+        when(strategy.suggest(any(ProgressionContext.class))).thenReturn(suggestion);
+
+        ProgressionSuggestionResponse response = service.getSuggestion(USER_ID, EXERCISE_ID);
+
+        assertThat(response.suggestedWeight()).isEqualTo("0");
+        assertThat(response.reasonCode()).isEqualTo(SuggestionReason.NO_HISTORY);
+        assertThat(response.previousWeightKg()).isNull();
+        assertThat(response.targetReps()).isEqualTo(8);
+        assertThat(response.averageRpe()).isNull();
+        assertThat(response.weekInCycle()).isNull();
     }
 
     @Test
@@ -134,7 +188,8 @@ class ProgressionServiceImplTest {
                 new UserProgressionPreferenceEntity(USER_ID, ProgressionModel.LINEAR_PERIODIZATION);
         ProgressionStrategy strategy = mock(ProgressionStrategy.class);
         ProgressionSuggestion suggestion = new ProgressionSuggestion(
-                EXERCISE_ID, new BigDecimal("102.5"), 8, 3, "test reasoning");
+                EXERCISE_ID, new BigDecimal("102.5"), 8, 3, "test reasoning",
+                SuggestionReason.WEEK_STEP, new BigDecimal("100"), 8, null, 1);
 
         // Active plan with a 3-day split. Mock the entity so no real day construction is needed.
         WorkoutPlanEntity plan = mock(WorkoutPlanEntity.class);

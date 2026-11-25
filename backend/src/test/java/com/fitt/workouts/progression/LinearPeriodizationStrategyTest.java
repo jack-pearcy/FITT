@@ -156,6 +156,69 @@ class LinearPeriodizationStrategyTest {
         assertThat(suggestion.suggestedWeight()).isEqualByComparingTo("104.6");
     }
 
+    @Test
+    void suggest_noSessionHistory_setsNoHistoryReasonAndKeepsText() {
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(), 0));
+
+        assertThat(suggestion.reasonCode()).isEqualTo(SuggestionReason.NO_HISTORY);
+        assertThat(suggestion.previousWeightKg()).isNull();
+        assertThat(suggestion.targetReps()).isEqualTo(10);
+        assertThat(suggestion.averageRpe()).isNull();
+        assertThat(suggestion.weekInCycle()).isNull();
+        assertThat(suggestion.reasoning()).isEqualTo(
+                "No session history. Start with a weight you can control for 10 reps.");
+    }
+
+    @Test
+    void suggest_noSetsLoggedForExercise_setsNoSetsReasonAndKeepsText() {
+        ExerciseEntity otherExercise = exerciseWithId(OTHER_EXERCISE_ID);
+        WorkoutSessionEntity session = sessionWith(otherExercise, new BigDecimal("100"), 10, 3);
+
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session), 0));
+
+        assertThat(suggestion.reasonCode()).isEqualTo(SuggestionReason.NO_SETS);
+        assertThat(suggestion.previousWeightKg()).isNull();
+        assertThat(suggestion.targetReps()).isEqualTo(10);
+        assertThat(suggestion.averageRpe()).isNull();
+        assertThat(suggestion.weekInCycle()).isNull();
+        assertThat(suggestion.reasoning()).isEqualTo(
+                "No completed sets for this exercise in recent sessions.");
+    }
+
+    @Test
+    void suggest_loadingWeek_setsWeekStepReasonAndKeepsText() {
+        ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
+        WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 10, 3);
+
+        // 3 completed / 3 days = week 2.
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session), 3));
+
+        assertThat(suggestion.reasonCode()).isEqualTo(SuggestionReason.WEEK_STEP);
+        assertThat(suggestion.previousWeightKg()).isEqualByComparingTo("100");
+        assertThat(suggestion.targetReps()).isEqualTo(8);
+        assertThat(suggestion.averageRpe()).isNull();
+        assertThat(suggestion.weekInCycle()).isEqualTo(2);
+        assertThat(suggestion.reasoning()).isEqualTo(
+                "Week 2 of 4. Increase weight to 102.5 for 8 reps.");
+    }
+
+    @Test
+    void suggest_deloadWeek_setsDeloadReasonAndKeepsText() {
+        ExerciseEntity squat = exerciseWithId(EXERCISE_ID);
+        WorkoutSessionEntity session = sessionWith(squat, new BigDecimal("100"), 10, 3);
+
+        // 9 completed / 3 days = week 4, the deload.
+        ProgressionSuggestion suggestion = strategy.suggest(ctx(List.of(session), 9));
+
+        assertThat(suggestion.reasonCode()).isEqualTo(SuggestionReason.DELOAD);
+        assertThat(suggestion.previousWeightKg()).isEqualByComparingTo("100");
+        assertThat(suggestion.targetReps()).isEqualTo(12);
+        assertThat(suggestion.averageRpe()).isNull();
+        assertThat(suggestion.weekInCycle()).isEqualTo(4);
+        assertThat(suggestion.reasoning()).isEqualTo(
+                "Deload week. Reduce to 60.0 at higher reps to recover before the next cycle.");
+    }
+
     // Builds a context for the standard 3-day split with the given completed-session count.
     private ProgressionContext ctx(List<WorkoutSessionEntity> sessions, long completedSessionCount) {
         return new ProgressionContext(EXERCISE_ID, sessions, completedSessionCount, DAYS_IN_ROTATION);

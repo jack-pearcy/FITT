@@ -28,7 +28,8 @@ public class DoubleProgressionStrategy implements ProgressionStrategy {
             return new ProgressionSuggestion(
                     exerciseId, BigDecimal.ZERO, REP_RANGE_BOTTOM, 3,
                     "No session history found. Start with a comfortable weight for "
-                            + REP_RANGE_BOTTOM + " reps.");
+                            + REP_RANGE_BOTTOM + " reps.",
+                    SuggestionReason.NO_HISTORY, null, REP_RANGE_BOTTOM, null, null);
         }
 
         WorkoutSessionEntity latestSession = recentSessions.getFirst();
@@ -37,7 +38,8 @@ public class DoubleProgressionStrategy implements ProgressionStrategy {
         if (latestSets.isEmpty()) {
             return new ProgressionSuggestion(
                     exerciseId, BigDecimal.ZERO, REP_RANGE_BOTTOM, 3,
-                    "No completed sets found for this exercise in recent sessions.");
+                    "No completed sets found for this exercise in recent sessions.",
+                    SuggestionReason.NO_SETS, null, REP_RANGE_BOTTOM, null, null);
         }
 
         BigDecimal lastWeight = findLastWeight(latestSets);
@@ -55,13 +57,15 @@ public class DoubleProgressionStrategy implements ProgressionStrategy {
                     "You hit " + REP_RANGE_TOP + " reps on all sets for "
                             + SESSIONS_TO_CHECK + " sessions in a row. "
                             + "Increase weight to " + newWeight + " and reset to "
-                            + REP_RANGE_BOTTOM + " reps.");
+                            + REP_RANGE_BOTTOM + " reps.",
+                    SuggestionReason.INCREASE_WEIGHT, lastWeight, REP_RANGE_BOTTOM, null, null);
         }
 
         return new ProgressionSuggestion(
                 exerciseId, lastWeight, REP_RANGE_TOP, setCount,
                 "Keep " + lastWeight + " and work toward " + REP_RANGE_TOP
-                        + " reps on every set before increasing weight.");
+                        + " reps on every set before increasing weight.",
+                SuggestionReason.ADD_REPS, lastWeight, REP_RANGE_TOP, null, null);
     }
 
     private boolean sessionsAllHitTarget(List<WorkoutSessionEntity> sessions, Long exerciseId) {
