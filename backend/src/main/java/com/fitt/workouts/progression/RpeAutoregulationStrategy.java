@@ -25,7 +25,8 @@ public class RpeAutoregulationStrategy implements ProgressionStrategy {
         if (recentSessions.isEmpty()) {
             return new ProgressionSuggestion(
                     exerciseId, BigDecimal.ZERO, 8, 3,
-                    "No session history. Start light and rate each set using RPE.");
+                    "No session history. Start light and rate each set using RPE.",
+                    SuggestionReason.NO_HISTORY, null, 8, null, null);
         }
 
         WorkoutSessionEntity latestSession = recentSessions.getFirst();
@@ -34,7 +35,8 @@ public class RpeAutoregulationStrategy implements ProgressionStrategy {
         if (sets.isEmpty()) {
             return new ProgressionSuggestion(
                     exerciseId, BigDecimal.ZERO, 8, 3,
-                    "No RPE data found. Log RPE on your sets to enable autoregulation.");
+                    "No RPE data found. Log RPE on your sets to enable autoregulation.",
+                    SuggestionReason.NO_RPE_DATA, null, 8, null, null);
         }
 
         BigDecimal avgRpe = calculateAverageRpe(sets);
@@ -50,7 +52,8 @@ public class RpeAutoregulationStrategy implements ProgressionStrategy {
                     exerciseId, newWeight, lastReps, setCount,
                     "Average RPE was " + avgRpe + " which is below the target zone ("
                             + TARGET_RPE_LOW + " to " + TARGET_RPE_HIGH
-                            + "). Increase weight to " + newWeight + ".");
+                            + "). Increase weight to " + newWeight + ".",
+                    SuggestionReason.RPE_LOW, lastWeight, lastReps, avgRpe, null);
         }
 
         if (avgRpe.compareTo(TARGET_RPE_HIGH) > 0) {
@@ -61,13 +64,15 @@ public class RpeAutoregulationStrategy implements ProgressionStrategy {
                     exerciseId, newWeight, lastReps, setCount,
                     "Average RPE was " + avgRpe + " which is above the target zone. "
                             + "Consider reducing weight to " + newWeight
-                            + " to stay in the productive training range.");
+                            + " to stay in the productive training range.",
+                    SuggestionReason.RPE_HIGH, lastWeight, lastReps, avgRpe, null);
         }
 
         return new ProgressionSuggestion(
                 exerciseId, lastWeight, lastReps, setCount,
                 "Average RPE was " + avgRpe + " which is right in the target zone. "
-                        + "Keep the current weight and focus on quality reps.");
+                        + "Keep the current weight and focus on quality reps.",
+                SuggestionReason.HOLD, lastWeight, lastReps, avgRpe, null);
     }
 
     private List<SetEntryEntity> extractCompletedSetsWithRpe(WorkoutSessionEntity session, Long exerciseId) {
