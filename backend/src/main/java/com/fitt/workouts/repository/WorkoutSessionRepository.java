@@ -40,13 +40,16 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSessionEn
     // but belongs to a different user, prevents cross-user data access.
     Optional<WorkoutSessionEntity> findByIdAndOwnerUserId(Long id, Long ownerUserId);
 
-    // One session, locked for update. Every change to a session's entries and sets
-    // reads it this way first, so two requests for the same session queue up and the
-    // second numbers its new row after the first has committed. Without the lock
-    // both read the same highest number and both insert the next one.
+    // One of the user's sessions, locked for update. Every change to a session's
+    // entries and sets reads it this way first, so two requests for the same session
+    // queue up and the second numbers its new row after the first has committed.
+    // Without the lock both read the same highest number and both insert the next
+    // one. The owner is part of the query, so another user's session is neither
+    // returned nor locked.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT s FROM WorkoutSessionEntity s WHERE s.id = :id")
-    Optional<WorkoutSessionEntity> findByIdForUpdate(@Param("id") Long id);
+    @Query("SELECT s FROM WorkoutSessionEntity s WHERE s.id = :id AND s.ownerUserId = :ownerUserId")
+    Optional<WorkoutSessionEntity> findByIdAndOwnerUserIdForUpdate(@Param("id") Long id,
+                                                                   @Param("ownerUserId") Long ownerUserId);
 
     // Cheaper ownership check when we only need to verify access, not load the entity.
     boolean existsByIdAndOwnerUserId(Long id, Long ownerUserId);

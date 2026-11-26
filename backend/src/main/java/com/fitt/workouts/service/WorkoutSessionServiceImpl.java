@@ -22,7 +22,6 @@ import com.fitt.workouts.service.exception.ExerciseNotFoundException;
 import com.fitt.workouts.service.exception.OpenSessionExistsException;
 import com.fitt.workouts.service.exception.WorkoutPlanNotFoundException;
 import com.fitt.workouts.service.exception.WorkoutSessionNotFoundException;
-import org.springframework.security.access.AccessDeniedException;
 import com.fitt.workouts.service.exception.ExerciseEntryNotFoundException;
 import com.fitt.workouts.service.exception.SetEntryNotFoundException;
 
@@ -325,23 +324,19 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         return now.isBefore(startedAt) ? startedAt : now;
     }
 
+    // Every session is read through the owner. Another user's session reads as
+    // not found, the same answer as an id that does not exist, so a caller cannot
+    // learn which session ids are in use.
     private WorkoutSessionEntity loadAndVerify(Long ownerUserId, Long sessionId) {
-        return verifyOwner(ownerUserId, sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new WorkoutSessionNotFoundException(sessionId)));
+        return sessionRepository.findByIdAndOwnerUserId(sessionId, ownerUserId)
+                .orElseThrow(() -> new WorkoutSessionNotFoundException(sessionId));
     }
 
     // For a change to the session's entries or sets. Holds the session row until the
     // transaction ends, so the next number is read after any earlier change is saved.
     private WorkoutSessionEntity loadForUpdate(Long ownerUserId, Long sessionId) {
-        return verifyOwner(ownerUserId, sessionRepository.findByIdForUpdate(sessionId)
-                .orElseThrow(() -> new WorkoutSessionNotFoundException(sessionId)));
-    }
-
-    private WorkoutSessionEntity verifyOwner(Long ownerUserId, WorkoutSessionEntity session) {
-        if (!ownerUserId.equals(session.getOwnerUserId())) {
-            throw new AccessDeniedException("You do not own this session");
-        }
-        return session;
+        return sessionRepository.findByIdAndOwnerUserIdForUpdate(sessionId, ownerUserId)
+                .orElseThrow(() -> new WorkoutSessionNotFoundException(sessionId));
     }
 
     private WorkoutSessionResponse toResponse(WorkoutSessionEntity entity) {
