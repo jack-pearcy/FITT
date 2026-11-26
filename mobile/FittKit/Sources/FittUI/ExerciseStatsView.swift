@@ -258,7 +258,7 @@ struct RecordsSection: View {
 
 #if DEBUG
 /// Local data for previews. Nothing here reaches the network.
-private enum StatsFixtures {
+enum StatsFixtures {
     static let bench = Exercise(id: 1, name: "Barbell Bench Press", muscleGroup: .chest, custom: false)
     static let pullUp = Exercise(id: 2, name: "Pull Up", muscleGroup: .back, custom: false)
 
