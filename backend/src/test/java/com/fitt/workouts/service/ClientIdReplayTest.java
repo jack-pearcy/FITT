@@ -16,7 +16,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -221,15 +223,50 @@ class ClientIdReplayTest {
         assertThat(service.getSession(userId, session.id()).finishedAt()).isAfter(before);
     }
 
+    // A phone whose clock ran fast at the start and was corrected before the
+    // finish sends a finish time before the start time. Refusing it would repeat
+    // on every retry and leave the session open for good, so the finish goes
+    // through on the server's clock.
     @Test
-    void finish_beforeTheStart_isRefused_andTheSessionStaysOpen() {
+    void finish_withADeviceTimeBeforeTheStart_finishesOnTheServerClock() {
         long userId = 7312L;
         WorkoutSessionResponse session = service.createSession(userId, start(null));
+        Instant before = Instant.now().minusSeconds(1);
 
-        assertThatThrownBy(() -> service.finishSession(userId, session.id(),
-                new FinishSessionRequest(null, STARTED.minusSeconds(60))))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThat(service.getSession(userId, session.id()).finishedAt()).isNull();
+        service.finishSession(userId, session.id(), new FinishSessionRequest(null, STARTED.minusSeconds(60)));
+
+        assertThat(service.getSession(userId, session.id()).finishedAt()).isAfter(before);
+        assertThat(service.getOpenSession(userId)).isEmpty();
+    }
+
+    // The start time is ahead of the server's clock too, so neither the device's
+    // finish time nor the server's is usable. The session still finishes, at its
+    // start time, and a new start is possible afterwards.
+    @Test
+    void finish_whenTheStartIsAheadOfEveryClock_finishesAtTheStartTime() {
+        long userId = 7315L;
+        Instant startedAhead = Instant.now().plus(Duration.ofHours(2)).truncatedTo(ChronoUnit.SECONDS);
+        WorkoutSessionResponse session = service.createSession(userId,
+                new CreateWorkoutSessionRequest(startedAhead, null, null, null));
+
+        service.finishSession(userId, session.id(),
+                new FinishSessionRequest(null, startedAhead.minus(Duration.ofHours(1))));
+
+        assertThat(service.getSession(userId, session.id()).finishedAt()).isEqualTo(startedAhead);
+        WorkoutSessionResponse next = service.createSession(userId, start(null));
+        assertThat(next.id()).isNotEqualTo(session.id());
+    }
+
+    @Test
+    void finish_withNoBody_whenTheStartIsAheadOfTheServerClock_finishesAtTheStartTime() {
+        long userId = 7316L;
+        Instant startedAhead = Instant.now().plus(Duration.ofHours(2)).truncatedTo(ChronoUnit.SECONDS);
+        WorkoutSessionResponse session = service.createSession(userId,
+                new CreateWorkoutSessionRequest(startedAhead, null, null, null));
+
+        service.finishSession(userId, session.id(), null);
+
+        assertThat(service.getSession(userId, session.id()).finishedAt()).isEqualTo(startedAhead);
     }
 
     private static CreateWorkoutSessionRequest start(String clientId) {

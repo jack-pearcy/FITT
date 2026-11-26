@@ -175,13 +175,8 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         // rather than being stamped again on a repeat call. That is also why the
         // client id in the body is not stored: a repeat changes nothing either way.
         if (session.getFinishedAt() == null) {
-            // The device's finish time when it sent one, so a workout finished
-            // offline is not stretched to the moment the phone got a connection.
-            Instant finishedAt = request == null ? null : request.finishedAt();
-            if (finishedAt != null && finishedAt.isBefore(session.getStartedAt())) {
-                throw new IllegalArgumentException("Finish time cannot be before the start time");
-            }
-            session.setFinishedAt(finishedAt != null ? finishedAt : Instant.now());
+            session.setFinishedAt(finishTime(session.getStartedAt(),
+                    request == null ? null : request.finishedAt()));
         }
 
         return toResponse(sessionRepository.save(session));
@@ -313,6 +308,21 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         entry.removeSetEntry(target);
 
         return toResponse(sessionRepository.save(session));
+    }
+
+    // The device's finish time when it sent one, so a workout finished offline is
+    // not stretched to the moment the phone got a connection. Both the start and
+    // the finish come from a clock the server does not control, so a finish that
+    // falls before the start is not refused: a refusal would repeat on every
+    // retry and leave the user with an open session that blocks every new start.
+    // The server's clock is used in its place, and the start time itself when
+    // even that is earlier. A finish is never stored before its start.
+    private static Instant finishTime(Instant startedAt, Instant fromDevice) {
+        if (fromDevice != null && !fromDevice.isBefore(startedAt)) {
+            return fromDevice;
+        }
+        Instant now = Instant.now();
+        return now.isBefore(startedAt) ? startedAt : now;
     }
 
     private WorkoutSessionEntity loadAndVerify(Long ownerUserId, Long sessionId) {
