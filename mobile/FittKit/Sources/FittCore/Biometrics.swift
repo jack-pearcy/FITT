@@ -18,9 +18,11 @@ public enum UnitsPreference: String, Codable, CaseIterable, Sendable {
     case imperial = "IMPERIAL"
 }
 
-/// Mirrors the backend `SaveBiometricsRequest` record. Always metric; the
-/// units preference only records how the user wants values shown.
-public struct Biometrics: Encodable, Equatable, Sendable {
+/// Mirrors the backend `SaveBiometricsRequest` record, and reads the
+/// `BiometricsResponse` record, which has the same fields plus an updated time
+/// the app does not use. Always metric; the units preference only records how
+/// the user wants values shown.
+public struct Biometrics: Codable, Equatable, Sendable {
     public let heightCm: Decimal
     public let weightKg: Decimal
     public let dateOfBirth: CalendarDate
@@ -42,6 +44,13 @@ public struct Biometrics: Encodable, Equatable, Sendable {
         self.biologicalSex = biologicalSex
         self.activityLevel = activityLevel
         self.unitsPreference = unitsPreference
+    }
+
+    /// The same measures with another units preference.
+    public func with(units: UnitsPreference) -> Biometrics {
+        Biometrics(
+            heightCm: heightCm, weightKg: weightKg, dateOfBirth: dateOfBirth,
+            biologicalSex: biologicalSex, activityLevel: activityLevel, unitsPreference: units)
     }
 }
 
@@ -76,6 +85,24 @@ public struct BiometricsDraft: Equatable, Sendable {
     public var activity: ActivityLevel?
 
     public init() {}
+
+    /// A draft filled in from saved biometrics, for editing them, in the units
+    /// they were saved with.
+    public init(biometrics: Biometrics) {
+        units = biometrics.unitsPreference
+        switch units {
+        case .metric:
+            height = "\(biometrics.heightCm)"
+        case .imperial:
+            let parts = UnitConversion.feetAndInches(centimeters: biometrics.heightCm)
+            feet = String(parts.feet)
+            inches = "\(parts.inches)"
+        }
+        weight = "\(units.shown(kilograms: biometrics.weightKg))"
+        dateOfBirth = biometrics.dateOfBirth
+        sex = biometrics.biologicalSex
+        activity = biometrics.activityLevel
+    }
 
     public func biometrics(today: CalendarDate) throws(ValidationFailure) -> Biometrics {
         var problems: [String: String] = [:]

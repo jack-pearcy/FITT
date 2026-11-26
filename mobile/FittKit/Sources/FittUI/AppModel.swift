@@ -21,6 +21,10 @@ public final class AppModel {
     /// The units the user works in. They come from the onboarding status, so they
     /// are right after a relaunch and on a second device. Metric until that loads.
     public private(set) var units = UnitsPreference.metric
+    /// The saved body measures, for Settings. Nil until loaded.
+    public private(set) var biometrics: Biometrics?
+    /// True once the server has said this user has no biometrics saved.
+    public private(set) var hasNoBiometrics = false
     public private(set) var isWorking = false
     public private(set) var errorMessage: String?
     /// True when the last error was that the server could not be reached.
@@ -234,6 +238,8 @@ public final class AppModel {
         weightAverage = nil
         goals = nil
         units = .metric
+        biometrics = nil
+        hasNoBiometrics = false
         phase = .signedOut
     }
 
@@ -290,6 +296,59 @@ public final class AppModel {
         } catch {
             errorMessage = "Something went wrong. Try again."
         }
+    }
+
+    // MARK: Settings
+
+    public func loadBiometrics() async {
+        await load { userId in
+            let saved = try await self.backend.biometrics(userId: userId)
+            self.biometrics = saved
+            self.hasNoBiometrics = saved == nil
+            if let saved {
+                self.units = saved.unitsPreference
+            }
+        }
+    }
+
+    /// Changes the units on the server first, so the phone, the watch and the
+    /// web agree. Every weight on screen reads `units`, so all of them follow.
+    /// A change the server did not take leaves the units as they were.
+    public func setUnits(_ chosen: UnitsPreference) async {
+        guard case .signedIn = phase, !isWorking, chosen != units else { return }
+        isWorking = true
+        defer { isWorking = false }
+        await load { userId in
+            try await self.backend.setUnits(chosen, userId: userId)
+            self.units = chosen
+            self.biometrics = self.biometrics?.with(units: chosen)
+        }
+    }
+
+    /// Saves changed body measures through the route onboarding uses, which
+    /// replaces what is stored. Returns true when they were saved, so the form
+    /// knows to close.
+    public func updateBiometrics(_ draft: BiometricsDraft) async -> Bool {
+        guard case .signedIn = phase, !isWorking else { return false }
+        clearErrors()
+        let changed: Biometrics
+        do {
+            changed = try draft.biometrics(today: CalendarDate(now()))
+        } catch {
+            fieldErrors = error.fields
+            return false
+        }
+        isWorking = true
+        defer { isWorking = false }
+        var saved = false
+        await load { userId in
+            try await self.backend.saveBiometrics(changed, userId: userId)
+            self.biometrics = changed
+            self.hasNoBiometrics = false
+            self.units = changed.unitsPreference
+            saved = true
+        }
+        return saved
     }
 
     // MARK: Workouts

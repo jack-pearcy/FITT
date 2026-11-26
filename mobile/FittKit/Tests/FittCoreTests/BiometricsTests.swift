@@ -122,4 +122,62 @@ struct BiometricsTests {
         #expect(biometrics.heightCm == Decimal(string: "180.46"))
         #expect(biometrics.weightKg == Decimal(string: "82.46"))
     }
+
+    // MARK: Reading and editing saved biometrics
+
+    private let saved = Biometrics(
+        heightCm: Decimal(string: "180.34")!,
+        weightKg: Decimal(string: "81.65")!,
+        dateOfBirth: CalendarDate(year: 1990, month: 5, day: 17),
+        biologicalSex: .male,
+        activityLevel: .active,
+        unitsPreference: .imperial
+    )
+
+    @Test("the server's biometrics response decodes, and its updated time is not kept")
+    func decodesResponse() throws {
+        let json = #"{"heightCm":180.34,"weightKg":81.65,"dateOfBirth":"1990-05-17","biologicalSex":"MALE","activityLevel":"ACTIVE","unitsPreference":"IMPERIAL","updatedAt":"2026-11-20T10:15:30Z"}"#
+
+        #expect(try JSONDecoder().decode(Biometrics.self, from: Data(json.utf8)) == saved)
+    }
+
+    @Test("changing the units of saved biometrics changes nothing else")
+    func withUnits() {
+        let metric = saved.with(units: .metric)
+
+        #expect(metric.unitsPreference == .metric)
+        #expect(metric.with(units: .imperial) == saved)
+    }
+
+    @Test("a draft made from imperial biometrics shows feet, inches and pounds, and saves back the same")
+    func imperialDraftFromSaved() throws {
+        let draft = BiometricsDraft(biometrics: saved)
+
+        #expect(draft.units == .imperial)
+        #expect(draft.feet == "5")
+        #expect(draft.inches == "11")
+        #expect(draft.weight == "180")
+        #expect(draft.dateOfBirth == saved.dateOfBirth)
+        #expect(draft.sex == .male)
+        #expect(draft.activity == .active)
+        #expect(try draft.biometrics(today: today) == saved)
+    }
+
+    @Test("a draft made from metric biometrics shows centimeters and kilograms, and saves back the same")
+    func metricDraftFromSaved() throws {
+        let metric = saved.with(units: .metric)
+        let draft = BiometricsDraft(biometrics: metric)
+
+        #expect(draft.height == "180.34")
+        #expect(draft.weight == "81.65")
+        #expect(try draft.biometrics(today: today) == metric)
+    }
+
+    @Test("a height is shown in the user's unit, with inches always below twelve")
+    func heightText() {
+        #expect(UnitsPreference.metric.heightText(centimeters: Decimal(string: "180.34")!) == "180.34 cm")
+        #expect(UnitsPreference.imperial.heightText(centimeters: Decimal(string: "180.34")!) == "5 ft 11 in")
+        #expect(UnitsPreference.imperial.heightText(centimeters: Decimal(string: "182.8")!) == "6 ft 0 in")
+        #expect(UnitsPreference.imperial.heightText(centimeters: 180) == "5 ft 10.9 in")
+    }
 }

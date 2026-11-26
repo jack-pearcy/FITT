@@ -29,6 +29,16 @@ public enum UnitConversion {
         (pounds * kilogramsPerPound).rounded(scale: 2)
     }
 
+    /// For showing a stored height to an imperial user. The inches are rounded
+    /// to one decimal place before the feet are taken out, so they stay below twelve.
+    public static func feetAndInches(centimeters: Decimal) -> (feet: Int, inches: Decimal) {
+        let total = (centimeters / centimetersPerInch).rounded(scale: 1)
+        var dozens = total / 12
+        var whole = Decimal()
+        NSDecimalRound(&whole, &dozens, 0, .down)
+        return (NSDecimalNumber(decimal: whole).intValue, total - whole * 12)
+    }
+
     /// For showing a stored weight to an imperial user. One decimal place is enough
     /// that a whole number of pounds typed earlier comes back as the same number.
     public static func pounds(kilograms: Decimal) -> Decimal {
@@ -65,6 +75,17 @@ extension UnitsPreference {
     /// A body weight for display, to one decimal place with its unit: "180.4 lb".
     public func bodyWeightText(kilograms: Decimal) -> String {
         weightText(kilograms: kilograms)
+    }
+
+    /// A stored height for display: "180 cm" or "5 ft 11 in".
+    public func heightText(centimeters: Decimal) -> String {
+        switch self {
+        case .metric:
+            return "\(centimeters.formatted()) cm"
+        case .imperial:
+            let parts = UnitConversion.feetAndInches(centimeters: centimeters)
+            return "\(parts.feet) ft \(parts.inches.formatted()) in"
+        }
     }
 
     /// A typed weight in kilograms. Pounds become kilograms to two decimal
