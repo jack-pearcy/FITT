@@ -139,6 +139,47 @@ class ClientIdReplayTest {
         assertThat(stored.performedAt()).isEqualTo(performedAt);
     }
 
+    // The Apple apps write the id in upper case. A retry in the other letter case
+    // is the same action, and the stored id is lower case either way.
+    @Test
+    void theSameAddedExercise_inAnotherLetterCase_givesOneEntry_storedInLowerCase() {
+        long userId = 7313L;
+        ExerciseEntity press = exerciseRepository.save(new ExerciseEntity(null, "Replay Press", "SHOULDERS", false));
+        WorkoutSessionResponse session = service.createSession(userId, start(null));
+        String clientId = UUID.randomUUID().toString();
+
+        service.addExerciseEntry(userId, session.id(),
+                new AddExerciseEntryRequest(press.getId(), clientId.toUpperCase(Locale.ROOT)));
+        WorkoutSessionResponse afterRepeat = service.addExerciseEntry(userId, session.id(),
+                new AddExerciseEntryRequest(press.getId(), clientId));
+
+        assertThat(afterRepeat.exerciseEntries()).hasSize(1);
+        assertThat(entryCount(session.id())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select client_id from exercise_entries where workout_session_id = ?",
+                String.class, session.id())).isEqualTo(clientId);
+    }
+
+    @Test
+    void theSameSet_inAnotherLetterCase_givesOneSet_storedInLowerCase() {
+        long userId = 7314L;
+        ExerciseEntity curl = exerciseRepository.save(new ExerciseEntity(null, "Replay Curl", "ARMS", false));
+        WorkoutSessionResponse session = service.createSession(userId, start(null));
+        long entryId = service.addExerciseEntry(userId, session.id(), new AddExerciseEntryRequest(curl.getId()))
+                .exerciseEntries().get(0).id();
+        String clientId = UUID.randomUUID().toString();
+
+        WorkoutSessionResponse first = service.logSet(userId, session.id(), entryId,
+                new LogSetRequest(10, new BigDecimal("20.00"), null, clientId.toUpperCase(Locale.ROOT), null));
+        WorkoutSessionResponse afterRepeat = service.logSet(userId, session.id(), entryId,
+                new LogSetRequest(10, new BigDecimal("20.00"), null, clientId, null));
+
+        assertThat(first.exerciseEntries().get(0).sets().get(0).clientId()).isEqualTo(clientId);
+        assertThat(afterRepeat.exerciseEntries().get(0).sets()).hasSize(1);
+        assertThat(setCount(entryId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select client_id from set_entries where exercise_entry_id = ?",
+                String.class, entryId)).isEqualTo(clientId);
+    }
+
     @Test
     void setsWithNoClientId_areAllStored_andHaveNoIdOrTime() {
         long userId = 7309L;
