@@ -15,6 +15,8 @@ struct MuscleVolumeTests {
         return calendar
     }
 
+    private let english = Locale(identifier: "en_US")
+
     /// Thursday 26 November 2026, 08:00 UTC. Its week starts on Monday the 23rd.
     private let now = Date(timeIntervalSince1970: 1_795_680_000)
 
@@ -105,6 +107,19 @@ struct MuscleVolumeTests {
         #expect(MuscleVolumeContent.title(of: weeks[0], in: weeks, calendar: utc) == "This week")
         #expect(MuscleVolumeContent.title(of: weeks[1], in: weeks, calendar: utc) == "Last week")
         #expect(MuscleVolumeContent.title(of: weeks[2], in: weeks, calendar: utc).hasPrefix("Week of "))
+    }
+
+    @Test("a row shows volume in the user's unit, to a whole number")
+    func volumeText() {
+        #expect(MuscleVolumeContent.volumeText(kilograms: 3500, units: .metric, locale: english) == "3,500 kg")
+        #expect(MuscleVolumeContent.volumeText(kilograms: 3500, units: .imperial, locale: english) == "7,716 lb")
+        #expect(MuscleVolumeContent.volumeText(kilograms: Decimal(string: "1200.4") ?? 0, units: .metric, locale: english) == "1,200 kg")
+    }
+
+    @Test("a muscle with only bodyweight sets shows no volume")
+    func bodyweightOnlyVolume() {
+        #expect(MuscleVolumeContent.volumeText(kilograms: 0, units: .metric, locale: english) == nil)
+        #expect(MuscleVolumeContent.volumeText(kilograms: 0, units: .imperial, locale: english) == nil)
     }
 
     @Test("the spoken summary of a week gives its total and each muscle, most sets first")

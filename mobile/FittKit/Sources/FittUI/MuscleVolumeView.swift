@@ -76,6 +76,18 @@ struct MuscleVolumeContent: View {
         "\(sets) \(sets == 1 ? "set" : "sets")"
     }
 
+    /// "1,200 kg", in the user's unit and to a whole number. Nil when the
+    /// muscle had only bodyweight sets, which have no volume.
+    nonisolated static func volumeText(
+        kilograms: Decimal,
+        units: UnitsPreference,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String? {
+        guard kilograms > 0 else { return nil }
+        let shown = units.shown(kilograms: kilograms)
+        return "\(shown.formatted(.number.precision(.fractionLength(0)).locale(locale))) \(units.weightLabel)"
+    }
+
     /// What VoiceOver reads for a whole week: the total, then each muscle, most sets first.
     nonisolated static func summary(of week: MuscleWeek) -> String {
         guard week.totalSets > 0 else { return "No sets" }
@@ -152,11 +164,7 @@ private struct MuscleRow: View {
 
     private var setsText: String { MuscleVolumeContent.setsText(sets) }
 
-    /// "1,200 kg", in the user's unit and to a whole number. Nil for bodyweight only.
-    private var volumeText: String? {
-        guard kilograms > 0 else { return nil }
-        return "\(units.shown(kilograms: kilograms).formatted(.number.precision(.fractionLength(0)))) \(units.weightLabel)"
-    }
+    private var volumeText: String? { MuscleVolumeContent.volumeText(kilograms: kilograms, units: units) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.xs) {
