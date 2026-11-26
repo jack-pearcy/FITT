@@ -4,8 +4,9 @@ import SwiftUI
 /// Sets and volume for each muscle group, week by week, worked out on the
 /// device from the finished workouts the app already holds.
 struct MuscleVolumeView: View {
-    /// How many weeks the screen shows, the current one included.
-    static let weeks = 8
+    /// How many weeks the screen shows, the current one included. Nonisolated,
+    /// so the pure helpers below can read it off the main actor.
+    nonisolated static let weeks = 8
 
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
