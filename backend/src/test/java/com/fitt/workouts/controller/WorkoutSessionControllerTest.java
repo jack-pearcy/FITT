@@ -1,5 +1,12 @@
 package com.fitt.workouts.controller;
 
+import com.fitt.workouts.domain.MuscleGroup;
+import com.fitt.workouts.dto.CreateWorkoutSessionRequest;
+import com.fitt.workouts.dto.ExerciseEntryResponse;
+import com.fitt.workouts.dto.ExerciseResponse;
+import com.fitt.workouts.dto.FinishSessionRequest;
+import com.fitt.workouts.dto.LogSetRequest;
+import com.fitt.workouts.dto.SetEntryResponse;
 import com.fitt.workouts.dto.WorkoutSessionResponse;
 import com.fitt.workouts.service.WorkoutSessionService;
 import com.fitt.workouts.service.exception.OpenSessionExistsException;
@@ -13,6 +20,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -45,6 +54,7 @@ class WorkoutSessionControllerTest {
     private static final long SESSION_ID = 300L;
     private static final long ENTRY_ID = 301L;
     private static final long PLAN_ID = 999L;
+    private static final String CLIENT_ID = "0b9f6c1e-5a1d-4a57-9f0e-3d2c1b4a5e6f";
 
 
     private static final String CREATE_BODY = """
@@ -166,7 +176,7 @@ class WorkoutSessionControllerTest {
                 Instant.parse("2026-05-25T10:00:00Z"),
                 Instant.parse("2026-05-25T11:00:00Z"),
                 "Test session", List.of());
-        when(workoutSessionService.finishSession(USER_ID, SESSION_ID))
+        when(workoutSessionService.finishSession(USER_ID, SESSION_ID, null))
                 .thenReturn(finished);
 
         mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/finish",
@@ -174,6 +184,181 @@ class WorkoutSessionControllerTest {
                         .with(jwt().jwt(token -> token.claim("uid", USER_ID))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.finishedAt").value("2026-05-25T11:00:00Z"));
+    }
+
+    // The web sends {} and older apps send nothing at all. Both must keep working.
+    @Test
+    void finishSession_withAnEmptyJsonBody_returns200() throws Exception {
+        when(workoutSessionService.finishSession(USER_ID, SESSION_ID, new FinishSessionRequest(null, null)))
+                .thenReturn(sampleSession());
+
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/finish",
+                        USER_ID, SESSION_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(SESSION_ID));
+    }
+
+    @Test
+    void finishSession_withAJsonContentTypeAndNoBody_returns200() throws Exception {
+        when(workoutSessionService.finishSession(USER_ID, SESSION_ID, null))
+                .thenReturn(sampleSession());
+
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/finish",
+                        USER_ID, SESSION_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(SESSION_ID));
+    }
+
+    @Test
+    void finishSession_withClientIdAndFinishTime_passesBothToTheService() throws Exception {
+        FinishSessionRequest expected = new FinishSessionRequest(
+                CLIENT_ID, Instant.parse("2026-05-25T11:00:00Z"));
+        when(workoutSessionService.finishSession(USER_ID, SESSION_ID, expected))
+                .thenReturn(sampleSession());
+
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/finish",
+                        USER_ID, SESSION_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"clientId\":\"" + CLIENT_ID + "\",\"finishedAt\":\"2026-05-25T11:00:00Z\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(SESSION_ID));
+    }
+
+    @Test
+    void finishSession_withAFinishTimeMoreThanADayAhead_returns400UnderTheField() throws Exception {
+        String tooFarAhead = Instant.now().plus(Duration.ofHours(25)).toString();
+
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/finish",
+                        USER_ID, SESSION_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"finishedAt\":\"" + tooFarAhead + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.properties.errors.finishedAt").exists());
+
+        verifyNoInteractions(workoutSessionService);
+    }
+
+    @Test
+    void finishSession_anotherUsersPath_returns403() throws Exception {
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/finish",
+                        USER_ID, SESSION_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", OTHER_USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(workoutSessionService);
+    }
+
+    @Test
+    void createSession_withAClientIdThatIsNotAUuid_returns400UnderTheField() throws Exception {
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions", USER_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"startedAt\":\"2026-05-25T10:00:00Z\",\"clientId\":\"not-a-uuid\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.properties.errors.clientId").value("Client id must be a UUID"));
+
+        verifyNoInteractions(workoutSessionService);
+    }
+
+    @Test
+    void createSession_withAClientId_passesItToTheService() throws Exception {
+        when(workoutSessionService.createSession(USER_ID, new CreateWorkoutSessionRequest(
+                Instant.parse("2026-05-25T10:00:00Z"), null, null, CLIENT_ID)))
+                .thenReturn(sampleSession());
+
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions", USER_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"startedAt\":\"2026-05-25T10:00:00Z\",\"clientId\":\"" + CLIENT_ID + "\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(SESSION_ID));
+    }
+
+    @Test
+    void addExerciseEntry_withAClientIdThatIsNotAUuid_returns400UnderTheField() throws Exception {
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/entries",
+                        USER_ID, SESSION_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"exerciseId\":50,\"clientId\":\"" + CLIENT_ID + "0\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.properties.errors.clientId").exists());
+
+        verifyNoInteractions(workoutSessionService);
+    }
+
+    @Test
+    void logSet_withClientIdAndTime_passesBoth_andTheSetInTheAnswerCarriesThem() throws Exception {
+        Instant performedAt = Instant.parse("2026-05-25T10:05:30Z");
+        WorkoutSessionResponse withSet = new WorkoutSessionResponse(
+                SESSION_ID, USER_ID, PLAN_ID, Instant.parse("2026-05-25T10:00:00Z"), null, null,
+                List.of(new ExerciseEntryResponse(ENTRY_ID, 0,
+                        new ExerciseResponse(50L, "Bench Press", MuscleGroup.CHEST, false),
+                        List.of(new SetEntryResponse(1L, 1, 5, new BigDecimal("100.00"), null, true,
+                                CLIENT_ID, performedAt)))));
+        when(workoutSessionService.logSet(USER_ID, SESSION_ID, ENTRY_ID,
+                new LogSetRequest(5, new BigDecimal("100.00"), null, CLIENT_ID, performedAt)))
+                .thenReturn(withSet);
+
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/entries/{entryId}/sets",
+                        USER_ID, SESSION_ID, ENTRY_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reps\":5,\"weight\":100.00,\"clientId\":\"" + CLIENT_ID
+                                + "\",\"performedAt\":\"2026-05-25T10:05:30Z\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.exerciseEntries[0].sets[0].clientId").value(CLIENT_ID))
+                .andExpect(jsonPath("$.exerciseEntries[0].sets[0].performedAt").value("2026-05-25T10:05:30Z"));
+    }
+
+    @Test
+    void logSet_withATimeOutsideTheBounds_returns400UnderTheField() throws Exception {
+        for (String outside : List.of("1999-12-31T23:59:59Z", Instant.now().plus(Duration.ofHours(25)).toString())) {
+            mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/entries/{entryId}/sets",
+                            USER_ID, SESSION_ID, ENTRY_ID)
+                            .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"reps\":5,\"performedAt\":\"" + outside + "\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.properties.errors.performedAt").exists());
+        }
+
+        verifyNoInteractions(workoutSessionService);
+    }
+
+    @Test
+    void logSet_withATimeAFewHoursAhead_isAccepted() throws Exception {
+        when(workoutSessionService.logSet(eq(USER_ID), eq(SESSION_ID), eq(ENTRY_ID), any()))
+                .thenReturn(sampleSession());
+
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/entries/{entryId}/sets",
+                        USER_ID, SESSION_ID, ENTRY_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reps\":5,\"performedAt\":\"" + Instant.now().plus(Duration.ofHours(23)) + "\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void logSet_withAClientIdThatIsNotAUuid_returns400UnderTheField() throws Exception {
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/entries/{entryId}/sets",
+                        USER_ID, SESSION_ID, ENTRY_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reps\":5,\"clientId\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.properties.errors.clientId").exists());
+
+        verifyNoInteractions(workoutSessionService);
     }
 
     @Test

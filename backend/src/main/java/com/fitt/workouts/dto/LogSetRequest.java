@@ -6,7 +6,9 @@ import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import java.math.BigDecimal;
+import java.time.Instant;
 
 // Upper bounds mirror the column sizes (weight decimal(6,2), rpe decimal(3,1)) so an
 // oversized value is a clean 400 here instead of a database error further down.
@@ -31,5 +33,17 @@ public record LogSetRequest(
         @DecimalMin(value = "0", message = "RPE cannot be negative")
         @DecimalMax(value = "10", message = "RPE must be 10 or less")
         @Digits(integer = 9, fraction = 1, message = "RPE can have at most 1 decimal place")
-        BigDecimal rpe
-) {}
+        BigDecimal rpe,
+
+        // Optional. The same id sent again logs nothing.
+        @Pattern(regexp = ClientIds.PATTERN, message = ClientIds.MESSAGE)
+        String clientId,
+
+        // Optional. When the set was done on the device.
+        @WithinTimeBounds
+        Instant performedAt
+) {
+    public LogSetRequest(Integer reps, BigDecimal weight, BigDecimal rpe) {
+        this(reps, weight, rpe, null, null);
+    }
+}

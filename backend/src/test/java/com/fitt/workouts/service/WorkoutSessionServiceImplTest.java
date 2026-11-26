@@ -138,6 +138,74 @@ class WorkoutSessionServiceImplTest {
     }
 
     @Test
+    void createSession_whenTheUniqueKeyRefusesACopyOfTheSameStart_returnsTheSessionThatWon() {
+        // The same start sent twice at the same moment: both see no stored session,
+        // one insert wins, and the other reads the winner by its client id. It gets
+        // the session back, not the open-session refusal.
+        String clientId = "0b9f6c1e-5a1d-4a57-9f0e-3d2c1b4a5e6f";
+        WorkoutSessionEntity winner = sessionWithId(SESSION_ID);
+        winner.setClientId(clientId);
+        when(sessionRepository.findByOwnerUserIdAndClientId(OWNER_USER_ID, clientId))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(winner));
+        when(sessionRepository.save(any(WorkoutSessionEntity.class)))
+                .thenThrow(new DataIntegrityViolationException("Duplicate entry for key uk_workout_sessions_owner_client"));
+
+        WorkoutSessionResponse response = service.createSession(OWNER_USER_ID,
+                new CreateWorkoutSessionRequest(Instant.parse("2026-05-26T18:00:00Z"), null, null, clientId));
+
+        assertThat(response.id()).isEqualTo(SESSION_ID);
+    }
+
+    @Test
+    void createSession_storesTheClientIdInLowerCase() {
+        ArgumentCaptor<WorkoutSessionEntity> captor = ArgumentCaptor.forClass(WorkoutSessionEntity.class);
+        when(sessionRepository.save(any(WorkoutSessionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.createSession(OWNER_USER_ID, new CreateWorkoutSessionRequest(
+                Instant.parse("2026-05-26T18:00:00Z"), null, null, "0B9F6C1E-5A1D-4A57-9F0E-3D2C1B4A5E6F"));
+
+        verify(sessionRepository).save(captor.capture());
+        assertThat(captor.getValue().getClientId()).isEqualTo("0b9f6c1e-5a1d-4a57-9f0e-3d2c1b4a5e6f");
+    }
+
+    @Test
+    void addExerciseEntry_withAClientIdAlreadyInTheSession_addsNothingAndSavesNothing() {
+        String clientId = "0b9f6c1e-5a1d-4a57-9f0e-3d2c1b4a5e6f";
+        WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
+        ExerciseEntryEntity existing = new ExerciseEntryEntity(exerciseWithId(EXERCISE_ID), 0);
+        existing.setClientId(clientId);
+        session.addExerciseEntry(existing);
+        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
+
+        WorkoutSessionResponse response = service.addExerciseEntry(OWNER_USER_ID, SESSION_ID,
+                new AddExerciseEntryRequest(EXERCISE_ID, clientId));
+
+        assertThat(response.exerciseEntries()).hasSize(1);
+        verify(sessionRepository, never()).save(any(WorkoutSessionEntity.class));
+    }
+
+    @Test
+    void logSet_withAClientIdAlreadyInTheEntry_logsNothingAndSavesNothing() {
+        String clientId = "0b9f6c1e-5a1d-4a57-9f0e-3d2c1b4a5e6f";
+        WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
+        ExerciseEntryEntity entry = new ExerciseEntryEntity(exerciseWithId(EXERCISE_ID), 0);
+        ReflectionTestUtils.setField(entry, "id", ENTRY_ID);
+        SetEntryEntity existing = new SetEntryEntity(1, new BigDecimal("100"), 5, null);
+        existing.setClientId(clientId);
+        entry.addSetEntry(existing);
+        session.addExerciseEntry(entry);
+        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
+
+        service.logSet(OWNER_USER_ID, SESSION_ID, ENTRY_ID,
+                new LogSetRequest(5, new BigDecimal("100"), null, clientId, null));
+
+        assertThat(entry.getSetEntries()).hasSize(1);
+        verify(sessionRepository, never()).save(any(WorkoutSessionEntity.class));
+    }
+
+    @Test
     void createSession_whenTheInsertFailsForAnotherReason_passesTheErrorOn() {
         DataIntegrityViolationException failure = new DataIntegrityViolationException("Some other key");
         when(sessionRepository.save(any(WorkoutSessionEntity.class))).thenThrow(failure);

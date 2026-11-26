@@ -2,9 +2,11 @@ package com.fitt.workouts.service;
 
 import com.fitt.workouts.domain.MuscleGroup;
 import com.fitt.workouts.dto.AddExerciseEntryRequest;
+import com.fitt.workouts.dto.ClientIds;
 import com.fitt.workouts.dto.CreateWorkoutSessionRequest;
 import com.fitt.workouts.dto.ExerciseEntryResponse;
 import com.fitt.workouts.dto.ExerciseResponse;
+import com.fitt.workouts.dto.FinishSessionRequest;
 import com.fitt.workouts.dto.LogSetRequest;
 import com.fitt.workouts.dto.SetEntryResponse;
 import com.fitt.workouts.dto.UpdateSessionNotesRequest;
@@ -59,12 +61,27 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     // read that follows runs in a fresh transaction and sees the session that won.
     // Inside the failed transaction MySQL would still show the snapshot from
     // before the other insert committed.
+    //
+    // A start that carries a client id and loses to its own twin (the same request
+    // sent twice at the same moment) is not refused: it returns the session the
+    // twin made, as a later retry would.
     @Override
     @Transactional(propagation = Propagation.SUPPORTS)
     public WorkoutSessionResponse createSession(Long ownerUserId, CreateWorkoutSessionRequest request) {
+        String clientId = ClientIds.normalize(request.clientId());
         try {
-            return writeTransaction.execute(status -> insertSession(ownerUserId, request));
+            return writeTransaction.execute(status -> insertSession(ownerUserId, request, clientId));
         } catch (DataIntegrityViolationException ex) {
+            if (clientId != null) {
+                // In a transaction, because the response reads the session's entries.
+                WorkoutSessionResponse twin = writeTransaction.execute(status -> sessionRepository
+                        .findByOwnerUserIdAndClientId(ownerUserId, clientId)
+                        .map(this::toResponse)
+                        .orElse(null));
+                if (twin != null) {
+                    return twin;
+                }
+            }
             Optional<WorkoutSessionEntity> winner = sessionRepository
                     .findFirstByOwnerUserIdAndFinishedAtIsNullOrderByStartedAtDescIdDesc(ownerUserId);
             if (winner.isPresent()) {
@@ -74,7 +91,18 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         }
     }
 
-    private WorkoutSessionResponse insertSession(Long ownerUserId, CreateWorkoutSessionRequest request) {
+    private WorkoutSessionResponse insertSession(Long ownerUserId, CreateWorkoutSessionRequest request,
+                                                 String clientId) {
+        // A repeat of a start already stored returns that session, open or
+        // finished, and inserts nothing. Checked before the open-session rule, so
+        // a retry is never told its own session is in the way.
+        if (clientId != null) {
+            Optional<WorkoutSessionEntity> same = sessionRepository.findByOwnerUserIdAndClientId(ownerUserId, clientId);
+            if (same.isPresent()) {
+                return toResponse(same.get());
+            }
+        }
+
         // One unfinished session per user. The client resumes the one named in the
         // refusal. V12's unique key backs this check when two starts race.
         sessionRepository.findFirstByOwnerUserIdAndFinishedAtIsNullOrderByStartedAtDescIdDesc(ownerUserId)
@@ -100,6 +128,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         session.setNotes(request.notes());
         session.setPlanId(request.planId());
         session.setPlanDayIndex(planDayIndex);
+        session.setClientId(clientId);
         return toResponse(sessionRepository.save(session));
     }
 
@@ -130,12 +159,29 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     @Override
     @Transactional
     public WorkoutSessionResponse finishSession(Long ownerUserId, Long sessionId) {
+        return finish(ownerUserId, sessionId, null);
+    }
+
+    @Override
+    @Transactional
+    public WorkoutSessionResponse finishSession(Long ownerUserId, Long sessionId, FinishSessionRequest request) {
+        return finish(ownerUserId, sessionId, request);
+    }
+
+    private WorkoutSessionResponse finish(Long ownerUserId, Long sessionId, FinishSessionRequest request) {
         WorkoutSessionEntity session = loadAndVerify(ownerUserId, sessionId);
 
         // Idempotent, an already finished session keeps its original finish time
-        // rather than being stamped again on a repeat call.
+        // rather than being stamped again on a repeat call. That is also why the
+        // client id in the body is not stored: a repeat changes nothing either way.
         if (session.getFinishedAt() == null) {
-            session.setFinishedAt(Instant.now());
+            // The device's finish time when it sent one, so a workout finished
+            // offline is not stretched to the moment the phone got a connection.
+            Instant finishedAt = request == null ? null : request.finishedAt();
+            if (finishedAt != null && finishedAt.isBefore(session.getStartedAt())) {
+                throw new IllegalArgumentException("Finish time cannot be before the start time");
+            }
+            session.setFinishedAt(finishedAt != null ? finishedAt : Instant.now());
         }
 
         return toResponse(sessionRepository.save(session));
@@ -165,6 +211,15 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     public WorkoutSessionResponse addExerciseEntry(Long ownerUserId, Long sessionId, AddExerciseEntryRequest request) {
         WorkoutSessionEntity session = loadForUpdate(ownerUserId, sessionId);
 
+        // A repeat of an add already stored changes nothing. The row lock above
+        // makes two copies sent at the same moment take turns, so the second one
+        // finds the first one's entry here. The unique key is the last line of defence.
+        String clientId = ClientIds.normalize(request.clientId());
+        if (clientId != null && session.getExerciseEntries().stream()
+                .anyMatch(e -> clientId.equals(e.getClientId()))) {
+            return toResponse(session);
+        }
+
         ExerciseEntity exercise = exerciseRepository
                 .findAccessibleById(request.exerciseId(), ownerUserId)
                 .orElseThrow(() -> new ExerciseNotFoundException(request.exerciseId()));
@@ -178,6 +233,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
 
         // entity constructor takes exercise and orderIndex
         ExerciseEntryEntity entry = new ExerciseEntryEntity(exercise, nextIndex);
+        entry.setClientId(clientId);
 
         // addExerciseEntry syncs both sides
         session.addExerciseEntry(entry);
@@ -211,6 +267,14 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
                 .findFirst()
                 .orElseThrow(() -> new ExerciseEntryNotFoundException(entryId));
 
+        // A repeat of a set already stored logs nothing, for the same reason as
+        // a repeated add above.
+        String clientId = ClientIds.normalize(request.clientId());
+        if (clientId != null && entry.getSetEntries().stream()
+                .anyMatch(s -> clientId.equals(s.getClientId()))) {
+            return toResponse(session);
+        }
+
         // One past the highest existing number, not size() + 1, so deleting a middle
         // set and logging again cannot produce two sets with the same number.
         int nextSetNumber = entry.getSetEntries().stream()
@@ -225,6 +289,8 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         entry.addSetEntry(set);
 
         set.setCompleted(true);
+        set.setClientId(clientId);
+        set.setPerformedAt(request.performedAt());
 
         return toResponse(sessionRepository.save(session));
     }
@@ -311,7 +377,9 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
                 entity.getReps(),
                 entity.getWeight(),
                 entity.getRpe(),
-                entity.isCompleted()
+                entity.isCompleted(),
+                entity.getClientId(),
+                entity.getPerformedAt()
         );
     }
 }
