@@ -1,6 +1,7 @@
 package com.fitt.workouts.controller;
 
 import com.fitt.workouts.domain.MuscleGroup;
+import com.fitt.workouts.dto.AddExerciseEntryRequest;
 import com.fitt.workouts.dto.CreateWorkoutSessionRequest;
 import com.fitt.workouts.dto.ExerciseEntryResponse;
 import com.fitt.workouts.dto.ExerciseResponse;
@@ -55,7 +56,9 @@ class WorkoutSessionControllerTest {
     private static final long ENTRY_ID = 301L;
     private static final long PLAN_ID = 999L;
     private static final String CLIENT_ID = "0b9f6c1e-5a1d-4a57-9f0e-3d2c1b4a5e6f";
-
+    // The form Swift's UUID().uuidString writes, so the form the iPhone and the
+    // watch send.
+    private static final String UPPER_CASE_CLIENT_ID = "0B9F6C1E-5A1D-4A57-9F0E-3D2C1B4A5E6F";
 
     private static final String CREATE_BODY = """
             {
@@ -359,6 +362,69 @@ class WorkoutSessionControllerTest {
                 .andExpect(jsonPath("$.properties.errors.clientId").exists());
 
         verifyNoInteractions(workoutSessionService);
+    }
+
+    // The four tests below send the client id in upper case through request
+    // validation. A pattern that took lower case only would turn away every
+    // request from the Apple apps.
+    @Test
+    void createSession_withAnUpperCaseClientId_isAccepted() throws Exception {
+        when(workoutSessionService.createSession(USER_ID, new CreateWorkoutSessionRequest(
+                Instant.parse("2026-05-25T10:00:00Z"), null, null, UPPER_CASE_CLIENT_ID)))
+                .thenReturn(sampleSession());
+
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions", USER_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"startedAt\":\"2026-05-25T10:00:00Z\",\"clientId\":\""
+                                + UPPER_CASE_CLIENT_ID + "\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(SESSION_ID));
+    }
+
+    @Test
+    void addExerciseEntry_withAnUpperCaseClientId_isAccepted() throws Exception {
+        when(workoutSessionService.addExerciseEntry(USER_ID, SESSION_ID,
+                new AddExerciseEntryRequest(50L, UPPER_CASE_CLIENT_ID)))
+                .thenReturn(sampleSession());
+
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/entries",
+                        USER_ID, SESSION_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"exerciseId\":50,\"clientId\":\"" + UPPER_CASE_CLIENT_ID + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(SESSION_ID));
+    }
+
+    @Test
+    void logSet_withAnUpperCaseClientId_isAccepted() throws Exception {
+        when(workoutSessionService.logSet(USER_ID, SESSION_ID, ENTRY_ID,
+                new LogSetRequest(5, null, null, UPPER_CASE_CLIENT_ID, null)))
+                .thenReturn(sampleSession());
+
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/entries/{entryId}/sets",
+                        USER_ID, SESSION_ID, ENTRY_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reps\":5,\"clientId\":\"" + UPPER_CASE_CLIENT_ID + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(SESSION_ID));
+    }
+
+    @Test
+    void finishSession_withAnUpperCaseClientId_isAccepted() throws Exception {
+        when(workoutSessionService.finishSession(USER_ID, SESSION_ID,
+                new FinishSessionRequest(UPPER_CASE_CLIENT_ID, null)))
+                .thenReturn(sampleSession());
+
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/finish",
+                        USER_ID, SESSION_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"clientId\":\"" + UPPER_CASE_CLIENT_ID + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(SESSION_ID));
     }
 
     @Test
