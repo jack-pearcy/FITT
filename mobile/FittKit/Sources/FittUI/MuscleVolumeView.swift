@@ -57,7 +57,13 @@ struct MuscleVolumeContent: View {
     }
 
     /// "This week", "Last week", then "Week of Nov 9". `weeks` runs newest first.
-    nonisolated static func title(of week: MuscleWeek, in weeks: [MuscleWeek], calendar: Calendar = CalendarDate.gregorian) -> String {
+    /// The date is written in the calendar's time zone, so it is the Monday the week starts on.
+    nonisolated static func title(
+        of week: MuscleWeek,
+        in weeks: [MuscleWeek],
+        calendar: Calendar = CalendarDate.gregorian,
+        locale: Locale = .autoupdatingCurrent
+    ) -> String {
         switch weeks.firstIndex(of: week) {
         case 0: return "This week"
         case 1: return "Last week"
@@ -65,6 +71,7 @@ struct MuscleVolumeContent: View {
             let monday = week.start.date(in: calendar).map { date in
                 var style = Date.FormatStyle.dateTime.month(.abbreviated).day()
                 style.timeZone = calendar.timeZone
+                style.locale = locale
                 return date.formatted(style)
             }
             return "Week of \(monday ?? week.start.iso)"

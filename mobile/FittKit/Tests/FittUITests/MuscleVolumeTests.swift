@@ -106,7 +106,23 @@ struct MuscleVolumeTests {
 
         #expect(MuscleVolumeContent.title(of: weeks[0], in: weeks, calendar: utc) == "This week")
         #expect(MuscleVolumeContent.title(of: weeks[1], in: weeks, calendar: utc) == "Last week")
-        #expect(MuscleVolumeContent.title(of: weeks[2], in: weeks, calendar: utc).hasPrefix("Week of "))
+        #expect(MuscleVolumeContent.title(of: weeks[2], in: weeks, calendar: utc, locale: english) == "Week of Nov 9")
+        #expect(MuscleVolumeContent.title(of: weeks[7], in: weeks, calendar: utc, locale: english) == "Week of Oct 5")
+    }
+
+    @Test("an older week is named for its Monday in the calendar's time zone, not the device's")
+    func weekTitleTimeZone() {
+        let weeks = weeks([session(1, daysAgo: 1, [(bench, 3)])])
+        #expect(weeks[2].start == CalendarDate(year: 2026, month: 11, day: 9))
+
+        // Midnight on Monday the 9th in each of these zones. They sit 25 hours
+        // apart, so on any device at least one is another day on the device's clock.
+        for zone in ["Pacific/Kiritimati", "Pacific/Pago_Pago"] {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(identifier: zone) ?? .gmt
+            #expect(calendar.timeZone.identifier == zone)
+            #expect(MuscleVolumeContent.title(of: weeks[2], in: weeks, calendar: calendar, locale: english) == "Week of Nov 9")
+        }
     }
 
     @Test("a row shows volume in the user's unit, to a whole number")
