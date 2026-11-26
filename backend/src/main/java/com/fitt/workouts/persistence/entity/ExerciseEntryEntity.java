@@ -19,8 +19,12 @@ import java.util.List;
 
 @Entity
 // See SetEntryEntity: the same guard for the position of an exercise in a session.
-@Table(name = "exercise_entries", uniqueConstraints = @UniqueConstraint(
-        name = "uk_exercise_entries_session_order", columnNames = {"workout_session_id", "order_index"}))
+// The second key stops one added exercise being stored twice when it is sent twice.
+@Table(name = "exercise_entries", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_exercise_entries_session_order",
+                columnNames = {"workout_session_id", "order_index"}),
+        @UniqueConstraint(name = "uk_exercise_entries_session_client",
+                columnNames = {"workout_session_id", "client_id"})})
 public class ExerciseEntryEntity {
 
     @Id
@@ -40,6 +44,10 @@ public class ExerciseEntryEntity {
 
     @Column(name = "order_index", nullable = false)
     private int orderIndex;
+
+    // A random UUID the app made for this entry, in lower case. Null when none was sent.
+    @Column(name = "client_id", length = 36, columnDefinition = "char(36)")
+    private String clientId;
 
     // Inverse side — ExerciseEntryEntity does not own this FK.
     // CascadeType.ALL so sets persist and delete with the entry.
@@ -70,6 +78,7 @@ public class ExerciseEntryEntity {
     public WorkoutSessionEntity getWorkoutSession() { return workoutSession; }
     public ExerciseEntity getExercise() { return exercise; }
     public int getOrderIndex() { return orderIndex; }
+    public String getClientId() { return clientId; }
 
     // Unmodifiable so callers cannot bypass addSetEntry/removeSetEntry.
     public List<SetEntryEntity> getSetEntries() {
@@ -82,4 +91,5 @@ public class ExerciseEntryEntity {
     }
 
     public void setOrderIndex(int orderIndex) { this.orderIndex = orderIndex; }
+    public void setClientId(String clientId) { this.clientId = clientId; }
 }
