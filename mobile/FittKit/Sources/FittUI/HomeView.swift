@@ -478,6 +478,15 @@ private struct AccountView: View {
                 }
 
                 Section {
+                    NavigationLink("Settings") {
+                        SettingsView()
+                    }
+                    .accessibilityIdentifier("settings")
+                } footer: {
+                    Text("Units and body measures.")
+                }
+
+                Section {
                     NavigationLink("Change Password") {
                         ChangePasswordView()
                     }

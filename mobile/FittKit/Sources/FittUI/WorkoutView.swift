@@ -111,10 +111,12 @@ struct WorkoutView: View {
                                     Text("Suggested: \(targetText)")
                                         .accessibilityIdentifier("suggestion.\(entry.exercise.id)")
                                 }
-                                // The server writes the reason with weights in kilograms, so it
-                                // is left out for a user who works in pounds and has a target.
-                                if model.units == .metric || !suggestion.hasTarget {
-                                    Text(suggestion.reasoning)
+                                // Without a reason code the text is the server's, with its
+                                // weights in kilograms, so it is left out for a user who
+                                // works in pounds and has a target.
+                                if suggestion.reasonCode != nil || model.units == .metric || !suggestion.hasTarget {
+                                    Text(suggestion.reasonText(units: model.units))
+                                        .accessibilityIdentifier("reason.\(entry.exercise.id)")
                                 }
                             }
                         }
@@ -246,6 +248,9 @@ struct WorkoutView: View {
             // Last time and the fill from history come from the finished
             // workouts. Nothing waits on them.
             .task { await model.loadHistoryForWorkout() }
+            // A number typed in the old unit would be read in the new one, so
+            // the rows go back to their prefill, which is rebuilt in the new unit.
+            .onChange(of: model.units) { drafts = [:] }
         }
     }
 
