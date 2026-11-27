@@ -2,6 +2,7 @@ package com.fitt.workouts.controller;
 
 import com.fitt.workouts.dto.AddExerciseEntryRequest;
 import com.fitt.workouts.dto.CreateWorkoutSessionRequest;
+import com.fitt.workouts.dto.FinishSessionRequest;
 import com.fitt.workouts.dto.LogSetRequest;
 import com.fitt.workouts.dto.UpdateSessionNotesRequest;
 import com.fitt.workouts.dto.WorkoutSessionResponse;
@@ -28,7 +29,9 @@ public class WorkoutSessionController {
         this.workoutSessionService = workoutSessionService;
     }
 
-    // 201 because a new session resource was created.
+    // 201 because a new session resource was created. A repeat with the same
+    // client id answers 201 with the first session too, so a retry reads the same
+    // as the request it repeats.
     @PostMapping
     public ResponseEntity<WorkoutSessionResponse> createSession(
             @PathVariable Long userId,
@@ -85,14 +88,16 @@ public class WorkoutSessionController {
     }
 
     // Returns the updated session so the client can show finishedAt immediately.
+    // The body is optional: older apps send none and the web sends {}.
     @PostMapping("/{sessionId}/finish")
     public WorkoutSessionResponse finishSession(
             @PathVariable Long userId,
             @PathVariable Long sessionId,
+            @Valid @RequestBody(required = false) FinishSessionRequest request,
             @AuthenticationPrincipal Jwt jwt
     ) {
         enforceOwnership(userId, currentUserId(jwt));
-        return workoutSessionService.finishSession(userId, sessionId);
+        return workoutSessionService.finishSession(userId, sessionId, request);
     }
 
     // Replaces the notes of a session, finished or not. Returns the updated
