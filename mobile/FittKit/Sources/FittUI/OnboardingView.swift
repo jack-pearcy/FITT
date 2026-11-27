@@ -135,8 +135,10 @@ struct BiometricsForm: View {
             }
         }
         .scrollDismissesKeyboard(.interactively)
+        // The bar, not a keyboard toolbar item: Settings shows this form inside
+        // the tab view, where a toolbar item does not appear.
+        .keyboardDoneBar(isShown: focus != nil) { focus = nil }
         .canvas()
-        .toolbar { KeyboardDoneButton { focus = nil } }
         // A message about the last attempt is stale once the user edits the form.
         .onChange(of: draft) { model.clearErrors() }
     }
