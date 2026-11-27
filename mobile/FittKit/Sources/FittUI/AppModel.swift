@@ -871,6 +871,10 @@ public final class AppModel {
         do {
             try await work(userId)
         } catch let error as BackendError {
+            // A request that was cancelled because its screen went away fails
+            // like a lost connection. The connection is fine and nobody is
+            // waiting for the answer, so nothing is shown.
+            if case .transport = error, Task.isCancelled { return }
             show(error, duringSignIn: false)
         } catch {
             errorMessage = "Something went wrong. Try again."

@@ -146,6 +146,44 @@ struct SettingsTests {
         #expect(model.errorMessage == nil)
     }
 
+    @Test("a biometrics read cancelled with its screen shows no error")
+    func cancelledLoadIsQuiet() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        let metricJSON = metricJSON
+        server.respond { _ in .json(200, metricJSON) }
+
+        // The task is cancelled before it first runs, as SwiftUI cancels the
+        // task of a screen that has gone away.
+        let task = Task { await model.loadBiometrics() }
+        task.cancel()
+        await task.value
+
+        #expect(model.errorMessage == nil)
+        #expect(!model.isOffline)
+        #expect(!model.hasNoBiometrics)
+        #expect(SettingsContent.screenState(
+            biometrics: model.biometrics, isMissing: model.hasNoBiometrics,
+            errorMessage: model.errorMessage, isOffline: model.isOffline) == .loading)
+    }
+
+    @Test("a cancelled refresh leaves the loaded biometrics with no error")
+    func cancelledRefreshIsQuiet() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        let metricJSON = metricJSON
+        server.respond { _ in .json(200, metricJSON) }
+        await model.loadBiometrics()
+
+        let task = Task { await model.loadBiometrics() }
+        task.cancel()
+        await task.value
+
+        #expect(model.biometrics == metric)
+        #expect(model.errorMessage == nil)
+        #expect(!model.isOffline)
+    }
+
     @Test("changing units saves through the server, and the app follows")
     func setUnitsRoundTrip() async {
         let server = StubServer()
