@@ -129,6 +129,7 @@ struct SuggestionReasonTests {
             == "Your average RPE was below the target zone. Go up from 135 lb to 140.5 lb.")
     }
 
+    @Test("a reason still reads well when the server left a number out")
     func missingNumbers() {
         #expect(suggestion(.rpeLow, weight: "102.5", previous: nil).reasonText(units: .imperial)
             == "Your average RPE was below the target zone. Go up to 226 lb.")
