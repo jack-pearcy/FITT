@@ -75,7 +75,7 @@ struct ExerciseStatsContent: View {
                         VStack(alignment: .leading, spacing: Theme.Space.xs) {
                             Text("Estimated one-rep max").sectionLabel()
                             if let best = stats.bestEstimate {
-                                Text(units.weightText(kilograms: best.value)).heroMetric()
+                                Text(units.weightText(kilograms: best.value)).heroMetric().ticking()
                                 Text("From \(best.from.set.summary(units: units)) on \(best.from.date.day)")
                                     .font(.footnote)
                                     .foregroundStyle(Theme.textSecondary)
@@ -102,6 +102,8 @@ struct ExerciseStatsContent: View {
                 }
             }
             .refreshable { await retry() }
+            // A refresh that brings a new best rolls the number to it.
+            .motion(value: stats)
         }
         .canvas()
     }
@@ -203,7 +205,7 @@ private struct OneRepMaxChart: View {
             }
             .opacity(drawn ? 1 : 0)
             .onAppear {
-                withAnimation(reduceMotion ? Theme.calm : .easeOut(duration: 0.7)) {
+                withAnimation(Theme.animation(.easeOut(duration: 0.7), reduceMotion: reduceMotion)) {
                     drawn = true
                 }
             }
