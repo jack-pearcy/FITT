@@ -598,14 +598,18 @@ public final class AppModel {
     }
 
     /// Finds a session left unfinished, such as one the app was closed in the middle of.
-    public func loadActiveSession() async {
+    /// True when the server answered, so the caller knows the check was made.
+    /// A read that failed or was cancelled with its screen answers false.
+    @discardableResult
+    public func loadActiveSession() async -> Bool {
         await loadSessions()
     }
 
     /// Reads every session once and splits it: the unfinished one is the workout
     /// in progress and the finished ones are the history. The API has one list
     /// route for both, so one request serves the Today tab and the History tab.
-    public func loadSessions() async {
+    @discardableResult
+    public func loadSessions() async -> Bool {
         await load { userId in
             let sessions = try await self.backend.sessions(userId: userId)
             self.activeSession = sessions.first { !$0.isFinished }
@@ -878,22 +882,26 @@ public final class AppModel {
         Dictionary(uniqueKeysWithValues: fields.map { (setFieldKey(entryId: entryId, field: $0.key), $0.value) })
     }
 
-    /// Runs one read or write for the signed-in user and shows what went wrong, if anything.
-    private func load(_ work: (Int64) async throws -> Void) async {
-        guard case .signedIn(let userId) = phase else { return }
+    /// Runs one read or write for the signed-in user and shows what went wrong,
+    /// if anything. True when the work ran to its end.
+    @discardableResult
+    private func load(_ work: (Int64) async throws -> Void) async -> Bool {
+        guard case .signedIn(let userId) = phase else { return false }
         errorMessage = nil
         isOffline = false
         do {
             try await work(userId)
+            return true
         } catch let error as BackendError {
             // A request that was cancelled because its screen went away fails
             // like a lost connection. The connection is fine and nobody is
             // waiting for the answer, so nothing is shown.
-            if case .transport = error, Task.isCancelled { return }
+            if case .transport = error, Task.isCancelled { return false }
             show(error, duringSignIn: false)
         } catch {
             errorMessage = "Something went wrong. Try again."
         }
+        return false
     }
 
     public func clearErrors() {

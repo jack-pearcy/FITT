@@ -156,8 +156,9 @@ struct TodayView: View {
     }
 
     private func load() async {
-        await model.loadActiveSession()
-        checkedForSession = model.errorMessage == nil
+        // A read cancelled with the tab leaves no error and no answer, so the
+        // answer itself is asked for, not the lack of an error.
+        checkedForSession = await model.loadActiveSession()
         await model.loadNextLift()
     }
 
