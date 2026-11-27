@@ -492,4 +492,19 @@ struct SettingsTests {
         #expect(!model.hasNoBiometrics)
         #expect(model.units == .metric)
     }
+
+    @Test("sign out forgets that the last user had no biometrics saved")
+    func signOutForgetsEmpty() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        let notFound = notFound
+        server.respond { _ in .json(404, notFound) }
+        await model.loadBiometrics()
+        #expect(model.hasNoBiometrics)
+
+        await model.signOut()
+
+        #expect(!model.hasNoBiometrics)
+        #expect(screenState(model) == .loading)
+    }
 }
