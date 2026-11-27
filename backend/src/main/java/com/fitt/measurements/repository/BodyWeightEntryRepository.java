@@ -16,6 +16,9 @@ public interface BodyWeightEntryRepository extends JpaRepository<BodyWeightEntry
     List<BodyWeightEntryEntity> findByOwnerUserIdAndLoggedAtBetweenOrderByLoggedAtDesc(
             Long ownerUserId, LocalDate start, LocalDate end);
 
+    // The newest entry by calendar date, for the current weight
+    Optional<BodyWeightEntryEntity> findFirstByOwnerUserIdOrderByLoggedAtDesc(Long ownerUserId);
+
     // Ownership safe lookup for delete
     Optional<BodyWeightEntryEntity> findByIdAndOwnerUserId(Long id, Long ownerUserId);
 }

@@ -166,4 +166,19 @@ class BodyWeightServiceImplTest {
 
         verify(repository, never()).delete(any(BodyWeightEntryEntity.class));
     }
+
+    @Test
+    void getLatestWeightKg_returnsTheNewestEntrysWeight() {
+        when(repository.findFirstByOwnerUserIdOrderByLoggedAtDesc(1L)).thenReturn(Optional.of(
+                new BodyWeightEntryEntity(1L, LocalDate.of(2026, 11, 20), new BigDecimal("81.40"))));
+
+        assertThat(service.getLatestWeightKg(1L)).contains(new BigDecimal("81.40"));
+    }
+
+    @Test
+    void getLatestWeightKg_nothingLogged_isEmpty() {
+        when(repository.findFirstByOwnerUserIdOrderByLoggedAtDesc(1L)).thenReturn(Optional.empty());
+
+        assertThat(service.getLatestWeightKg(1L)).isEmpty();
+    }
 }
