@@ -56,6 +56,9 @@ public final class AppModel {
     /// True while the workout screen's read of the history is out, so a second
     /// visit does not send another.
     @ObservationIgnored private var isLoadingHistory = false
+    /// Goes up with each change to units or body measures the server accepts,
+    /// so a read that was sent before the change can be told apart.
+    @ObservationIgnored private var biometricsChanges = 0
     /// The model the server uses for suggestions. Nil until loaded.
     public private(set) var progressionModel: ProgressionModel?
     /// What to do next for an exercise, by exercise id. An exercise is missing
@@ -302,10 +305,13 @@ public final class AppModel {
 
     public func loadBiometrics() async {
         await load { userId in
+            let changes = self.biometricsChanges
             let saved = try await self.backend.biometrics(userId: userId)
             // The answer is dropped if the user signed out while it was on its
             // way, so body measures never reach the next account on this phone.
-            guard case .signedIn(userId) = self.phase else { return }
+            // It is also dropped if a change was accepted while it was out: it
+            // may have been read before the change and would undo it here.
+            guard case .signedIn(userId) = self.phase, changes == self.biometricsChanges else { return }
             self.biometrics = saved
             self.hasNoBiometrics = saved == nil
             if let saved {
@@ -325,6 +331,7 @@ public final class AppModel {
             try await self.backend.setUnits(chosen, userId: userId)
             // Dropped after a sign-out, as in `loadBiometrics`.
             guard case .signedIn(userId) = self.phase else { return }
+            self.biometricsChanges += 1
             self.units = chosen
             self.biometrics = self.biometrics?.with(units: chosen)
         }
@@ -350,6 +357,7 @@ public final class AppModel {
             try await self.backend.saveBiometrics(changed, userId: userId)
             // Dropped after a sign-out, as in `loadBiometrics`.
             guard case .signedIn(userId) = self.phase else { return }
+            self.biometricsChanges += 1
             self.biometrics = changed
             self.hasNoBiometrics = false
             self.units = changed.unitsPreference

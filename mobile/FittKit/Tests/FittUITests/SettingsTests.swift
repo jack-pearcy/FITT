@@ -418,6 +418,67 @@ struct SettingsTests {
         }
     }
 
+    /// Answers a biometrics read only after `change` has run and been accepted
+    /// with a 204, as a slow read that was answered before the change does.
+    private func changeBeforeAnswering(
+        _ server: StubServer, with stale: String, change: @escaping @MainActor @Sendable () async -> Void
+    ) {
+        server.respond { request in
+            guard request.method == "GET" else { return StubResponse(status: 204) }
+            var answer = StubResponse.json(200, stale)
+            answer.before = change
+            return answer
+        }
+    }
+
+    @Test("a biometrics read answered before a units change does not undo the change")
+    func staleReadAfterUnitsChange() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        let metricJSON = metricJSON
+        server.respond { _ in .json(200, metricJSON) }
+        await model.loadBiometrics()
+        changeBeforeAnswering(server, with: metricJSON) { await model.setUnits(.imperial) }
+
+        await model.loadBiometrics()
+
+        #expect(model.units == .imperial)
+        #expect(model.biometrics == metric.with(units: .imperial))
+        #expect(model.errorMessage == nil)
+    }
+
+    @Test("a biometrics read answered before a save does not undo the save")
+    func staleReadAfterSave() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        let metricJSON = metricJSON
+        server.respond { _ in .json(200, metricJSON) }
+        await model.loadBiometrics()
+        var draft = BiometricsDraft(biometrics: metric)
+        draft.weight = "83"
+        let changed = draft
+        changeBeforeAnswering(server, with: metricJSON) { _ = await model.updateBiometrics(changed) }
+
+        await model.loadBiometrics()
+
+        #expect(model.biometrics?.weightKg == 83)
+    }
+
+    @Test("a read sent after a units change is taken as the server's answer")
+    func readAfterUnitsChange() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        server.respond { _ in StubResponse(status: 204) }
+        await model.setUnits(.imperial)
+        let imperial = metricJSON.replacingOccurrences(of: "METRIC", with: "IMPERIAL")
+        server.respond { _ in .json(200, imperial) }
+
+        await model.loadBiometrics()
+
+        #expect(model.biometrics == metric.with(units: .imperial))
+        #expect(model.units == .imperial)
+    }
+
     @Test("biometrics that answer after sign out are dropped")
     func lateLoadAfterSignOut() async {
         let server = StubServer()
