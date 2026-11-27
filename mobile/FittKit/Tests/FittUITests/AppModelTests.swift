@@ -1366,13 +1366,20 @@ struct AppModelTests {
         let server = StubServer()
         let model = await signedInModel(server, biometrics: true, goals: true)
         let open = sessionJSON()
-        server.respond { _ in .json(200, "[\(open)]") }
+        // The answer is held until the check is cancelled, so the test does not
+        // depend on whether the task started before the cancel reached it.
+        let (held, release) = AsyncStream<Void>.makeStream()
+        server.respond { _ in
+            var stub = StubResponse.json(200, "[\(open)]")
+            stub.before = { for await _ in held {} }
+            return stub
+        }
 
-        // Cancelled before it first runs, as SwiftUI cancels the task of a tab
-        // the user has left.
+        // Cancelled while out, as SwiftUI cancels the task of a tab the user has left.
         let task = Task { await model.loadActiveSession() }
         task.cancel()
         let answered = await task.value
+        release.finish()
 
         // No error is shown, so the lack of one cannot stand for an answer.
         #expect(model.errorMessage == nil)
