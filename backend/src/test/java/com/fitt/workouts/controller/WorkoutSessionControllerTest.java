@@ -253,6 +253,19 @@ class WorkoutSessionControllerTest {
     }
 
     @Test
+    void finishSession_withAClientIdThatIsNotAUuid_returns400UnderTheField() throws Exception {
+        mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/finish",
+                        USER_ID, SESSION_ID)
+                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"clientId\":\"not-a-uuid\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.properties.errors.clientId").value("Client id must be a UUID"));
+
+        verifyNoInteractions(workoutSessionService);
+    }
+
+    @Test
     void finishSession_anotherUsersPath_returns403() throws Exception {
         mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/finish",
                         USER_ID, SESSION_ID)
