@@ -24,6 +24,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 // A request sent twice with the same client id is stored once. Against a real
 // database with real transactions, counting rows, because "inserts nothing" is a
@@ -267,6 +268,92 @@ class ClientIdReplayTest {
         service.finishSession(userId, session.id(), null);
 
         assertThat(service.getSession(userId, session.id()).finishedAt()).isEqualTo(startedAhead);
+    }
+
+    // A phone whose clock is set three days ahead. The start is taken as sent,
+    // so the finish must go through too, on every retry, or the open session
+    // would block every new start. The device's finish time is outside the
+    // bound and the server's clock is before the start, so the start time is
+    // stored.
+    @Test
+    void finish_fromAPhoneThreeDaysAhead_goesThrough_andANewStartIsPossible() {
+        long userId = 7317L;
+        Instant startedAhead = Instant.now().plus(Duration.ofHours(72)).truncatedTo(ChronoUnit.SECONDS);
+        WorkoutSessionResponse session = service.createSession(userId,
+                new CreateWorkoutSessionRequest(startedAhead, null, null, null));
+
+        service.finishSession(userId, session.id(),
+                new FinishSessionRequest(null, startedAhead.plus(Duration.ofHours(1))));
+
+        assertThat(service.getSession(userId, session.id()).finishedAt()).isEqualTo(startedAhead);
+        assertThat(service.getOpenSession(userId)).isEmpty();
+        WorkoutSessionResponse next = service.createSession(userId, start(null));
+        assertThat(next.id()).isNotEqualTo(session.id());
+    }
+
+    @Test
+    void finish_withADeviceTimeMoreThanADayAhead_finishesOnTheServerClock() {
+        long userId = 7318L;
+        WorkoutSessionResponse session = service.createSession(userId, start(null));
+        Instant before = Instant.now().minusSeconds(1);
+
+        service.finishSession(userId, session.id(),
+                new FinishSessionRequest(null, Instant.now().plus(Duration.ofHours(25))));
+
+        assertThat(service.getSession(userId, session.id()).finishedAt())
+                .isAfter(before)
+                .isBefore(Instant.now().plusSeconds(1));
+    }
+
+    @Test
+    void finish_withADeviceTimeADayAheadOrLess_keepsTheDeviceTime() {
+        long userId = 7319L;
+        WorkoutSessionResponse session = service.createSession(userId, start(null));
+        Instant fromDevice = Instant.now().plus(Duration.ofHours(23)).truncatedTo(ChronoUnit.SECONDS);
+
+        service.finishSession(userId, session.id(), new FinishSessionRequest(null, fromDevice));
+
+        assertThat(service.getSession(userId, session.id()).finishedAt()).isEqualTo(fromDevice);
+    }
+
+    // A phone whose clock was reset to before 2000 for the whole workout.
+    @Test
+    void finish_fromAPhoneSetBefore2000_finishesOnTheServerClock() {
+        long userId = 7320L;
+        WorkoutSessionResponse session = service.createSession(userId,
+                new CreateWorkoutSessionRequest(Instant.parse("1999-06-01T10:00:00Z"), null, null, null));
+        Instant before = Instant.now().minusSeconds(1);
+
+        service.finishSession(userId, session.id(),
+                new FinishSessionRequest(null, Instant.parse("1999-06-01T11:00:00Z")));
+
+        assertThat(service.getSession(userId, session.id()).finishedAt()).isAfter(before);
+        assertThat(service.getOpenSession(userId)).isEmpty();
+    }
+
+    // The set is stored either way. Only a time outside the bound is left out.
+    @Test
+    void aSetWithATimeOutsideTheBounds_isStoredWithoutTheTime() {
+        long userId = 7321L;
+        ExerciseEntity row = exerciseRepository.save(new ExerciseEntity(null, "Replay Clock Row", "BACK", false));
+        WorkoutSessionResponse session = service.createSession(userId, start(null));
+        long entryId = service.addExerciseEntry(userId, session.id(), new AddExerciseEntryRequest(row.getId()))
+                .exerciseEntries().get(0).id();
+        Instant inside = Instant.now().plus(Duration.ofHours(23)).truncatedTo(ChronoUnit.SECONDS);
+
+        service.logSet(userId, session.id(), entryId, new LogSetRequest(5, null, null,
+                UUID.randomUUID().toString(), Instant.now().plus(Duration.ofHours(72))));
+        service.logSet(userId, session.id(), entryId, new LogSetRequest(6, null, null,
+                UUID.randomUUID().toString(), Instant.parse("1999-12-31T23:59:59Z")));
+        service.logSet(userId, session.id(), entryId, new LogSetRequest(7, null, null,
+                UUID.randomUUID().toString(), inside));
+
+        assertThat(service.getSession(userId, session.id()).exerciseEntries().get(0).sets())
+                .extracting(SetEntryResponse::reps, SetEntryResponse::performedAt)
+                .containsExactly(
+                        tuple(5, null),
+                        tuple(6, null),
+                        tuple(7, inside));
     }
 
     private static CreateWorkoutSessionRequest start(String clientId) {

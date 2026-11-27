@@ -39,8 +39,8 @@ public record LogSetRequest(
         @Pattern(regexp = ClientIds.PATTERN, message = ClientIds.MESSAGE)
         String clientId,
 
-        // Optional. When the set was done on the device.
-        @WithinTimeBounds
+        // Optional. When the set was done on the device. A time outside the
+        // bounds in DeviceTimes is not stored, and the set is logged without it.
         Instant performedAt
 ) {
     public LogSetRequest(Integer reps, BigDecimal weight, BigDecimal rpe) {

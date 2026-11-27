@@ -233,19 +233,23 @@ class WorkoutSessionControllerTest {
                 .andExpect(jsonPath("$.id").value(SESSION_ID));
     }
 
+    // A wrong device clock is not a 400. The retry would carry the same time, so
+    // the session could never be finished. The service picks the time to store.
     @Test
-    void finishSession_withAFinishTimeMoreThanADayAhead_returns400UnderTheField() throws Exception {
-        String tooFarAhead = Instant.now().plus(Duration.ofHours(25)).toString();
+    void finishSession_withAFinishTimeOutsideTheBounds_isNotRefused() throws Exception {
+        for (String outside : List.of("1999-12-31T23:59:59Z", Instant.now().plus(Duration.ofHours(73)).toString())) {
+            when(workoutSessionService.finishSession(USER_ID, SESSION_ID,
+                    new FinishSessionRequest(null, Instant.parse(outside))))
+                    .thenReturn(sampleSession());
 
-        mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/finish",
-                        USER_ID, SESSION_ID)
-                        .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"finishedAt\":\"" + tooFarAhead + "\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.properties.errors.finishedAt").exists());
-
-        verifyNoInteractions(workoutSessionService);
+            mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/finish",
+                            USER_ID, SESSION_ID)
+                            .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"finishedAt\":\"" + outside + "\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(SESSION_ID));
+        }
     }
 
     @Test
@@ -323,19 +327,23 @@ class WorkoutSessionControllerTest {
                 .andExpect(jsonPath("$.exerciseEntries[0].sets[0].performedAt").value("2026-05-25T10:05:30Z"));
     }
 
+    // The set is what matters. A time from a wrong device clock does not keep
+    // it from being logged.
     @Test
-    void logSet_withATimeOutsideTheBounds_returns400UnderTheField() throws Exception {
-        for (String outside : List.of("1999-12-31T23:59:59Z", Instant.now().plus(Duration.ofHours(25)).toString())) {
+    void logSet_withATimeOutsideTheBounds_isNotRefused() throws Exception {
+        for (String outside : List.of("1999-12-31T23:59:59Z", Instant.now().plus(Duration.ofHours(73)).toString())) {
+            when(workoutSessionService.logSet(USER_ID, SESSION_ID, ENTRY_ID,
+                    new LogSetRequest(5, null, null, null, Instant.parse(outside))))
+                    .thenReturn(sampleSession());
+
             mockMvc.perform(post("/api/users/{userId}/workout-sessions/{sessionId}/entries/{entryId}/sets",
                             USER_ID, SESSION_ID, ENTRY_ID)
                             .with(jwt().jwt(token -> token.claim("uid", USER_ID)))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"reps\":5,\"performedAt\":\"" + outside + "\"}"))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.properties.errors.performedAt").exists());
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(SESSION_ID));
         }
-
-        verifyNoInteractions(workoutSessionService);
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.fitt.workouts.domain.MuscleGroup;
 import com.fitt.workouts.dto.AddExerciseEntryRequest;
 import com.fitt.workouts.dto.ClientIds;
 import com.fitt.workouts.dto.CreateWorkoutSessionRequest;
+import com.fitt.workouts.dto.DeviceTimes;
 import com.fitt.workouts.dto.ExerciseEntryResponse;
 import com.fitt.workouts.dto.ExerciseResponse;
 import com.fitt.workouts.dto.FinishSessionRequest;
@@ -284,7 +285,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
 
         set.setCompleted(true);
         set.setClientId(clientId);
-        set.setPerformedAt(request.performedAt());
+        set.setPerformedAt(DeviceTimes.orNullWhenOutOfBounds(request.performedAt(), Instant.now()));
 
         return toResponse(sessionRepository.save(session));
     }
@@ -312,15 +313,17 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     // The device's finish time when it sent one, so a workout finished offline is
     // not stretched to the moment the phone got a connection. Both the start and
     // the finish come from a clock the server does not control, so a finish that
-    // falls before the start is not refused: a refusal would repeat on every
-    // retry and leave the user with an open session that blocks every new start.
-    // The server's clock is used in its place, and the start time itself when
-    // even that is earlier. A finish is never stored before its start.
+    // falls before the start, or outside the bounds in DeviceTimes, is not
+    // refused: a refusal would repeat on every retry and leave the user with an
+    // open session that blocks every new start. The server's clock is used in
+    // its place, and the start time itself when even that is earlier. A finish
+    // is never stored before its start.
     private static Instant finishTime(Instant startedAt, Instant fromDevice) {
-        if (fromDevice != null && !fromDevice.isBefore(startedAt)) {
-            return fromDevice;
-        }
         Instant now = Instant.now();
+        Instant usable = DeviceTimes.orNullWhenOutOfBounds(fromDevice, now);
+        if (usable != null && !usable.isBefore(startedAt)) {
+            return usable;
+        }
         return now.isBefore(startedAt) ? startedAt : now;
     }
 
