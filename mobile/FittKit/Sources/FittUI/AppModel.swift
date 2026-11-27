@@ -303,6 +303,9 @@ public final class AppModel {
     public func loadBiometrics() async {
         await load { userId in
             let saved = try await self.backend.biometrics(userId: userId)
+            // The answer is dropped if the user signed out while it was on its
+            // way, so body measures never reach the next account on this phone.
+            guard case .signedIn(userId) = self.phase else { return }
             self.biometrics = saved
             self.hasNoBiometrics = saved == nil
             if let saved {
@@ -320,6 +323,8 @@ public final class AppModel {
         defer { isWorking = false }
         await load { userId in
             try await self.backend.setUnits(chosen, userId: userId)
+            // Dropped after a sign-out, as in `loadBiometrics`.
+            guard case .signedIn(userId) = self.phase else { return }
             self.units = chosen
             self.biometrics = self.biometrics?.with(units: chosen)
         }
@@ -343,6 +348,8 @@ public final class AppModel {
         var saved = false
         await load { userId in
             try await self.backend.saveBiometrics(changed, userId: userId)
+            // Dropped after a sign-out, as in `loadBiometrics`.
+            guard case .signedIn(userId) = self.phase else { return }
             self.biometrics = changed
             self.hasNoBiometrics = false
             self.units = changed.unitsPreference

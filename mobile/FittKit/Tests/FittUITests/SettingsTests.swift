@@ -293,6 +293,83 @@ struct SettingsTests {
         #expect(model.isOffline)
     }
 
+    /// Answers the next request matching `method` only after the user has
+    /// signed out, as a slow answer that lands after Sign Out does.
+    private func signOutBeforeAnswering(
+        _ server: StubServer, _ model: AppModel, method: String, with response: StubResponse
+    ) {
+        server.respond { request in
+            guard request.method == method else { return StubResponse(status: 500) }
+            let signedOut = DispatchSemaphore(value: 0)
+            Task { @MainActor in
+                await model.signOut()
+                signedOut.signal()
+            }
+            signedOut.wait()
+            return response
+        }
+    }
+
+    @Test("biometrics that answer after sign out are dropped")
+    func lateLoadAfterSignOut() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        let imperial = metricJSON.replacingOccurrences(of: "METRIC", with: "IMPERIAL")
+        signOutBeforeAnswering(server, model, method: "GET", with: .json(200, imperial))
+
+        await model.loadBiometrics()
+
+        #expect(model.phase == .signedOut)
+        #expect(model.biometrics == nil)
+        #expect(!model.hasNoBiometrics)
+        #expect(model.units == .metric)
+    }
+
+    @Test("a missing-biometrics answer after sign out is dropped")
+    func lateEmptyLoadAfterSignOut() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        signOutBeforeAnswering(server, model, method: "GET", with: .json(404, notFound))
+
+        await model.loadBiometrics()
+
+        #expect(!model.hasNoBiometrics)
+        #expect(model.biometrics == nil)
+    }
+
+    @Test("a units change that answers after sign out is dropped")
+    func lateUnitsAfterSignOut() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        let metricJSON = metricJSON
+        server.respond { _ in .json(200, metricJSON) }
+        await model.loadBiometrics()
+        signOutBeforeAnswering(server, model, method: "PUT", with: StubResponse(status: 204))
+
+        await model.setUnits(.imperial)
+
+        #expect(model.phase == .signedOut)
+        #expect(model.units == .metric)
+        #expect(model.biometrics == nil)
+    }
+
+    @Test("saved body measures that answer after sign out are dropped")
+    func lateSaveAfterSignOut() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        signOutBeforeAnswering(server, model, method: "POST", with: StubResponse(status: 204))
+        var draft = BiometricsDraft(biometrics: metric.with(units: .imperial))
+        draft.weight = "183"
+
+        let saved = await model.updateBiometrics(draft)
+
+        #expect(!saved)
+        #expect(model.phase == .signedOut)
+        #expect(model.biometrics == nil)
+        #expect(!model.hasNoBiometrics)
+        #expect(model.units == .metric)
+    }
+
     @Test("sign out forgets the biometrics and goes back to metric")
     func signOutForgets() async {
         let server = StubServer()
