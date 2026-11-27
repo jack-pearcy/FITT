@@ -28,8 +28,8 @@ extension ProgressionSuggestion {
 /// The workout in progress: each exercise with its logged sets and a row to log the next one.
 struct WorkoutView: View {
     @Environment(AppModel.self) private var model
-    /// What is typed for the next set of each entry, keyed by entry id.
-    @State private var drafts: [Int64: SetDraft] = [:]
+    /// What is typed for the next set of each entry, in the unit it was typed in.
+    @State private var drafts = TypedSetRows()
     @State private var confirmingDiscard = false
     @State private var addingExercise = false
     /// What is typed in the notes field. Saved when the field loses focus and
@@ -245,9 +245,6 @@ struct WorkoutView: View {
             // Last time and the fill from history come from the finished
             // workouts. Nothing waits on them.
             .task { await model.loadHistoryForWorkout() }
-            // A number typed in the old unit would be read in the new one, so
-            // the rows go back to their prefill, which is rebuilt in the new unit.
-            .onChange(of: model.units) { drafts = [:] }
         }
     }
 
@@ -257,8 +254,10 @@ struct WorkoutView: View {
     @ViewBuilder
     private func setForm(for entry: ExerciseEntry) -> some View {
         let draft = Binding(
-            get: { drafts[entry.id] ?? prefill(for: entry) },
-            set: { drafts[entry.id] = $0 }
+            // A row typed in another unit is not given back, so after a change
+            // of units the row shows its prefill, rebuilt in the new unit.
+            get: { drafts.row(entryId: entry.id, units: model.units) ?? prefill(for: entry) },
+            set: { drafts.set($0, entryId: entry.id, units: model.units) }
         )
         SetForm(draft: draft, entry: entry, units: model.units, isWorking: model.isWorking, focus: $focus) {
             Task {
