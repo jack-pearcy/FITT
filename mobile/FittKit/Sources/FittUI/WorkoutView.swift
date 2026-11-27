@@ -211,7 +211,9 @@ struct WorkoutView: View {
             } message: {
                 Text(session.loggedSetCount == 0
                     ? "Nothing has been logged yet."
-                    : "The \(session.loggedSetCount) sets you logged will be deleted.")
+                    : session.loggedSetCount == 1
+                        ? "The set you logged will be deleted."
+                        : "The \(session.loggedSetCount) sets you logged will be deleted.")
             }
             .confirmationDialog(
                 "Remove \(removing?.exercise.name ?? "exercise")?",
@@ -360,7 +362,7 @@ private struct WorkoutProgressCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(plannedSets > 0
             ? "\(session.loggedSetCount) of \(plannedSets) sets logged"
-            : "\(session.loggedSetCount) sets logged")
+            : "\(session.loggedSetCount) \(session.loggedSetCount == 1 ? "set" : "sets") logged")
         .accessibilityIdentifier("workoutProgress")
     }
 }
