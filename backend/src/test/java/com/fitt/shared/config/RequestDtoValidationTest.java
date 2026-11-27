@@ -54,13 +54,30 @@ class RequestDtoValidationTest {
     }
 
     @Test
+    void goals_maintenanceAndAdjustmentAreBounded() {
+        assertThat(VALIDATOR.validate(goalsWith(1000, -1500))).isEmpty();
+        assertThat(VALIDATOR.validate(goalsWith(8000, 1500))).isEmpty();
+        assertThat(VALIDATOR.validate(goalsWith(null, null))).isEmpty();
+        assertThat(VALIDATOR.validate(goalsWith(999, null))).isNotEmpty();
+        assertThat(VALIDATOR.validate(goalsWith(8001, null))).isNotEmpty();
+        assertThat(VALIDATOR.validate(goalsWith(null, -1501))).isNotEmpty();
+        assertThat(VALIDATOR.validate(goalsWith(null, 1501))).isNotEmpty();
+    }
+
+    private static SaveGoalsRequest goalsWith(Integer maintenanceOverrideKcal, Integer adjustmentKcal) {
+        return new SaveGoalsRequest(
+                GoalDirection.CUT, null, null, CalorieGoalMode.AUTO, null,
+                maintenanceOverrideKcal, adjustmentKcal);
+    }
+
+    @Test
     void goals_manualCalorieGoalMustBeSane() {
         assertThat(VALIDATOR.validate(new SaveGoalsRequest(
-                GoalDirection.CUT, new BigDecimal("75"), 12, CalorieGoalMode.MANUAL, 2200))).isEmpty();
+                GoalDirection.CUT, new BigDecimal("75"), 12, CalorieGoalMode.MANUAL, 2200, null, null))).isEmpty();
         assertThat(VALIDATOR.validate(new SaveGoalsRequest(
-                GoalDirection.CUT, null, null, CalorieGoalMode.MANUAL, -300))).isNotEmpty();
+                GoalDirection.CUT, null, null, CalorieGoalMode.MANUAL, -300, null, null))).isNotEmpty();
         assertThat(VALIDATOR.validate(new SaveGoalsRequest(
-                GoalDirection.CUT, null, 0, CalorieGoalMode.AUTO, null))).isNotEmpty();
+                GoalDirection.CUT, null, 0, CalorieGoalMode.AUTO, null, null, null))).isNotEmpty();
     }
 
     @Test

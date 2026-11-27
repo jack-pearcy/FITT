@@ -27,5 +27,16 @@ public record SaveGoalsRequest(
 
         @Min(value = 500, message = "Calorie goal must be at least 500")
         @Max(value = 10000, message = "Calorie goal must be 10000 or fewer")
-        Integer calorieGoal
+        Integer calorieGoal,
+
+        // Optional. The user's own maintenance, used in place of the estimate.
+        @Min(value = 1000, message = "Maintenance must be at least 1000")
+        @Max(value = 8000, message = "Maintenance must be 8000 or fewer")
+        Integer maintenanceOverrideKcal,
+
+        // Optional. Signed daily surplus or deficit, used in AUTO mode in place
+        // of the built-in bulk or cut percentage.
+        @Min(value = -1500, message = "Adjustment must be -1500 or more")
+        @Max(value = 1500, message = "Adjustment must be 1500 or less")
+        Integer adjustmentKcal
 ) {}
