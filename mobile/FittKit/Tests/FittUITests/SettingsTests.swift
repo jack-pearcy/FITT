@@ -345,6 +345,29 @@ struct SettingsTests {
         #expect(calls(server, after: before) == ["POST /api/users/7/identity/onboarding/biometrics"])
     }
 
+    @Test("a save that changes no measure posts the stored height and weight, not the rounded ones shown")
+    func untouchedMeasuresArePostedAsStored() async throws {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        server.respond { _ in StubResponse(status: 204) }
+        // Typed in metric at onboarding, shown as 5 ft 10.9 in and 180.8 lb.
+        let stored = Biometrics(
+            heightCm: 180, weightKg: 82, dateOfBirth: metric.dateOfBirth,
+            biologicalSex: .male, activityLevel: .active, unitsPreference: .imperial)
+        var draft = BiometricsDraft(biometrics: stored)
+        draft.activity = .sedentary
+
+        let saved = await model.updateBiometrics(draft)
+
+        #expect(saved)
+        let posted = try JSONDecoder().decode(Biometrics.self, from: #require(server.requests.last).body)
+        #expect(posted.heightCm == 180)
+        #expect(posted.weightKg == 82)
+        #expect(posted.activityLevel == .sedentary)
+        #expect(model.biometrics?.heightCm == 180)
+        #expect(model.biometrics?.weightKg == 82)
+    }
+
     @Test("a first save from the empty state takes the units picked in the form")
     func firstSaveFromEmpty() async {
         let server = StubServer()
