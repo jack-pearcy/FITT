@@ -345,6 +345,29 @@ struct SettingsTests {
         #expect(calls(server, after: before) == ["POST /api/users/7/identity/onboarding/biometrics"])
     }
 
+    @Test("a first save from the empty state takes the units picked in the form")
+    func firstSaveFromEmpty() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        let notFound = notFound
+        server.respond { _ in .json(404, notFound) }
+        await model.loadBiometrics()
+        #expect(model.hasNoBiometrics)
+        #expect(screenState(model) == .empty)
+        let before = server.requests.count
+        server.respond { _ in StubResponse(status: 204) }
+        let imperial = metric.with(units: .imperial)
+
+        let saved = await model.updateBiometrics(BiometricsDraft(biometrics: imperial))
+
+        #expect(saved)
+        #expect(model.units == .imperial)
+        #expect(model.biometrics?.unitsPreference == .imperial)
+        #expect(!model.hasNoBiometrics)
+        #expect(model.biometrics.map { screenState(model) == .content($0) } == true)
+        #expect(calls(server, after: before) == ["POST /api/users/7/identity/onboarding/biometrics"])
+    }
+
     @Test("body measures that fail the checks are not sent")
     func updateBiometricsInvalid() async {
         let server = StubServer()
