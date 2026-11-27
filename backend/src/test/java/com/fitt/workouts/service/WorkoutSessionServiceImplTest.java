@@ -37,6 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -153,6 +154,34 @@ class WorkoutSessionServiceImplTest {
                 new CreateWorkoutSessionRequest(Instant.parse("2026-05-26T18:00:00Z"), null, null, clientId));
 
         assertThat(response.id()).isEqualTo(SESSION_ID);
+    }
+
+    @Test
+    void createSession_whenTheUniqueKeyRefusesAStartWithItsOwnClientId_refusesWithTheSessionThatWon() {
+        // A phone and a watch start at the same moment, each with its own client
+        // id. Both see no open session, one insert wins, and the other finds no
+        // session under its own id. It is told which session is open, the same
+        // answer a start with no id gets. It is not handed the other device's
+        // session as if it were its own.
+        String clientId = "0b9f6c1e-5a1d-4a57-9f0e-3d2c1b4a5e6f";
+        WorkoutSessionEntity winner = sessionWithId(SESSION_ID);
+        winner.setClientId("7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f");
+        when(sessionRepository.findByOwnerUserIdAndClientId(OWNER_USER_ID, clientId))
+                .thenReturn(Optional.empty());
+        when(sessionRepository.findFirstByOwnerUserIdAndFinishedAtIsNullOrderByStartedAtDescIdDesc(OWNER_USER_ID))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(winner));
+        when(sessionRepository.save(any(WorkoutSessionEntity.class)))
+                .thenThrow(new DataIntegrityViolationException("Duplicate entry for key uk_workout_sessions_open_owner"));
+
+        assertThatThrownBy(() -> service.createSession(OWNER_USER_ID,
+                new CreateWorkoutSessionRequest(Instant.parse("2026-05-26T18:00:00Z"), null, null, clientId)))
+                .isInstanceOf(OpenSessionExistsException.class)
+                .extracting(ex -> ((OpenSessionExistsException) ex).getOpenSessionId())
+                .isEqualTo(SESSION_ID);
+
+        // Once inside the insert and once after the key refused it.
+        verify(sessionRepository, times(2)).findByOwnerUserIdAndClientId(OWNER_USER_ID, clientId);
     }
 
     @Test

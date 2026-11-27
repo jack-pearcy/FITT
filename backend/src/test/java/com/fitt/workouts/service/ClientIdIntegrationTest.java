@@ -10,6 +10,7 @@ import com.fitt.workouts.persistence.entity.SetEntryEntity;
 import com.fitt.workouts.persistence.entity.WorkoutSessionEntity;
 import com.fitt.workouts.repository.ExerciseRepository;
 import com.fitt.workouts.repository.WorkoutSessionRepository;
+import com.fitt.workouts.service.exception.OpenSessionExistsException;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,17 +19,26 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -67,6 +77,9 @@ class ClientIdIntegrationTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
     // Several rounds, each with a fresh user. Whether the loser fails on the
     // unique key or already sees the winner's row depends on timing, and more
     // rounds make it likely that both paths run. Every round must end the same.
@@ -81,6 +94,82 @@ class ClientIdIntegrationTest {
 
             assertThat(answers).hasSize(COPIES);
             assertThat(answers.get(1).id()).isEqualTo(answers.get(0).id());
+            assertThat(count("select count(*) from workout_sessions where owner_user_id = ?", owner)).isEqualTo(1);
+        }
+    }
+
+    // A phone and a watch start at the same moment, each with its own client id.
+    // The first start is held inside its transaction until the second one waits
+    // on the one-open-session key. So the second start always passes its own
+    // check, is refused by the database, and finds no session under its own id.
+    // It must be told which session is open. It must not get the other device's
+    // session back as if it had made it, and it must not fail with a 500.
+    @Test
+    void aStartWithItsOwnId_refusedByTheOpenSessionKey_isToldWhichSessionIsOpen() throws Exception {
+        long userId = 7441L;
+        String phoneId = UUID.randomUUID().toString();
+        String watchId = UUID.randomUUID().toString();
+        List<Future<WorkoutSessionResponse>> watchStart = new ArrayList<>();
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            Long phoneSessionId = new TransactionTemplate(transactionManager).execute(status -> {
+                WorkoutSessionEntity phoneSession = new WorkoutSessionEntity(userId, Instant.now());
+                phoneSession.setClientId(phoneId);
+                Long id = sessionRepository.saveAndFlush(phoneSession).getId();
+                watchStart.add(pool.submit(() -> service.createSession(userId,
+                        new CreateWorkoutSessionRequest(Instant.now(), null, null, watchId))));
+                waitUntilAnInsertWaitsForALock();
+                return id;
+            });
+
+            assertThatThrownBy(() -> watchStart.getFirst().get(30, TimeUnit.SECONDS))
+                    .isInstanceOf(ExecutionException.class)
+                    .cause()
+                    .isInstanceOf(OpenSessionExistsException.class)
+                    .extracting(ex -> ((OpenSessionExistsException) ex).getOpenSessionId())
+                    .isEqualTo(phoneSessionId);
+            assertThat(jdbc.queryForList("select client_id from workout_sessions where owner_user_id = ?",
+                    String.class, userId)).containsExactly(phoneId);
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    // The same two starts with nothing held back. Which of them wins, and whether
+    // the other is stopped by its own check or by the database, depends on
+    // timing. Every round must end the same: one session, and the other start
+    // told its id.
+    @Test
+    void twoStartsAtOnceWithDifferentIds_leaveOneSession_andTheOtherIsToldItsId() throws Exception {
+        for (long userId = 7451L; userId <= 7460L; userId++) {
+            long owner = userId;
+            CyclicBarrier together = new CyclicBarrier(COPIES);
+            Callable<WorkoutSessionResponse> start = () -> {
+                together.await(10, TimeUnit.SECONDS);
+                return service.createSession(owner, new CreateWorkoutSessionRequest(
+                        Instant.now(), null, null, UUID.randomUUID().toString()));
+            };
+
+            List<WorkoutSessionResponse> created = new ArrayList<>();
+            List<Throwable> refused = new ArrayList<>();
+            ExecutorService pool = Executors.newFixedThreadPool(COPIES);
+            try {
+                for (Future<WorkoutSessionResponse> result : pool.invokeAll(List.of(start, start))) {
+                    try {
+                        created.add(result.get());
+                    } catch (ExecutionException ex) {
+                        refused.add(ex.getCause());
+                    }
+                }
+            } finally {
+                pool.shutdown();
+            }
+
+            assertThat(created).hasSize(1);
+            assertThat(refused).singleElement()
+                    .isInstanceOf(OpenSessionExistsException.class)
+                    .extracting(ex -> ((OpenSessionExistsException) ex).getOpenSessionId())
+                    .isEqualTo(created.getFirst().id());
             assertThat(count("select count(*) from workout_sessions where owner_user_id = ?", owner)).isEqualTo(1);
         }
     }
@@ -186,6 +275,37 @@ class ClientIdIntegrationTest {
             pool.shutdown();
         }
         return answers;
+    }
+
+    // Returns once some statement on the server waits for a row lock, which here
+    // can only be the second start's insert waiting on the first one's row. Reads
+    // the server's transaction list as root, because the test user may not see
+    // other connections. The container sets root's password to the test user's.
+    private void waitUntilAnInsertWaitsForALock() {
+        Properties root = new Properties();
+        root.setProperty("user", "root");
+        root.setProperty("password", mysql.getPassword());
+        root.setProperty("allowPublicKeyRetrieval", "true");
+        try (Connection connection = DriverManager.getConnection(mysql.getJdbcUrl(), root);
+             PreparedStatement waiting = connection.prepareStatement(
+                     "select count(*) from information_schema.innodb_trx where trx_state = 'LOCK WAIT'")) {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+            while (System.nanoTime() < deadline) {
+                try (ResultSet row = waiting.executeQuery()) {
+                    row.next();
+                    if (row.getInt(1) > 0) {
+                        return;
+                    }
+                }
+                Thread.sleep(20);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException(ex);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(ex);
+        }
+        throw new AssertionError("The second start never waited on the first one's row");
     }
 
     // Finished, so the one-open-session key from V12 stays out of these tests.
