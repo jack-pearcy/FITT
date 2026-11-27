@@ -41,7 +41,7 @@ class MigratedSchemaIntegrationTest {
         // Reaching this line is the test: validation ran while the context started.
         Integer applied = jdbc.queryForObject(
                 "select count(*) from flyway_schema_history where success = 1", Integer.class);
-        assertThat(applied).isGreaterThanOrEqualTo(12);
+        assertThat(applied).isGreaterThanOrEqualTo(13);
 
         Integer mfaTables = jdbc.queryForObject("select count(*) from information_schema.tables"
                 + " where table_schema = database()"
@@ -59,5 +59,13 @@ class MigratedSchemaIntegrationTest {
                 + " and index_name = 'uk_workout_sessions_open_owner' and column_name = 'open_owner_id'"
                 + " and non_unique = 0", Integer.class);
         assertThat(openOwnerKey).isEqualTo(1);
+
+        // V13's keys: a client id is unique inside its owner, session or entry.
+        // Two columns in each key, so three keys make six rows here.
+        Integer clientIdKeyColumns = jdbc.queryForObject("select count(*) from information_schema.statistics"
+                + " where table_schema = database() and non_unique = 0"
+                + " and index_name in ('uk_workout_sessions_owner_client',"
+                + " 'uk_exercise_entries_session_client', 'uk_set_entries_entry_client')", Integer.class);
+        assertThat(clientIdKeyColumns).isEqualTo(6);
     }
 }
