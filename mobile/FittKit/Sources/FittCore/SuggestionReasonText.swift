@@ -29,8 +29,11 @@ extension ProgressionSuggestion {
 
         let reps = targetReps ?? suggestedReps
         let forReps = reps.map { " for \($0) reps" } ?? ""
-        let weight = units.weightText(kilograms: suggestedWeight)
-        let from = previousWeightKg.map { "from \(units.weightText(kilograms: $0)) " } ?? ""
+        // Written as the suggested line and the prefilled row write a weight:
+        // kilograms as the server sent them, pounds to one decimal place.
+        let text = { (kilograms: Decimal) in "\(units.shown(kilograms: kilograms).formatted()) \(units.weightLabel)" }
+        let weight = text(suggestedWeight)
+        let from = previousWeightKg.map { "from \(text($0)) " } ?? ""
         let rpe = averageRpe.map { " of \($0.formatted())" } ?? ""
 
         switch reasonCode {

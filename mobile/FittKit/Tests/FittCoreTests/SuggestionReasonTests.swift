@@ -118,7 +118,17 @@ struct SuggestionReasonTests {
             == "Deload week. Drop from 100 kg to 60 kg for 12 reps to recover before the next cycle.")
     }
 
-    @Test("a reason still reads well when the server left a number out")
+    @Test("a metric reason names the weights the server sent, to the hundredth")
+    func kilogramsAreNotRounded() {
+        #expect(suggestion(.increaseWeight, weight: "63.73", reps: 8, previous: "61.23").reasonText(units: .metric)
+            == "You reached the top of the rep range on every set. Go up from 61.23 kg to 63.73 kg and start again at 8 reps.")
+        #expect(suggestion(.increaseWeight, weight: "63.75", reps: 8, previous: "61.25").reasonText(units: .metric)
+            == "You reached the top of the rep range on every set. Go up from 61.25 kg to 63.75 kg and start again at 8 reps.")
+        // The same weights in pounds still read to one decimal place.
+        #expect(suggestion(.rpeLow, weight: "63.73", previous: "61.23").reasonText(units: .imperial)
+            == "Your average RPE was below the target zone. Go up from 135 lb to 140.5 lb.")
+    }
+
     func missingNumbers() {
         #expect(suggestion(.rpeLow, weight: "102.5", previous: nil).reasonText(units: .imperial)
             == "Your average RPE was below the target zone. Go up to 226 lb.")
