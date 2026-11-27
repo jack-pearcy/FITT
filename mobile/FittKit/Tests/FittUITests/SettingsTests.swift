@@ -146,6 +146,93 @@ struct SettingsTests {
         #expect(model.errorMessage == nil)
     }
 
+    private func screenState(_ model: AppModel) -> ScreenState<Biometrics> {
+        SettingsContent.screenState(
+            biometrics: model.biometrics, isMissing: model.hasNoBiometrics,
+            errorMessage: model.errorMessage, isOffline: model.isOffline)
+    }
+
+    @Test("a biometrics read the server fails is an error, not a user with none saved")
+    func loadFails() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        server.respond { _ in StubResponse(status: 500) }
+
+        await model.loadBiometrics()
+
+        #expect(model.biometrics == nil)
+        #expect(!model.hasNoBiometrics)
+        #expect(!model.isOffline)
+        #expect(model.errorMessage == "The server gave an unexpected answer. Try again.")
+        #expect(screenState(model) == .failed("The server gave an unexpected answer. Try again."))
+    }
+
+    @Test("a biometrics read with no connection is offline, not a user with none saved")
+    func loadOffline() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        server.respond(nil)
+
+        await model.loadBiometrics()
+
+        #expect(model.biometrics == nil)
+        #expect(!model.hasNoBiometrics)
+        #expect(model.isOffline)
+        #expect(model.errorMessage == "Cannot reach the server. Check the connection.")
+        #expect(screenState(model) == .offline)
+    }
+
+    @Test("trying again after a failed read reaches the biometrics and clears the error")
+    func retryAfterFailure() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        server.respond(nil)
+        await model.loadBiometrics()
+        #expect(screenState(model) == .offline)
+        let metricJSON = metricJSON
+        server.respond { _ in .json(200, metricJSON) }
+
+        await model.loadBiometrics()
+
+        #expect(model.biometrics == metric)
+        #expect(!model.hasNoBiometrics)
+        #expect(!model.isOffline)
+        #expect(model.errorMessage == nil)
+        #expect(screenState(model) == .content(metric))
+    }
+
+    @Test("trying again after a failed read reaches a user with none saved")
+    func retryReachesEmpty() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        server.respond { _ in StubResponse(status: 500) }
+        await model.loadBiometrics()
+        let notFound = notFound
+        server.respond { _ in .json(404, notFound) }
+
+        await model.loadBiometrics()
+
+        #expect(model.errorMessage == nil)
+        #expect(screenState(model) == .empty)
+    }
+
+    @Test("a refresh that fails keeps the loaded biometrics on screen")
+    func refreshFails() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        let metricJSON = metricJSON
+        server.respond { _ in .json(200, metricJSON) }
+        await model.loadBiometrics()
+        server.respond(nil)
+
+        await model.loadBiometrics()
+
+        #expect(model.biometrics == metric)
+        #expect(!model.hasNoBiometrics)
+        #expect(model.isOffline)
+        #expect(screenState(model) == .content(metric))
+    }
+
     @Test("a biometrics read cancelled with its screen shows no error")
     func cancelledLoadIsQuiet() async {
         let server = StubServer()
@@ -162,9 +249,7 @@ struct SettingsTests {
         #expect(model.errorMessage == nil)
         #expect(!model.isOffline)
         #expect(!model.hasNoBiometrics)
-        #expect(SettingsContent.screenState(
-            biometrics: model.biometrics, isMissing: model.hasNoBiometrics,
-            errorMessage: model.errorMessage, isOffline: model.isOffline) == .loading)
+        #expect(screenState(model) == .loading)
     }
 
     @Test("a cancelled refresh leaves the loaded biometrics with no error")
