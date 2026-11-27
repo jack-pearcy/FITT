@@ -25,7 +25,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -38,12 +37,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 // Service unit test for WorkoutSessionServiceImpl. Covers all 10 public
-// methods plus the two loadAndVerify failure branches (404 not found,
-// 403 owned by someone else). The service constructs hierarchical
+// methods plus the loadAndVerify failure branch (not found, which is also
+// the answer for a session owned by someone else). The service constructs hierarchical
 // entity graphs (session has entries, entries have sets) so several
 // tests use ArgumentCaptor to walk the saved object structure, and
 // several use ReflectionTestUtils to assign IDs that would normally be
@@ -53,7 +53,6 @@ import static org.mockito.Mockito.when;
 class WorkoutSessionServiceImplTest {
 
     private static final Long OWNER_USER_ID = 42L;
-    private static final Long OTHER_USER_ID = 99L;
     private static final Long SESSION_ID = 100L;
     private static final Long EXERCISE_ID = 5L;
     private static final Long ENTRY_ID = 300L;
@@ -138,6 +137,102 @@ class WorkoutSessionServiceImplTest {
     }
 
     @Test
+    void createSession_whenTheUniqueKeyRefusesACopyOfTheSameStart_returnsTheSessionThatWon() {
+        // The same start sent twice at the same moment: both see no stored session,
+        // one insert wins, and the other reads the winner by its client id. It gets
+        // the session back, not the open-session refusal.
+        String clientId = "0b9f6c1e-5a1d-4a57-9f0e-3d2c1b4a5e6f";
+        WorkoutSessionEntity winner = sessionWithId(SESSION_ID);
+        winner.setClientId(clientId);
+        when(sessionRepository.findByOwnerUserIdAndClientId(OWNER_USER_ID, clientId))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(winner));
+        when(sessionRepository.save(any(WorkoutSessionEntity.class)))
+                .thenThrow(new DataIntegrityViolationException("Duplicate entry for key uk_workout_sessions_owner_client"));
+
+        WorkoutSessionResponse response = service.createSession(OWNER_USER_ID,
+                new CreateWorkoutSessionRequest(Instant.parse("2026-05-26T18:00:00Z"), null, null, clientId));
+
+        assertThat(response.id()).isEqualTo(SESSION_ID);
+    }
+
+    @Test
+    void createSession_whenTheUniqueKeyRefusesAStartWithItsOwnClientId_refusesWithTheSessionThatWon() {
+        // A phone and a watch start at the same moment, each with its own client
+        // id. Both see no open session, one insert wins, and the other finds no
+        // session under its own id. It is told which session is open, the same
+        // answer a start with no id gets. It is not handed the other device's
+        // session as if it were its own.
+        String clientId = "0b9f6c1e-5a1d-4a57-9f0e-3d2c1b4a5e6f";
+        WorkoutSessionEntity winner = sessionWithId(SESSION_ID);
+        winner.setClientId("7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f");
+        when(sessionRepository.findByOwnerUserIdAndClientId(OWNER_USER_ID, clientId))
+                .thenReturn(Optional.empty());
+        when(sessionRepository.findFirstByOwnerUserIdAndFinishedAtIsNullOrderByStartedAtDescIdDesc(OWNER_USER_ID))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(winner));
+        when(sessionRepository.save(any(WorkoutSessionEntity.class)))
+                .thenThrow(new DataIntegrityViolationException("Duplicate entry for key uk_workout_sessions_open_owner"));
+
+        assertThatThrownBy(() -> service.createSession(OWNER_USER_ID,
+                new CreateWorkoutSessionRequest(Instant.parse("2026-05-26T18:00:00Z"), null, null, clientId)))
+                .isInstanceOf(OpenSessionExistsException.class)
+                .extracting(ex -> ((OpenSessionExistsException) ex).getOpenSessionId())
+                .isEqualTo(SESSION_ID);
+
+        // Once inside the insert and once after the key refused it.
+        verify(sessionRepository, times(2)).findByOwnerUserIdAndClientId(OWNER_USER_ID, clientId);
+    }
+
+    @Test
+    void createSession_storesTheClientIdInLowerCase() {
+        ArgumentCaptor<WorkoutSessionEntity> captor = ArgumentCaptor.forClass(WorkoutSessionEntity.class);
+        when(sessionRepository.save(any(WorkoutSessionEntity.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.createSession(OWNER_USER_ID, new CreateWorkoutSessionRequest(
+                Instant.parse("2026-05-26T18:00:00Z"), null, null, "0B9F6C1E-5A1D-4A57-9F0E-3D2C1B4A5E6F"));
+
+        verify(sessionRepository).save(captor.capture());
+        assertThat(captor.getValue().getClientId()).isEqualTo("0b9f6c1e-5a1d-4a57-9f0e-3d2c1b4a5e6f");
+    }
+
+    @Test
+    void addExerciseEntry_withAClientIdAlreadyInTheSession_addsNothingAndSavesNothing() {
+        String clientId = "0b9f6c1e-5a1d-4a57-9f0e-3d2c1b4a5e6f";
+        WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
+        ExerciseEntryEntity existing = new ExerciseEntryEntity(exerciseWithId(EXERCISE_ID), 0);
+        existing.setClientId(clientId);
+        session.addExerciseEntry(existing);
+        when(sessionRepository.findByIdAndOwnerUserIdForUpdate(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.of(session));
+
+        WorkoutSessionResponse response = service.addExerciseEntry(OWNER_USER_ID, SESSION_ID,
+                new AddExerciseEntryRequest(EXERCISE_ID, clientId));
+
+        assertThat(response.exerciseEntries()).hasSize(1);
+        verify(sessionRepository, never()).save(any(WorkoutSessionEntity.class));
+    }
+
+    @Test
+    void logSet_withAClientIdAlreadyInTheEntry_logsNothingAndSavesNothing() {
+        String clientId = "0b9f6c1e-5a1d-4a57-9f0e-3d2c1b4a5e6f";
+        WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
+        ExerciseEntryEntity entry = new ExerciseEntryEntity(exerciseWithId(EXERCISE_ID), 0);
+        ReflectionTestUtils.setField(entry, "id", ENTRY_ID);
+        SetEntryEntity existing = new SetEntryEntity(1, new BigDecimal("100"), 5, null);
+        existing.setClientId(clientId);
+        entry.addSetEntry(existing);
+        session.addExerciseEntry(entry);
+        when(sessionRepository.findByIdAndOwnerUserIdForUpdate(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.of(session));
+
+        service.logSet(OWNER_USER_ID, SESSION_ID, ENTRY_ID,
+                new LogSetRequest(5, new BigDecimal("100"), null, clientId, null));
+
+        assertThat(entry.getSetEntries()).hasSize(1);
+        verify(sessionRepository, never()).save(any(WorkoutSessionEntity.class));
+    }
+
+    @Test
     void createSession_whenTheInsertFailsForAnotherReason_passesTheErrorOn() {
         DataIntegrityViolationException failure = new DataIntegrityViolationException("Some other key");
         when(sessionRepository.save(any(WorkoutSessionEntity.class))).thenThrow(failure);
@@ -193,27 +288,28 @@ class WorkoutSessionServiceImplTest {
 
     @Test
     void getSession_notFound_throwsWorkoutSessionNotFoundException() {
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.empty());
+        when(sessionRepository.findByIdAndOwnerUserId(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getSession(OWNER_USER_ID, SESSION_ID))
                 .isInstanceOf(WorkoutSessionNotFoundException.class);
     }
 
     @Test
-    void getSession_notOwnedByCaller_throwsAccessDeniedException() {
-        // Session exists but belongs to OTHER_USER_ID. loadAndVerify must
-        // throw before returning the session to any further service logic.
-        WorkoutSessionEntity foreignSession = sessionFor(OTHER_USER_ID);
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(foreignSession));
+    void getSession_readsThroughTheOwner_soAnotherUsersSessionIsNotFound() {
+        // The session exists but belongs to another user, so the owner-scoped
+        // read finds nothing. The id alone is never looked up.
+        when(sessionRepository.findByIdAndOwnerUserId(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getSession(OWNER_USER_ID, SESSION_ID))
-                .isInstanceOf(AccessDeniedException.class);
+                .isInstanceOf(WorkoutSessionNotFoundException.class);
+
+        verify(sessionRepository, never()).findById(any());
     }
 
     @Test
     void finishSession_setsFinishedAtTimestampAndSaves() {
         WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdAndOwnerUserId(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -228,7 +324,7 @@ class WorkoutSessionServiceImplTest {
     @Test
     void updateNotes_storesTheTextWithoutSurroundingWhitespace() {
         WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdAndOwnerUserId(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -243,7 +339,7 @@ class WorkoutSessionServiceImplTest {
     void updateNotes_blankOrNull_clearsTheNotes() {
         WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
         session.setNotes("Old notes");
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdAndOwnerUserId(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -256,21 +352,21 @@ class WorkoutSessionServiceImplTest {
     }
 
     @Test
-    void updateNotes_notOwnedByCaller_throwsAccessDeniedAndSavesNothing() {
-        WorkoutSessionEntity session = sessionFor(OTHER_USER_ID);
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+    void updateNotes_onAnotherUsersSession_isNotFoundAndSavesNothing() {
+        when(sessionRepository.findByIdAndOwnerUserId(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.updateNotes(OWNER_USER_ID, SESSION_ID,
                 new UpdateSessionNotesRequest("x")))
-                .isInstanceOf(AccessDeniedException.class);
+                .isInstanceOf(WorkoutSessionNotFoundException.class);
 
+        verify(sessionRepository, never()).findById(any());
         verify(sessionRepository, never()).save(any(WorkoutSessionEntity.class));
     }
 
     @Test
     void deleteSession_ownedByCaller_callsRepositoryDelete() {
         WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdAndOwnerUserId(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.of(session));
 
         service.deleteSession(OWNER_USER_ID, SESSION_ID);
 
@@ -285,7 +381,7 @@ class WorkoutSessionServiceImplTest {
         session.addExerciseEntry(new ExerciseEntryEntity(existingExercise, 0));
 
         ExerciseEntity newExercise = exerciseWithId(EXERCISE_ID);
-        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdAndOwnerUserIdForUpdate(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.of(session));
         when(exerciseRepository.findAccessibleById(EXERCISE_ID, OWNER_USER_ID)).thenReturn(Optional.of(newExercise));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -307,7 +403,7 @@ class WorkoutSessionServiceImplTest {
         session.addExerciseEntry(new ExerciseEntryEntity(exerciseWithId(EXERCISE_ID + 1), 1));
         session.addExerciseEntry(new ExerciseEntryEntity(exerciseWithId(EXERCISE_ID + 2), 2));
 
-        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdAndOwnerUserIdForUpdate(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.of(session));
         when(exerciseRepository.findAccessibleById(EXERCISE_ID, OWNER_USER_ID))
                 .thenReturn(Optional.of(exerciseWithId(EXERCISE_ID)));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
@@ -321,7 +417,7 @@ class WorkoutSessionServiceImplTest {
     @Test
     void addExerciseEntry_firstEntryOfSession_startsAtZero() {
         WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
-        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdAndOwnerUserIdForUpdate(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.of(session));
         when(exerciseRepository.findAccessibleById(EXERCISE_ID, OWNER_USER_ID))
                 .thenReturn(Optional.of(exerciseWithId(EXERCISE_ID)));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
@@ -335,7 +431,7 @@ class WorkoutSessionServiceImplTest {
     @Test
     void addExerciseEntry_exerciseNotInLibrary_throwsExerciseNotFoundException() {
         WorkoutSessionEntity session = sessionFor(OWNER_USER_ID);
-        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdAndOwnerUserIdForUpdate(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.of(session));
         when(exerciseRepository.findAccessibleById(EXERCISE_ID, OWNER_USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() ->
@@ -355,7 +451,7 @@ class WorkoutSessionServiceImplTest {
         ReflectionTestUtils.setField(entry, "id", ENTRY_ID);
         session.addExerciseEntry(entry);
 
-        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdAndOwnerUserIdForUpdate(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -438,7 +534,7 @@ class WorkoutSessionServiceImplTest {
         entry.addSetEntry(new SetEntryEntity(3, new BigDecimal("100"), 8, null));
         session.addExerciseEntry(entry);
 
-        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdAndOwnerUserIdForUpdate(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -458,7 +554,7 @@ class WorkoutSessionServiceImplTest {
         entry.addSetEntry(new SetEntryEntity(1, new BigDecimal("100"), 10, null));
         session.addExerciseEntry(entry);
 
-        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdAndOwnerUserIdForUpdate(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -487,7 +583,7 @@ class WorkoutSessionServiceImplTest {
         entry.addSetEntry(set);
         session.addExerciseEntry(entry);
 
-        when(sessionRepository.findByIdForUpdate(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.findByIdAndOwnerUserIdForUpdate(SESSION_ID, OWNER_USER_ID)).thenReturn(Optional.of(session));
         when(sessionRepository.save(any(WorkoutSessionEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 

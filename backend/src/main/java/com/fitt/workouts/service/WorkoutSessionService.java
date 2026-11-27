@@ -2,6 +2,7 @@ package com.fitt.workouts.service;
 
 import com.fitt.workouts.dto.AddExerciseEntryRequest;
 import com.fitt.workouts.dto.CreateWorkoutSessionRequest;
+import com.fitt.workouts.dto.FinishSessionRequest;
 import com.fitt.workouts.dto.LogSetRequest;
 import com.fitt.workouts.dto.UpdateSessionNotesRequest;
 import com.fitt.workouts.dto.WorkoutSessionResponse;
@@ -19,6 +20,10 @@ public interface WorkoutSessionService {
     // The session the user started and has not finished, if there is one.
     Optional<WorkoutSessionResponse> getOpenSession(Long ownerUserId);
 
+    // The request may be null: a finish with no body uses the server's clock.
+    WorkoutSessionResponse finishSession(Long ownerUserId, Long sessionId, FinishSessionRequest request);
+
+    // A finish with no body.
     WorkoutSessionResponse finishSession(Long ownerUserId, Long sessionId);
 
     WorkoutSessionResponse updateNotes(Long ownerUserId, Long sessionId, UpdateSessionNotesRequest request);

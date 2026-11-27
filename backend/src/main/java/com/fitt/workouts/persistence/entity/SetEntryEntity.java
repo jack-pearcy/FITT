@@ -12,12 +12,17 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 @Entity
 // The unique key is the last line of defence against two requests giving two sets
 // the same number. The service takes a row lock first, so it should never fire.
-@Table(name = "set_entries", uniqueConstraints = @UniqueConstraint(
-        name = "uk_set_entries_entry_number", columnNames = {"exercise_entry_id", "set_number"}))
+// The second key stops one logged set being stored twice when it is sent twice.
+@Table(name = "set_entries", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_set_entries_entry_number",
+                columnNames = {"exercise_entry_id", "set_number"}),
+        @UniqueConstraint(name = "uk_set_entries_entry_client",
+                columnNames = {"exercise_entry_id", "client_id"})})
 public class SetEntryEntity {
 
     @Id
@@ -47,6 +52,14 @@ public class SetEntryEntity {
     @Column(nullable = false)
     private boolean completed = false;
 
+    // A random UUID the app made for this set, in lower case. Null when none was sent.
+    @Column(name = "client_id", length = 36, columnDefinition = "char(36)")
+    private String clientId;
+
+    // When the set was done on the device. Null when the client sent no time.
+    @Column(name = "performed_at")
+    private Instant performedAt;
+
     protected SetEntryEntity() {}
 
     public SetEntryEntity(int setNumber, BigDecimal weight, Integer reps, BigDecimal rpe) {
@@ -63,6 +76,8 @@ public class SetEntryEntity {
     public Integer getReps() { return reps; }
     public BigDecimal getRpe() { return rpe; }
     public boolean isCompleted() { return completed; }
+    public String getClientId() { return clientId; }
+    public Instant getPerformedAt() { return performedAt; }
 
     // Called by ExerciseEntryEntity.addSetEntry() to sync both sides.
     void setExerciseEntry(ExerciseEntryEntity exerciseEntry) {
@@ -73,4 +88,6 @@ public class SetEntryEntity {
     public void setReps(Integer reps) { this.reps = reps; }
     public void setRpe(BigDecimal rpe) { this.rpe = rpe; }
     public void setCompleted(boolean completed) { this.completed = completed; }
+    public void setClientId(String clientId) { this.clientId = clientId; }
+    public void setPerformedAt(Instant performedAt) { this.performedAt = performedAt; }
 }
