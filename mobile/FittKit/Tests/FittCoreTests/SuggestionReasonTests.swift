@@ -135,4 +135,41 @@ struct SuggestionReasonTests {
         #expect(suggestion(.addReps, weight: "0", reps: 12, reasoning: "Keep 0 and work toward 12 reps.").reasonText(units: .imperial)
             == "Keep 0 and work toward 12 reps.")
     }
+
+    // MARK: What the workout screen shows
+
+    @Test("a reason with a code is shown in the user's unit, never as the server's text")
+    func shownReasonUsesTheFormatter() {
+        let suggestion = suggestion(
+            .increaseWeight, weight: "102.5", reps: 8,
+            reasoning: "Increase weight to 102.5 and reset to 8 reps")
+
+        #expect(suggestion.shownReason(units: .imperial)
+            == "You reached the top of the rep range on every set. Go up from 220.5 lb to 226 lb and start again at 8 reps.")
+        #expect(suggestion.shownReason(units: .metric)
+            == "You reached the top of the rep range on every set. Go up from 100 kg to 102.5 kg and start again at 8 reps.")
+    }
+
+    @Test("every reason with a code is shown to a user who works in pounds", arguments: SuggestionReason.allCases)
+    func codedReasonsAreShownInPounds(code: SuggestionReason) {
+        let suggestion = suggestion(code, weight: "102.5", reps: 8, rpe: "7.5", week: 2)
+
+        #expect(suggestion.shownReason(units: .imperial) == suggestion.reasonText(units: .imperial))
+    }
+
+    @Test("the server's text in kilograms is hidden from a user in pounds who has a target")
+    func uncodedReasonHiddenInPounds() {
+        let older = suggestion(nil, weight: "102.5", reps: 8, reasoning: "Increase weight to 102.5 and reset to 8 reps")
+
+        #expect(older.shownReason(units: .imperial) == nil)
+        #expect(older.shownReason(units: .metric) == "Increase weight to 102.5 and reset to 8 reps")
+    }
+
+    @Test("the server's text is shown in pounds when there is no target for it to clash with")
+    func uncodedReasonShownWithoutTarget() {
+        let older = suggestion(nil, weight: "0", previous: nil, reasoning: "No history yet.")
+
+        #expect(older.shownReason(units: .imperial) == "No history yet.")
+        #expect(older.shownReason(units: .metric) == "No history yet.")
+    }
 }

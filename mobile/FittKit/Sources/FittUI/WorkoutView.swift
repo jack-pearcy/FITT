@@ -111,11 +111,8 @@ struct WorkoutView: View {
                                     Text("Suggested: \(targetText)")
                                         .accessibilityIdentifier("suggestion.\(entry.exercise.id)")
                                 }
-                                // Without a reason code the text is the server's, with its
-                                // weights in kilograms, so it is left out for a user who
-                                // works in pounds and has a target.
-                                if suggestion.reasonCode != nil || model.units == .metric || !suggestion.hasTarget {
-                                    Text(suggestion.reasonText(units: model.units))
+                                if let reason = suggestion.shownReason(units: model.units) {
+                                    Text(reason)
                                         .accessibilityIdentifier("reason.\(entry.exercise.id)")
                                 }
                             }

@@ -11,6 +11,15 @@ extension SuggestionReason {
 }
 
 extension ProgressionSuggestion {
+    /// The reason to put under a suggestion, or nil when none is to be shown.
+    /// Without a reason code the only text is the server's, with its weights
+    /// in kilograms, so it is left out for a user who works in pounds and has
+    /// a target shown in pounds above it.
+    public func shownReason(units: UnitsPreference) -> String? {
+        guard reasonCode != nil || units == .metric || !hasTarget else { return nil }
+        return reasonText(units: units)
+    }
+
     /// Why the server suggests what it does, with every weight in the unit the
     /// user works in. The server's own text has its weights in kilograms, so it
     /// is used only when there is nothing to write from: an older server, a
