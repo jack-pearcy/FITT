@@ -39,6 +39,7 @@ import com.fitt.identity.service.exception.MfaStateException;
 import com.fitt.identity.service.exception.MfaUnavailableException;
 import com.fitt.workouts.service.exception.ExerciseEntryNotFoundException;
 import com.fitt.workouts.service.exception.SetEntryNotFoundException;
+import com.fitt.workouts.service.exception.InvalidSessionEditException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -111,6 +112,15 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setTitle("Open Session Exists");
         problem.setProperty("openSessionId", ex.getOpenSessionId());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+    }
+
+    // 400 under the field, for a session edit that does not fit the session.
+    @ExceptionHandler(InvalidSessionEditException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidSessionEdit(InvalidSessionEditException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation failed");
+        problem.setTitle("Bad Request");
+        problem.setProperty("errors", Map.of(ex.getField(), ex.getMessage()));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
     }
 
     @ExceptionHandler(BodyWeightEntryNotFoundException.class)
