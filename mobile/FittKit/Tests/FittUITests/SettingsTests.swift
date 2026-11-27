@@ -424,6 +424,113 @@ struct SettingsTests {
         #expect(model.isOffline)
     }
 
+    // MARK: One write at a time
+
+    @Test("a second units change while the first is being saved sends nothing")
+    func setUnitsIgnoresSecondTap() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        let before = server.requests.count
+        server.respond { _ in StubResponse(status: 204) }
+
+        async let first: Void = model.setUnits(.imperial)
+        async let second: Void = model.setUnits(.imperial)
+        _ = await (first, second)
+
+        #expect(calls(server, after: before) == ["PUT /api/users/7/identity/biometrics/units"])
+        #expect(model.units == .imperial)
+        #expect(!model.isWorking)
+    }
+
+    @Test("a second tap on Save while body measures are being saved sends nothing")
+    func updateBiometricsIgnoresSecondTap() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        let before = server.requests.count
+        server.respond { _ in StubResponse(status: 204) }
+        var draft = BiometricsDraft(biometrics: metric)
+        draft.weight = "83"
+        let changed = draft
+
+        async let first = model.updateBiometrics(changed)
+        async let second = model.updateBiometrics(changed)
+        let results = await [first, second]
+
+        #expect(results.filter { $0 }.count == 1)
+        #expect(calls(server, after: before) == ["POST /api/users/7/identity/onboarding/biometrics"])
+        #expect(!model.isWorking)
+    }
+
+    /// Answers a request matching `method` with a 204, but only after `during`
+    /// has run, so a test can read the model and try another change while the
+    /// first is still out. Any other request is answered at once.
+    private func holdAnswer(
+        _ server: StubServer, method: String, during: @escaping @MainActor @Sendable () async -> Void
+    ) {
+        server.respond { request in
+            var answer = StubResponse(status: 204)
+            if request.method == method {
+                answer.before = during
+            }
+            return answer
+        }
+    }
+
+    @Test("while a units change is out the model is busy, and body measures are not saved over it")
+    func saveRefusedDuringUnitsChange() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        let metricJSON = metricJSON
+        server.respond { _ in .json(200, metricJSON) }
+        await model.loadBiometrics()
+        let before = server.requests.count
+        // An edit form opened before the change: it would post METRIC over
+        // the IMPERIAL the change is storing.
+        let stale = BiometricsDraft(biometrics: metric)
+        let busy = Locked<Bool?>(nil)
+        let saved = Locked<Bool?>(nil)
+        holdAnswer(server, method: "PUT") {
+            busy.withLock { $0 = model.isWorking }
+            let result = await model.updateBiometrics(stale)
+            saved.withLock { $0 = result }
+        }
+
+        await model.setUnits(.imperial)
+
+        #expect(busy.withLock { $0 } == true)
+        #expect(saved.withLock { $0 } == false)
+        #expect(calls(server, after: before) == ["PUT /api/users/7/identity/biometrics/units"])
+        #expect(model.units == .imperial)
+        #expect(model.biometrics == metric.with(units: .imperial))
+        #expect(!model.isWorking)
+    }
+
+    @Test("while body measures are being saved the model is busy, and units are not changed")
+    func unitsRefusedDuringSave() async {
+        let server = StubServer()
+        let model = await signedInModel(server)
+        let before = server.requests.count
+        var draft = BiometricsDraft(biometrics: metric)
+        draft.weight = "83"
+        let busy = Locked<Bool?>(nil)
+        let unitsAfterTry = Locked<UnitsPreference?>(nil)
+        holdAnswer(server, method: "POST") {
+            busy.withLock { $0 = model.isWorking }
+            await model.setUnits(.imperial)
+            unitsAfterTry.withLock { $0 = model.units }
+        }
+
+        let saved = await model.updateBiometrics(draft)
+
+        #expect(saved)
+        #expect(busy.withLock { $0 } == true)
+        #expect(unitsAfterTry.withLock { $0 } == .metric)
+        #expect(calls(server, after: before) == ["POST /api/users/7/identity/onboarding/biometrics"])
+        #expect(model.units == .metric)
+        #expect(model.biometrics?.weightKg == 83)
+        #expect(!model.isWorking)
+    }
+
     /// Answers the next request matching `method` only after the user has
     /// signed out, as a slow answer that lands after Sign Out does.
     private func signOutBeforeAnswering(
