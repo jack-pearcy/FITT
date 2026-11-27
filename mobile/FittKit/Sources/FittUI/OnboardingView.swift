@@ -70,7 +70,8 @@ struct BiometricsForm: View {
             }
 
             Section {
-                LabeledContent("Height") {
+                // The unit sits in the label: a filled field hides its placeholder.
+                LabeledContent(draft.units == .metric ? "Height (cm)" : "Height (ft, in)") {
                     if draft.units == .metric {
                         TextField("cm", text: $draft.height)
                             .numberEntry(decimal: true)
@@ -91,7 +92,7 @@ struct BiometricsForm: View {
                 }
                 FieldError(field: "heightCm")
 
-                LabeledContent("Weight") {
+                LabeledContent(draft.units == .metric ? "Weight (kg)" : "Weight (lb)") {
                     TextField(draft.units == .metric ? "kg" : "lb", text: $draft.weight)
                         .numberEntry(decimal: true)
                         .focused($focus, equals: .weight)
