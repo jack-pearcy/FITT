@@ -7,6 +7,9 @@ import java.time.Instant;
 // before the year 2000, and at most 24 hours after the server's clock. The day
 // of slack keeps a phone with a slightly wrong clock working, and the lower
 // bound keeps a nonsense year out of the DATETIME column.
+// A session's finish time has a tighter upper bound, the server's clock itself,
+// because the plan rotation orders sessions by it. WorkoutSessionServiceImpl
+// applies it.
 // A time outside the bound is dropped, not refused. The device would send the
 // same time on every retry, so a 400 would never clear: the set would never be
 // stored and the session could never be finished.

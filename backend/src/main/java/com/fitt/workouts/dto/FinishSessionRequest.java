@@ -13,8 +13,9 @@ public record FinishSessionRequest(
         String clientId,
 
         // When the user finished on the device. The server's clock is used when
-        // this is missing, and also when it is outside the bounds in DeviceTimes
-        // or before the start. A wrong device clock is never a 400 here: the
-        // retry would carry the same time and the session would stay open.
+        // this is missing, and also when it is before the start, before the year
+        // 2000 or after the server's clock. A wrong device clock is never a 400
+        // here: the retry would carry the same time and the session would stay
+        // open.
         Instant finishedAt
 ) {}

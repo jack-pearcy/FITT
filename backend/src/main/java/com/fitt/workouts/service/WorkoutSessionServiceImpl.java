@@ -311,20 +311,33 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     }
 
     // The device's finish time when it sent one, so a workout finished offline is
-    // not stretched to the moment the phone got a connection. Both the start and
-    // the finish come from a clock the server does not control, so a finish that
-    // falls before the start, or outside the bounds in DeviceTimes, is not
-    // refused: a refusal would repeat on every retry and leave the user with an
-    // open session that blocks every new start. The server's clock is used in
-    // its place, and the start time itself when even that is earlier. A finish
-    // is never stored before its start.
+    // not stretched to the moment the phone got a connection. Kept only when it
+    // is not before the start, not before the lower bound in DeviceTimes, and
+    // not after the server's clock. In every other case the server's clock is
+    // stored.
+    //
+    // Never after the server's clock, because a finish cannot be later than the
+    // moment the server hears of it, and because finished_at is read as real
+    // time: the plan rotation takes the newest finish as the last day trained,
+    // and the trained-today check looks for a finish inside today. A finish
+    // stored ahead of the clock would stay the newest one until real time passed
+    // it, and would not count as today.
+    //
+    // Never refused, because both times come from a clock the server does not
+    // control. A refusal would repeat on every retry and leave the user with an
+    // open session that blocks every new start.
+    //
+    // A start is stored as the device sent it, as it was before finish took a
+    // time. When that start is ahead of the server's clock, the finish is stored
+    // before it. The pair is wrong either way, and the finish is the half the
+    // rotation and the trained-today check read.
     private static Instant finishTime(Instant startedAt, Instant fromDevice) {
         Instant now = Instant.now();
         Instant usable = DeviceTimes.orNullWhenOutOfBounds(fromDevice, now);
-        if (usable != null && !usable.isBefore(startedAt)) {
+        if (usable != null && !usable.isBefore(startedAt) && !usable.isAfter(now)) {
             return usable;
         }
-        return now.isBefore(startedAt) ? startedAt : now;
+        return now;
     }
 
     // Every session is read through the owner. Another user's session reads as

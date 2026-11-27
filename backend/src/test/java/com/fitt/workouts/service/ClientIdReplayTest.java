@@ -1,15 +1,21 @@
 package com.fitt.workouts.service;
 
+import com.fitt.workouts.domain.SplitType;
 import com.fitt.workouts.dto.AddExerciseEntryRequest;
+import com.fitt.workouts.dto.CreateWorkoutPlanDayRequest;
+import com.fitt.workouts.dto.CreateWorkoutPlanRequest;
 import com.fitt.workouts.dto.CreateWorkoutSessionRequest;
 import com.fitt.workouts.dto.FinishSessionRequest;
 import com.fitt.workouts.dto.LogSetRequest;
+import com.fitt.workouts.dto.NextLiftResponse;
 import com.fitt.workouts.dto.SetEntryResponse;
 import com.fitt.workouts.dto.WorkoutSessionResponse;
 import com.fitt.workouts.persistence.entity.ExerciseEntity;
 import com.fitt.workouts.repository.ExerciseRepository;
 import com.fitt.workouts.service.exception.OpenSessionExistsException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -19,6 +25,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -39,6 +46,12 @@ class ClientIdReplayTest {
 
     @Autowired
     private WorkoutSessionService service;
+
+    @Autowired
+    private WorkoutPlanService planService;
+
+    @Autowired
+    private NextLiftService nextLiftService;
 
     @Autowired
     private ExerciseRepository exerciseRepository;
@@ -240,52 +253,61 @@ class ClientIdReplayTest {
         assertThat(service.getOpenSession(userId)).isEmpty();
     }
 
-    // The start time is ahead of the server's clock too, so neither the device's
-    // finish time nor the server's is usable. The session still finishes, at its
-    // start time, and a new start is possible afterwards.
+    // The start time is ahead of the server's clock, and the device's finish time
+    // is before that start. The session still finishes, on the server's clock
+    // and not at the start time, which has not come yet. A new start is possible
+    // afterwards.
     @Test
-    void finish_whenTheStartIsAheadOfEveryClock_finishesAtTheStartTime() {
+    void finish_whenTheStartIsAheadOfEveryClock_finishesOnTheServerClock() {
         long userId = 7315L;
         Instant startedAhead = Instant.now().plus(Duration.ofHours(2)).truncatedTo(ChronoUnit.SECONDS);
         WorkoutSessionResponse session = service.createSession(userId,
                 new CreateWorkoutSessionRequest(startedAhead, null, null, null));
+        Instant before = Instant.now().minusSeconds(1);
 
         service.finishSession(userId, session.id(),
                 new FinishSessionRequest(null, startedAhead.minus(Duration.ofHours(1))));
 
-        assertThat(service.getSession(userId, session.id()).finishedAt()).isEqualTo(startedAhead);
+        assertThat(service.getSession(userId, session.id()).finishedAt())
+                .isAfter(before)
+                .isBefore(Instant.now().plusSeconds(1));
         WorkoutSessionResponse next = service.createSession(userId, start(null));
         assertThat(next.id()).isNotEqualTo(session.id());
     }
 
     @Test
-    void finish_withNoBody_whenTheStartIsAheadOfTheServerClock_finishesAtTheStartTime() {
+    void finish_withNoBody_whenTheStartIsAheadOfTheServerClock_finishesOnTheServerClock() {
         long userId = 7316L;
         Instant startedAhead = Instant.now().plus(Duration.ofHours(2)).truncatedTo(ChronoUnit.SECONDS);
         WorkoutSessionResponse session = service.createSession(userId,
                 new CreateWorkoutSessionRequest(startedAhead, null, null, null));
+        Instant before = Instant.now().minusSeconds(1);
 
         service.finishSession(userId, session.id(), null);
 
-        assertThat(service.getSession(userId, session.id()).finishedAt()).isEqualTo(startedAhead);
+        assertThat(service.getSession(userId, session.id()).finishedAt())
+                .isAfter(before)
+                .isBefore(Instant.now().plusSeconds(1));
     }
 
     // A phone whose clock is set three days ahead. The start is taken as sent,
     // so the finish must go through too, on every retry, or the open session
-    // would block every new start. The device's finish time is outside the
-    // bound and the server's clock is before the start, so the start time is
-    // stored.
+    // would block every new start. The finish is stored on the server's clock:
+    // neither the device's finish time nor the start time has come yet.
     @Test
     void finish_fromAPhoneThreeDaysAhead_goesThrough_andANewStartIsPossible() {
         long userId = 7317L;
         Instant startedAhead = Instant.now().plus(Duration.ofHours(72)).truncatedTo(ChronoUnit.SECONDS);
         WorkoutSessionResponse session = service.createSession(userId,
                 new CreateWorkoutSessionRequest(startedAhead, null, null, null));
+        Instant before = Instant.now().minusSeconds(1);
 
         service.finishSession(userId, session.id(),
                 new FinishSessionRequest(null, startedAhead.plus(Duration.ofHours(1))));
 
-        assertThat(service.getSession(userId, session.id()).finishedAt()).isEqualTo(startedAhead);
+        assertThat(service.getSession(userId, session.id()).finishedAt())
+                .isAfter(before)
+                .isBefore(Instant.now().plusSeconds(1));
         assertThat(service.getOpenSession(userId)).isEmpty();
         WorkoutSessionResponse next = service.createSession(userId, start(null));
         assertThat(next.id()).isNotEqualTo(session.id());
@@ -305,15 +327,61 @@ class ClientIdReplayTest {
                 .isBefore(Instant.now().plusSeconds(1));
     }
 
+    // Any finish time ahead of the server's clock, by a minute or by most of a
+    // day. A finish cannot be later than the moment the server hears of it.
+    @ParameterizedTest
+    @ValueSource(longs = {1, 23 * 60})
+    void finish_withADeviceTimeAheadOfTheServerClock_finishesOnTheServerClock(long minutesAhead) {
+        long userId = 7340L + minutesAhead;
+        WorkoutSessionResponse session = service.createSession(userId, start(null));
+        Instant before = Instant.now().minusSeconds(1);
+
+        service.finishSession(userId, session.id(),
+                new FinishSessionRequest(null, Instant.now().plus(Duration.ofMinutes(minutesAhead))));
+
+        assertThat(service.getSession(userId, session.id()).finishedAt())
+                .isAfter(before)
+                .isBefore(Instant.now().plusSeconds(1));
+    }
+
+    // A finish from a moment ago is the device's to tell: it is kept as sent.
     @Test
-    void finish_withADeviceTimeADayAheadOrLess_keepsTheDeviceTime() {
+    void finish_withADeviceTimeJustBehindTheServerClock_keepsTheDeviceTime() {
         long userId = 7319L;
         WorkoutSessionResponse session = service.createSession(userId, start(null));
-        Instant fromDevice = Instant.now().plus(Duration.ofHours(23)).truncatedTo(ChronoUnit.SECONDS);
+        Instant fromDevice = Instant.now().minus(Duration.ofMinutes(1)).truncatedTo(ChronoUnit.SECONDS);
 
         service.finishSession(userId, session.id(), new FinishSessionRequest(null, fromDevice));
 
         assertThat(service.getSession(userId, session.id()).finishedAt()).isEqualTo(fromDevice);
+    }
+
+    // The plan rotation and the trained-today check both read the finish time
+    // as real time. A phone whose clock runs ahead, by less than a day or by
+    // three days, finishes the first day of a three-day plan. That counts as
+    // trained today. Then the clock is corrected and the second day is trained.
+    // The third day comes next: the first session's finish must not sort after
+    // the second one's and hand the user the second day again.
+    @ParameterizedTest
+    @ValueSource(longs = {20, 72})
+    void aFinishFromAPhoneWhoseClockRunsAhead_countsAsToday_andThePlanMovesOn(long hoursAhead) {
+        long userId = 7350L + hoursAhead;
+        long planId = activeThreeDayPlan(userId);
+        Instant phoneClock = Instant.now().plus(Duration.ofHours(hoursAhead));
+        WorkoutSessionResponse first = service.createSession(userId,
+                new CreateWorkoutSessionRequest(phoneClock, planId, null, null));
+        service.finishSession(userId, first.id(),
+                new FinishSessionRequest(null, phoneClock.plus(Duration.ofHours(1))));
+
+        NextLiftResponse afterFirst = nextLiftService.getNextLift(userId);
+        assertThat(afterFirst.alreadyTrainedToday()).isTrue();
+        assertThat(afterFirst.dayNumber()).isEqualTo(2);
+
+        WorkoutSessionResponse second = service.createSession(userId,
+                new CreateWorkoutSessionRequest(Instant.now(), planId, null, null));
+        service.finishSession(userId, second.id(), null);
+
+        assertThat(nextLiftService.getNextLift(userId).dayNumber()).isEqualTo(3);
     }
 
     // A phone whose clock was reset to before 2000 for the whole workout.
@@ -354,6 +422,15 @@ class ClientIdReplayTest {
                         tuple(5, null),
                         tuple(6, null),
                         tuple(7, inside));
+    }
+
+    private long activeThreeDayPlan(long userId) {
+        long planId = planService.createPlan(userId, new CreateWorkoutPlanRequest("Replay plan", 3, SplitType.PPL,
+                List.of(new CreateWorkoutPlanDayRequest(0, "Push", List.of()),
+                        new CreateWorkoutPlanDayRequest(1, "Pull", List.of()),
+                        new CreateWorkoutPlanDayRequest(2, "Legs", List.of())))).id();
+        planService.activatePlan(userId, planId);
+        return planId;
     }
 
     private static CreateWorkoutSessionRequest start(String clientId) {
