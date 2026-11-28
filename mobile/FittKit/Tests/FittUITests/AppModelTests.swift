@@ -1350,6 +1350,43 @@ struct AppModelTests {
         #expect(model.activeSession?.id == 12)
     }
 
+    @Test("the session check says whether the server answered it")
+    func sessionCheckAnswers() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        server.respond { _ in .json(200, "[]") }
+        #expect(await model.loadActiveSession())
+
+        server.respond { _ in StubResponse(status: 500) }
+        #expect(await model.loadActiveSession() == false)
+    }
+
+    @Test("a session check cancelled with its tab is not taken as an answer")
+    func cancelledSessionCheck() async {
+        let server = StubServer()
+        let model = await signedInModel(server, biometrics: true, goals: true)
+        let open = sessionJSON()
+        // The answer is held until the check is cancelled, so the test does not
+        // depend on whether the task started before the cancel reached it.
+        let (held, release) = AsyncStream<Void>.makeStream()
+        server.respond { _ in
+            var stub = StubResponse.json(200, "[\(open)]")
+            stub.before = { for await _ in held {} }
+            return stub
+        }
+
+        // Cancelled while out, as SwiftUI cancels the task of a tab the user has left.
+        let task = Task { await model.loadActiveSession() }
+        task.cancel()
+        let answered = await task.value
+        release.finish()
+
+        // No error is shown, so the lack of one cannot stand for an answer.
+        #expect(model.errorMessage == nil)
+        #expect(model.activeSession == nil)
+        #expect(!answered)
+    }
+
     @Test("with every session finished there is no workout in progress")
     func noActiveSession() async {
         let server = StubServer()

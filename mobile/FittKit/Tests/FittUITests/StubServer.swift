@@ -7,6 +7,9 @@ struct StubResponse: Sendable {
     var status: Int
     var headers: [String: String] = [:]
     var body: String = ""
+    /// When set, the answer is held back until this has run, so a test can
+    /// send and finish another request while this one is still out.
+    var before: (@MainActor @Sendable () async -> Void)?
 
     static func json(_ status: Int, _ body: String) -> StubResponse {
         StubResponse(status: status, headers: ["Content-Type": "application/json"], body: body)
@@ -86,6 +89,16 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
             return
         }
         let stub = handler(recorded)
+        guard let before = stub.before else { return answer(stub, url: url) }
+        // Off the loading thread, which the request made by `before` needs.
+        let finish: @Sendable () -> Void = { self.answer(stub, url: url) }
+        Task {
+            await before()
+            finish()
+        }
+    }
+
+    private func answer(_ stub: StubResponse, url: URL) {
         let response = HTTPURLResponse(url: url, statusCode: stub.status, httpVersion: "HTTP/1.1", headerFields: stub.headers)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(stub.body.utf8))

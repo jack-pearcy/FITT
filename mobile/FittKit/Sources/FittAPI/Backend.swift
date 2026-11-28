@@ -159,6 +159,23 @@ public struct Backend: Sendable {
         return response.tdee
     }
 
+    // MARK: Settings
+
+    /// The saved biometrics, or nil when the server answers 404 because the
+    /// user has saved none.
+    public func biometrics(userId: Int64) async throws -> Biometrics? {
+        do {
+            return try await get("/api/users/\(userId)/identity/biometrics") as Biometrics
+        } catch BackendError.problem(status: 404, _), BackendError.unexpectedStatus(404) {
+            return nil
+        }
+    }
+
+    /// Changes the units alone. The server answers 404 when no biometrics are saved.
+    public func setUnits(_ units: UnitsPreference, userId: Int64) async throws {
+        _ = try await perform("PUT", "/api/users/\(userId)/identity/biometrics/units", body: UnitsChange(unitsPreference: units), authenticated: true)
+    }
+
     // MARK: Goals
 
     /// The saved goals. In automatic mode `calorieGoal` is the number the server worked out.
@@ -325,6 +342,11 @@ public struct Backend: Sendable {
     // MARK: Transport
 
     private struct NoBody: Encodable {}
+
+    /// Mirrors the backend `UpdateUnitsRequest` record.
+    private struct UnitsChange: Encodable {
+        let unitsPreference: UnitsPreference
+    }
 
     private func get<Response: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> Response {
         try await send("GET", path, query: query, body: nil as NoBody?, authenticated: true)
