@@ -5,6 +5,8 @@ import com.fitt.workouts.dto.CreateWorkoutSessionRequest;
 import com.fitt.workouts.dto.FinishSessionRequest;
 import com.fitt.workouts.dto.LogSetRequest;
 import com.fitt.workouts.dto.UpdateSessionNotesRequest;
+import com.fitt.workouts.dto.UpdateSessionRequest;
+import com.fitt.workouts.dto.UpdateSetRequest;
 import com.fitt.workouts.dto.WorkoutSessionResponse;
 import com.fitt.workouts.service.WorkoutSessionService;
 import jakarta.validation.Valid;
@@ -113,6 +115,19 @@ public class WorkoutSessionController {
         return workoutSessionService.updateNotes(userId, sessionId, request);
     }
 
+    // Changes the start, the finish or the notes of a session, each optional.
+    // Returns the updated session.
+    @PatchMapping("/{sessionId}")
+    public WorkoutSessionResponse updateSession(
+            @PathVariable Long userId,
+            @PathVariable Long sessionId,
+            @Valid @RequestBody UpdateSessionRequest request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        enforceOwnership(userId, currentUserId(jwt));
+        return workoutSessionService.updateSession(userId, sessionId, request);
+    }
+
     // Top-level session delete. 204 because the resource is gone.
     @DeleteMapping("/{sessionId}")
     public ResponseEntity<Void> deleteSession(
@@ -173,6 +188,20 @@ public class WorkoutSessionController {
     ) {
         enforceOwnership(userId, currentUserId(jwt));
         return workoutSessionService.deleteSet(userId, sessionId, entryId, setId);
+    }
+
+    // Replaces the reps, weight and RPE of a logged set. Returns the updated session.
+    @PutMapping("/{sessionId}/entries/{entryId}/sets/{setId}")
+    public WorkoutSessionResponse updateSet(
+            @PathVariable Long userId,
+            @PathVariable Long sessionId,
+            @PathVariable Long entryId,
+            @PathVariable Long setId,
+            @Valid @RequestBody UpdateSetRequest request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        enforceOwnership(userId, currentUserId(jwt));
+        return workoutSessionService.updateSet(userId, sessionId, entryId, setId, request);
     }
 
     private Long currentUserId(Jwt jwt) {

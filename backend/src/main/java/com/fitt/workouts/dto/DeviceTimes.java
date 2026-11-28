@@ -15,7 +15,7 @@ import java.time.Instant;
 // stored and the session could never be finished.
 public final class DeviceTimes {
 
-    static final Instant EARLIEST = Instant.parse("2000-01-01T00:00:00Z");
+    public static final Instant EARLIEST = Instant.parse("2000-01-01T00:00:00Z");
     static final Duration AHEAD = Duration.ofHours(24);
 
     private DeviceTimes() {}

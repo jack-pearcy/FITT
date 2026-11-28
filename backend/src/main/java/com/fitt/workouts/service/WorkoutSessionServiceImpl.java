@@ -11,6 +11,8 @@ import com.fitt.workouts.dto.FinishSessionRequest;
 import com.fitt.workouts.dto.LogSetRequest;
 import com.fitt.workouts.dto.SetEntryResponse;
 import com.fitt.workouts.dto.UpdateSessionNotesRequest;
+import com.fitt.workouts.dto.UpdateSessionRequest;
+import com.fitt.workouts.dto.UpdateSetRequest;
 import com.fitt.workouts.dto.WorkoutSessionResponse;
 import com.fitt.workouts.persistence.entity.ExerciseEntryEntity;
 import com.fitt.workouts.persistence.entity.ExerciseEntity;
@@ -20,6 +22,7 @@ import com.fitt.workouts.repository.ExerciseRepository;
 import com.fitt.workouts.repository.WorkoutPlanRepository;
 import com.fitt.workouts.repository.WorkoutSessionRepository;
 import com.fitt.workouts.service.exception.ExerciseNotFoundException;
+import com.fitt.workouts.service.exception.InvalidSessionEditException;
 import com.fitt.workouts.service.exception.OpenSessionExistsException;
 import com.fitt.workouts.service.exception.WorkoutPlanNotFoundException;
 import com.fitt.workouts.service.exception.WorkoutSessionNotFoundException;
@@ -33,6 +36,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -294,20 +298,89 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     @Transactional
     public WorkoutSessionResponse deleteSet(Long ownerUserId, Long sessionId, Long entryId, Long setId) {
         WorkoutSessionEntity session = loadForUpdate(ownerUserId, sessionId);
+        SetEntryEntity target = findSet(session, entryId, setId);
 
+        target.getExerciseEntry().removeSetEntry(target);
+
+        return toResponse(sessionRepository.save(session));
+    }
+
+    // Works on open and finished sessions alike. The set keeps its number, its
+    // client id and the time it was done; only what the user typed changes.
+    @Override
+    @Transactional
+    public WorkoutSessionResponse updateSet(Long ownerUserId, Long sessionId, Long entryId, Long setId,
+                                            UpdateSetRequest request) {
+        WorkoutSessionEntity session = loadForUpdate(ownerUserId, sessionId);
+        SetEntryEntity set = findSet(session, entryId, setId);
+
+        set.setReps(request.reps());
+        set.setWeight(request.weight());
+        set.setRpe(request.rpe());
+
+        return toResponse(sessionRepository.save(session));
+    }
+
+    // A person typing a correction, not a device replaying a request, so a bad
+    // time is refused with a message rather than dropped as P5 does for sets.
+    @Override
+    @Transactional
+    public WorkoutSessionResponse updateSession(Long ownerUserId, Long sessionId, UpdateSessionRequest request) {
+        WorkoutSessionEntity session = loadForUpdate(ownerUserId, sessionId);
+        Instant now = Instant.now();
+
+        if (request.finishedAt() != null && session.getFinishedAt() == null) {
+            throw new InvalidSessionEditException("finishedAt",
+                    "Finish the workout before changing its finish time");
+        }
+        Instant startedAt = request.startedAt() == null
+                ? session.getStartedAt()
+                : editedTime("startedAt", request.startedAt(), now);
+        Instant finishedAt = request.finishedAt() == null
+                ? session.getFinishedAt()
+                : editedTime("finishedAt", request.finishedAt(), now);
+        if (finishedAt != null && !finishedAt.isAfter(startedAt)) {
+            throw new InvalidSessionEditException(request.finishedAt() != null ? "finishedAt" : "startedAt",
+                    "The finish must be after the start");
+        }
+
+        session.setStartedAt(startedAt);
+        session.setFinishedAt(finishedAt);
+        if (request.notes() != null) {
+            String notes = request.notes().strip();
+            session.setNotes(notes.isEmpty() ? null : notes);
+        }
+
+        return toResponse(sessionRepository.save(session));
+    }
+
+    // A few minutes of slack for a phone whose clock runs a little ahead, so
+    // "now" picked on the device is not refused. The time stored is never after
+    // the server's clock, for the reason given at finishTime below.
+    private static final Duration EDIT_CLOCK_SLACK = Duration.ofMinutes(5);
+
+    private static Instant editedTime(String field, Instant time, Instant now) {
+        if (time.isBefore(DeviceTimes.EARLIEST)) {
+            throw new InvalidSessionEditException(field, "The time must be in the year 2000 or later");
+        }
+        if (time.isAfter(now.plus(EDIT_CLOCK_SLACK))) {
+            throw new InvalidSessionEditException(field, "The time cannot be in the future");
+        }
+        return time.isAfter(now) ? now : time;
+    }
+
+    // The set through its entry inside this session, so a set id from another
+    // entry or another session reads as not found.
+    private static SetEntryEntity findSet(WorkoutSessionEntity session, Long entryId, Long setId) {
         ExerciseEntryEntity entry = session.getExerciseEntries().stream()
                 .filter(e -> e.getId().equals(entryId))
                 .findFirst()
                 .orElseThrow(() -> new ExerciseEntryNotFoundException(entryId));
 
-        SetEntryEntity target = entry.getSetEntries().stream()
+        return entry.getSetEntries().stream()
                 .filter(s -> s.getId().equals(setId))
                 .findFirst()
                 .orElseThrow(() -> new SetEntryNotFoundException(setId));
-
-        entry.removeSetEntry(target);
-
-        return toResponse(sessionRepository.save(session));
     }
 
     // The device's finish time when it sent one, so a workout finished offline is
