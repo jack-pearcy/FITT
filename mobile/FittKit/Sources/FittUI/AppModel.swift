@@ -49,8 +49,15 @@ public final class AppModel {
     public private(set) var weightEntries: [BodyWeightEntry]?
     /// Average of the last seven days. Nil until loaded, or when nothing was logged in them.
     public private(set) var weightAverage: Decimal?
-    /// The workout in progress, if there is one.
-    public private(set) var activeSession: WorkoutSession?
+    /// The workout in progress, if there is one. Rest ends with it, however it
+    /// ends: finished, discarded, on the other device, or at sign-out.
+    public private(set) var activeSession: WorkoutSession? {
+        didSet { if activeSession == nil, restTimer != nil { skipRest() } }
+    }
+    /// The rest running after the last logged set. Nil when there is none.
+    public private(set) var restTimer: RestTimer?
+    /// The rest length chosen in Settings. Kept on this device only.
+    public private(set) var restLength: TimeInterval
     /// Finished workouts, newest first. Nil until loaded.
     public private(set) var history: [WorkoutSession]?
     /// True while the workout screen's read of the history is out, so a second
@@ -78,17 +85,29 @@ public final class AppModel {
     /// Waits between the reads that follow a resumed workout. The tests pass
     /// one that returns at once.
     private let pause: @Sendable (Duration) async -> Void
+    /// The alert when rest is over. Nil schedules none, which is what the tests
+    /// and previews get unless they pass one.
+    private let restAlerts: (any RestAlerts)?
+    private let deviceSettings: DeviceSettings
+    /// The permission question and the scheduling that follows it. Kept so a
+    /// newer rest, or a skip, can stop an older one that is still waiting.
+    private(set) var restAlertTask: Task<Void, Never>?
 
     public init(
         backend: Backend,
         tokenStore: any TokenStore,
         drafts: DraftStore? = nil,
+        restAlerts: (any RestAlerts)? = nil,
+        deviceSettings: DeviceSettings = DeviceSettings(),
         now: @escaping @Sendable () -> Date = { Date() },
         pause: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     ) {
         self.backend = backend
         self.tokenStore = tokenStore
         self.drafts = drafts
+        self.restAlerts = restAlerts
+        self.deviceSettings = deviceSettings
+        self.restLength = deviceSettings.restLength
         self.now = now
         self.pause = pause
     }
@@ -811,7 +830,50 @@ public final class AppModel {
         }
         // A 400 from the server names the same fields; file them under this entry too.
         fieldErrors = Self.keyed(fieldErrors, entryId: entryId)
+        // Each saved set starts a fresh rest, which replaces the one running.
+        if saved { startRest() }
         return saved
+    }
+
+    // MARK: Rest
+
+    /// Starts rest at the length chosen in Settings, and the alert for its end.
+    func startRest() {
+        restTimer = RestTimer(length: restLength, now: now())
+        scheduleRestAlert()
+    }
+
+    /// Adds 30 seconds and moves the alert with it.
+    public func addRestTime() {
+        guard restTimer != nil else { return }
+        restTimer?.addExtra(now: now())
+        scheduleRestAlert()
+    }
+
+    /// Ends rest now and removes its alert.
+    public func skipRest() {
+        restAlertTask?.cancel()
+        restAlertTask = nil
+        restTimer = nil
+        restAlerts?.cancel()
+    }
+
+    /// A new rest length for the next rest. The one running keeps its own.
+    public func setRestLength(_ length: TimeInterval) {
+        deviceSettings.restLength = length
+        restLength = deviceSettings.restLength
+    }
+
+    /// Asks for permission the first time, then schedules the alert. A no
+    /// leaves the in-app timer running with no alert.
+    private func scheduleRestAlert() {
+        guard let restAlerts, let timer = restTimer else { return }
+        restAlertTask?.cancel()
+        restAlertTask = Task {
+            guard await restAlerts.requestPermission(), !Task.isCancelled,
+                  self.restTimer == timer else { return }
+            restAlerts.schedule(at: timer.endsAt, now: self.now())
+        }
     }
 
     public func deleteSet(_ setId: Int64, entryId: Int64) async {
