@@ -74,6 +74,12 @@ public class BodyWeightServiceImpl implements BodyWeightService {
     }
 
     @Override
+    public Optional<BigDecimal> getLatestWeightKg(Long ownerUserId) {
+        return repository.findFirstByOwnerUserIdOrderByLoggedAtDesc(ownerUserId)
+                .map(BodyWeightEntryEntity::getWeight);
+    }
+
+    @Override
     @Transactional
     public void deleteEntry(Long ownerUserId, Long entryId) {
         BodyWeightEntryEntity entry = repository.findByIdAndOwnerUserId(entryId, ownerUserId)
