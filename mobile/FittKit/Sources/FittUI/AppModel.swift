@@ -21,6 +21,10 @@ public final class AppModel {
     /// The units the user works in. They come from the onboarding status, so they
     /// are right after a relaunch and on a second device. Metric until that loads.
     public private(set) var units = UnitsPreference.metric
+    /// The saved body measures, for Settings. Nil until loaded.
+    public private(set) var biometrics: Biometrics?
+    /// True once the server has said this user has no biometrics saved.
+    public private(set) var hasNoBiometrics = false
     public private(set) var isWorking = false
     public private(set) var errorMessage: String?
     /// True when the last error was that the server could not be reached.
@@ -52,6 +56,9 @@ public final class AppModel {
     /// True while the workout screen's read of the history is out, so a second
     /// visit does not send another.
     @ObservationIgnored private var isLoadingHistory = false
+    /// Goes up with each change to units or body measures the server accepts,
+    /// so a read that was sent before the change can be told apart.
+    @ObservationIgnored private var biometricsChanges = 0
     /// The model the server uses for suggestions. Nil until loaded.
     public private(set) var progressionModel: ProgressionModel?
     /// What to do next for an exercise, by exercise id. An exercise is missing
@@ -234,6 +241,8 @@ public final class AppModel {
         weightAverage = nil
         goals = nil
         units = .metric
+        biometrics = nil
+        hasNoBiometrics = false
         phase = .signedOut
     }
 
@@ -290,6 +299,71 @@ public final class AppModel {
         } catch {
             errorMessage = "Something went wrong. Try again."
         }
+    }
+
+    // MARK: Settings
+
+    public func loadBiometrics() async {
+        await load { userId in
+            let changes = self.biometricsChanges
+            let saved = try await self.backend.biometrics(userId: userId)
+            // The answer is dropped if the user signed out while it was on its
+            // way, so body measures never reach the next account on this phone.
+            // It is also dropped if a change was accepted while it was out: it
+            // may have been read before the change and would undo it here.
+            guard case .signedIn(userId) = self.phase, changes == self.biometricsChanges else { return }
+            self.biometrics = saved
+            self.hasNoBiometrics = saved == nil
+            if let saved {
+                self.units = saved.unitsPreference
+            }
+        }
+    }
+
+    /// Changes the units on the server first, so the phone, the watch and the
+    /// web agree. Every weight on screen reads `units`, so all of them follow.
+    /// A change the server did not take leaves the units as they were.
+    public func setUnits(_ chosen: UnitsPreference) async {
+        guard case .signedIn = phase, !isWorking, chosen != units else { return }
+        isWorking = true
+        defer { isWorking = false }
+        await load { userId in
+            try await self.backend.setUnits(chosen, userId: userId)
+            // Dropped after a sign-out, as in `loadBiometrics`.
+            guard case .signedIn(userId) = self.phase else { return }
+            self.biometricsChanges += 1
+            self.units = chosen
+            self.biometrics = self.biometrics?.with(units: chosen)
+        }
+    }
+
+    /// Saves changed body measures through the route onboarding uses, which
+    /// replaces what is stored. Returns true when they were saved, so the form
+    /// knows to close.
+    public func updateBiometrics(_ draft: BiometricsDraft) async -> Bool {
+        guard case .signedIn = phase, !isWorking else { return false }
+        clearErrors()
+        let changed: Biometrics
+        do {
+            changed = try draft.biometrics(today: CalendarDate(now()))
+        } catch {
+            fieldErrors = error.fields
+            return false
+        }
+        isWorking = true
+        defer { isWorking = false }
+        var saved = false
+        await load { userId in
+            try await self.backend.saveBiometrics(changed, userId: userId)
+            // Dropped after a sign-out, as in `loadBiometrics`.
+            guard case .signedIn(userId) = self.phase else { return }
+            self.biometricsChanges += 1
+            self.biometrics = changed
+            self.hasNoBiometrics = false
+            self.units = changed.unitsPreference
+            saved = true
+        }
+        return saved
     }
 
     // MARK: Workouts
@@ -524,14 +598,18 @@ public final class AppModel {
     }
 
     /// Finds a session left unfinished, such as one the app was closed in the middle of.
-    public func loadActiveSession() async {
+    /// True when the server answered, so the caller knows the check was made.
+    /// A read that failed or was cancelled with its screen answers false.
+    @discardableResult
+    public func loadActiveSession() async -> Bool {
         await loadSessions()
     }
 
     /// Reads every session once and splits it: the unfinished one is the workout
     /// in progress and the finished ones are the history. The API has one list
     /// route for both, so one request serves the Today tab and the History tab.
-    public func loadSessions() async {
+    @discardableResult
+    public func loadSessions() async -> Bool {
         await load { userId in
             let sessions = try await self.backend.sessions(userId: userId)
             self.activeSession = sessions.first { !$0.isFinished }
@@ -804,18 +882,26 @@ public final class AppModel {
         Dictionary(uniqueKeysWithValues: fields.map { (setFieldKey(entryId: entryId, field: $0.key), $0.value) })
     }
 
-    /// Runs one read or write for the signed-in user and shows what went wrong, if anything.
-    private func load(_ work: (Int64) async throws -> Void) async {
-        guard case .signedIn(let userId) = phase else { return }
+    /// Runs one read or write for the signed-in user and shows what went wrong,
+    /// if anything. True when the work ran to its end.
+    @discardableResult
+    private func load(_ work: (Int64) async throws -> Void) async -> Bool {
+        guard case .signedIn(let userId) = phase else { return false }
         errorMessage = nil
         isOffline = false
         do {
             try await work(userId)
+            return true
         } catch let error as BackendError {
+            // A request that was cancelled because its screen went away fails
+            // like a lost connection. The connection is fine and nobody is
+            // waiting for the answer, so nothing is shown.
+            if case .transport = error, Task.isCancelled { return false }
             show(error, duringSignIn: false)
         } catch {
             errorMessage = "Something went wrong. Try again."
         }
+        return false
     }
 
     public func clearErrors() {
