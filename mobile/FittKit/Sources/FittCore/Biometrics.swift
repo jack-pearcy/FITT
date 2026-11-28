@@ -18,9 +18,11 @@ public enum UnitsPreference: String, Codable, CaseIterable, Sendable {
     case imperial = "IMPERIAL"
 }
 
-/// Mirrors the backend `SaveBiometricsRequest` record. Always metric; the
-/// units preference only records how the user wants values shown.
-public struct Biometrics: Encodable, Equatable, Sendable {
+/// Mirrors the backend `SaveBiometricsRequest` record, and reads the
+/// `BiometricsResponse` record, which has the same fields plus an updated time
+/// the app does not use. Always metric; the units preference only records how
+/// the user wants values shown.
+public struct Biometrics: Codable, Equatable, Sendable {
     public let heightCm: Decimal
     public let weightKg: Decimal
     public let dateOfBirth: CalendarDate
@@ -42,6 +44,13 @@ public struct Biometrics: Encodable, Equatable, Sendable {
         self.biologicalSex = biologicalSex
         self.activityLevel = activityLevel
         self.unitsPreference = unitsPreference
+    }
+
+    /// The same measures with another units preference.
+    public func with(units: UnitsPreference) -> Biometrics {
+        Biometrics(
+            heightCm: heightCm, weightKg: weightKg, dateOfBirth: dateOfBirth,
+            biologicalSex: biologicalSex, activityLevel: activityLevel, unitsPreference: units)
     }
 }
 
@@ -74,8 +83,31 @@ public struct BiometricsDraft: Equatable, Sendable {
     public var dateOfBirth = CalendarDate(year: 2000, month: 1, day: 1)
     public var sex: BiologicalSex?
     public var activity: ActivityLevel?
+    /// The saved measures an edit form was filled in from. Feet, inches and
+    /// pounds are shown rounded, and turning them back does not always land on
+    /// the start, so a height or weight left as shown saves these instead.
+    private var saved: Biometrics?
 
     public init() {}
+
+    /// A draft filled in from saved biometrics, for editing them, in the units
+    /// they were saved with.
+    public init(biometrics: Biometrics) {
+        saved = biometrics
+        units = biometrics.unitsPreference
+        switch units {
+        case .metric:
+            height = "\(biometrics.heightCm)"
+        case .imperial:
+            let parts = UnitConversion.feetAndInches(centimeters: biometrics.heightCm)
+            feet = String(parts.feet)
+            inches = "\(parts.inches)"
+        }
+        weight = "\(units.shown(kilograms: biometrics.weightKg))"
+        dateOfBirth = biometrics.dateOfBirth
+        sex = biometrics.biologicalSex
+        activity = biometrics.activityLevel
+    }
 
     public func biometrics(today: CalendarDate) throws(ValidationFailure) -> Biometrics {
         var problems: [String: String] = [:]
@@ -115,7 +147,17 @@ public struct BiometricsDraft: Equatable, Sendable {
         )
     }
 
+    /// The saved measures and the form as it first showed them, while the
+    /// units are the ones they were shown in.
+    private var prefill: (saved: Biometrics, shown: BiometricsDraft)? {
+        guard let saved, saved.unitsPreference == units else { return nil }
+        return (saved, BiometricsDraft(biometrics: saved))
+    }
+
     private var heightInCentimeters: Decimal? {
+        if let prefill, [height, feet, inches] == [prefill.shown.height, prefill.shown.feet, prefill.shown.inches] {
+            return prefill.saved.heightCm.rounded(scale: 2)
+        }
         switch units {
         case .metric:
             // Two places, the scale the server stores and the most it accepts.
@@ -130,6 +172,7 @@ public struct BiometricsDraft: Equatable, Sendable {
     }
 
     private var weightInKilograms: Decimal? {
+        if let prefill, weight == prefill.shown.weight { return prefill.saved.weightKg.rounded(scale: 2) }
         guard let value = DecimalInput.parse(weight) else { return nil }
         return units == .metric ? value.rounded(scale: 2) : UnitConversion.kilograms(pounds: value)
     }

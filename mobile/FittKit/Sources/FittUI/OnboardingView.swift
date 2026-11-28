@@ -1,7 +1,7 @@
 import FittCore
 import SwiftUI
 
-private extension BiologicalSex {
+extension BiologicalSex {
     var label: String {
         switch self {
         case .male: "Male"
@@ -10,7 +10,7 @@ private extension BiologicalSex {
     }
 }
 
-private extension ActivityLevel {
+extension ActivityLevel {
     var label: String {
         switch self {
         case .sedentary: "Sedentary"
@@ -26,6 +26,24 @@ private extension ActivityLevel {
 struct BiometricsStepView: View {
     @Environment(AppModel.self) private var model
     @State private var draft = BiometricsDraft()
+
+    var body: some View {
+        BiometricsForm(draft: $draft, submitTitle: "Continue") {
+            Task { await model.saveBiometrics(draft) }
+        }
+        .navigationTitle("About You")
+    }
+}
+
+/// The body measures form, shared by onboarding and Settings.
+struct BiometricsForm: View {
+    @Environment(AppModel.self) private var model
+    @Binding var draft: BiometricsDraft
+    /// Off when editing saved measures: the fields are filled in the saved
+    /// units, and Settings has its own control for changing them.
+    var showsUnits = true
+    let submitTitle: String
+    let action: () -> Void
     @FocusState private var focus: Field?
 
     private enum Field { case height, feet, inches, weight }
@@ -40,17 +58,20 @@ struct BiometricsStepView: View {
 
     var body: some View {
         ThemedForm {
-            Section {
-                Picker("Units", selection: $draft.units) {
-                    Text("Metric").tag(UnitsPreference.metric)
-                    Text("Imperial").tag(UnitsPreference.imperial)
+            if showsUnits {
+                Section {
+                    Picker("Units", selection: $draft.units) {
+                        Text("Metric").tag(UnitsPreference.metric)
+                        Text("Imperial").tag(UnitsPreference.imperial)
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("units")
                 }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("units")
             }
 
             Section {
-                LabeledContent("Height") {
+                // The unit sits in the label: a filled field hides its placeholder.
+                LabeledContent(draft.units == .metric ? "Height (cm)" : "Height (ft, in)") {
                     if draft.units == .metric {
                         TextField("cm", text: $draft.height)
                             .numberEntry(decimal: true)
@@ -71,7 +92,7 @@ struct BiometricsStepView: View {
                 }
                 FieldError(field: "heightCm")
 
-                LabeledContent("Weight") {
+                LabeledContent(draft.units == .metric ? "Weight (kg)" : "Weight (lb)") {
                     TextField(draft.units == .metric ? "kg" : "lb", text: $draft.weight)
                         .numberEntry(decimal: true)
                         .focused($focus, equals: .weight)
@@ -109,15 +130,16 @@ struct BiometricsStepView: View {
             }
 
             ErrorSection()
-            SubmitSection(title: "Continue") {
+            SubmitSection(title: submitTitle) {
                 focus = nil
-                Task { await model.saveBiometrics(draft) }
+                action()
             }
         }
         .scrollDismissesKeyboard(.interactively)
+        // The bar, not a keyboard toolbar item: Settings shows this form inside
+        // the tab view, where a toolbar item does not appear.
+        .keyboardDoneBar(isShown: focus != nil) { focus = nil }
         .canvas()
-        .navigationTitle("About You")
-        .toolbar { KeyboardDoneButton { focus = nil } }
         // A message about the last attempt is stale once the user edits the form.
         .onChange(of: draft) { model.clearErrors() }
     }
