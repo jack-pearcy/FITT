@@ -189,6 +189,15 @@ struct WorkoutView: View {
             .motion(Theme.quick, value: justLogged)
             .sensoryFeedback(.success, trigger: loggedCount)
             .scrollDismissesKeyboard(.interactively)
+            // Rest after a set. Out of the way while the keyboard is up, where
+            // the Done bar takes the bottom.
+            .safeAreaInset(edge: .bottom) {
+                if let timer = model.restTimer, focus == nil {
+                    RestBar(timer: timer, addTime: { model.addRestTime() }, skip: { model.skipRest() })
+                        .entrance(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .motion(value: model.restTimer == nil)
             .keyboardDoneBar(isShown: focus != nil) { focus = nil }
             // A message about the last attempt is stale once the user edits a set.
             .onChange(of: drafts) { model.clearErrors() }

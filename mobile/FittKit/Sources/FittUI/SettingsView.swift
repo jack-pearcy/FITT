@@ -1,8 +1,8 @@
 import FittCore
 import SwiftUI
 
-/// Settings, reached from Account: the units every weight is shown in, and the
-/// body measures saved at onboarding.
+/// Settings, reached from Account: the units every weight is shown in, the rest
+/// length, and the body measures saved at onboarding.
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @State private var isEditing = false
@@ -19,6 +19,8 @@ struct SettingsView: View {
             isWorking: model.isWorking,
             errorMessage: model.errorMessage,
             setUnits: { chosen in Task { await model.setUnits(chosen) } },
+            restLength: model.restLength,
+            setRestLength: { model.setRestLength($0) },
             edit: { isEditing = true },
             retry: { await model.loadBiometrics() }
         )
@@ -43,6 +45,8 @@ struct SettingsContent: View {
     /// What went wrong with the last change, shown under the units.
     let errorMessage: String?
     let setUnits: (UnitsPreference) -> Void
+    var restLength: TimeInterval = RestTimer.defaultLength
+    var setRestLength: (TimeInterval) -> Void = { _ in }
     let edit: () -> Void
     let retry: () async -> Void
 
@@ -100,6 +104,20 @@ struct SettingsContent: View {
                                 .accessibilityIdentifier("error")
                         }
                     }
+                }
+
+                Section {
+                    Stepper(value: Binding(get: { restLength }, set: { setRestLength($0) }),
+                            in: RestTimer.lengths, step: RestTimer.lengthStep) {
+                        LabeledContent("Rest between sets", value: RestTimer.clock(restLength))
+                            .monospacedDigit()
+                    }
+                    .accessibilityValue(RestTimer.spoken(restLength))
+                    .accessibilityIdentifier("restLength")
+                } header: {
+                    Text("Rest timer").sectionLabel()
+                } footer: {
+                    Text("Starts after each set you log. Kept on this phone only.")
                 }
 
                 Section {

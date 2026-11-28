@@ -484,7 +484,7 @@ private struct AccountView: View {
                     }
                     .accessibilityIdentifier("settings")
                 } footer: {
-                    Text("Units and body measures.")
+                    Text("Units, rest timer and body measures.")
                 }
 
                 Section {
