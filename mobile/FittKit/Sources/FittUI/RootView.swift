@@ -26,7 +26,8 @@ public struct RootView: View {
         _model = State(initialValue: AppModel(
             backend: services.backend,
             tokenStore: services.tokenStore,
-            drafts: DraftStore()
+            drafts: DraftStore(),
+            restAlerts: SystemRestAlerts()
         ))
     }
 
