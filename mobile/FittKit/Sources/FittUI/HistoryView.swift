@@ -32,6 +32,18 @@ struct HistoryView: View {
                         )
                     } else {
                         List {
+                            Section {
+                                NavigationLink {
+                                    MuscleVolumeView()
+                                } label: {
+                                    Label("Weekly volume by muscle", systemImage: "chart.bar")
+                                        .foregroundStyle(Theme.textPrimary)
+                                        .frame(minHeight: 44)
+                                }
+                                .accessibilityHint("Sets for each muscle group, week by week")
+                                .accessibilityIdentifier("muscleVolume")
+                                .listRowBackground(Theme.card)
+                            }
                             RecordsSection(records: ExerciseStats.records(history, limit: 3), units: model.units)
                             ForEach(history) { session in
                                 NavigationLink {

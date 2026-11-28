@@ -125,6 +125,17 @@ public struct MuscleWeek: Equatable, Sendable, Identifiable {
     public let sets: [MuscleGroup: Int]
     public var id: CalendarDate { start }
 
+    /// Every set of the week, whatever the muscle.
+    public var totalSets: Int { sets.values.reduce(0, +) }
+
+    /// The muscles trained this week, most sets first. A tie keeps the order of `MuscleGroup`.
+    public var rankedMuscles: [MuscleGroup] {
+        let trained = MuscleGroup.allCases.enumerated().filter { sets[$0.element] != nil }
+        return trained
+            .sorted { (sets[$1.element] ?? 0, $0.offset) < (sets[$0.element] ?? 0, $1.offset) }
+            .map(\.element)
+    }
+
     /// The last `count` weeks up to the one holding `now`, newest first, empty
     /// weeks included. Weeks start on Monday in the calendar's time zone,
     /// whatever day the calendar's own weeks start on.
