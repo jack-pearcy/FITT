@@ -29,6 +29,7 @@ import com.fitt.coach.service.exception.CoachLimitException;
 import com.fitt.coach.service.exception.CoachUnavailableException;
 import com.fitt.identity.service.exception.BiometricsNotFoundException;
 import com.fitt.identity.service.exception.GoalNotFoundException;
+import com.fitt.identity.service.exception.InvalidGoalException;
 import com.fitt.identity.service.exception.IncorrectPasswordException;
 import com.fitt.identity.service.exception.InvalidMfaCodeException;
 import com.fitt.identity.service.exception.InvalidRefreshTokenException;
@@ -210,6 +211,16 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     // and a 401 would tell the client its session is over.
     @ExceptionHandler(IncorrectPasswordException.class)
     public ResponseEntity<ProblemDetail> handleIncorrectPassword(IncorrectPasswordException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation failed");
+        problem.setTitle("Bad Request");
+        problem.setProperty("errors", Map.of(ex.getField(), ex.getMessage()));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
+    }
+
+    // 400 under the field, for goal values that are each in range but do not
+    // work together.
+    @ExceptionHandler(InvalidGoalException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidGoal(InvalidGoalException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Validation failed");
         problem.setTitle("Bad Request");
         problem.setProperty("errors", Map.of(ex.getField(), ex.getMessage()));

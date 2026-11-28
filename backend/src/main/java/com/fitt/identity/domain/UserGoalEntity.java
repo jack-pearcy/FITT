@@ -43,6 +43,14 @@ public class UserGoalEntity {
     @Column
     private Integer calorieGoal;
 
+    // Nullable. The user's own maintenance, used in place of the estimate.
+    @Column
+    private Integer maintenanceOverrideKcal;
+
+    // Nullable. Signed daily surplus or deficit the user chose.
+    @Column
+    private Integer dailyAdjustmentKcal;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -85,6 +93,11 @@ public class UserGoalEntity {
         this.updatedAt = Instant.now();
     }
 
+    public void setCalorieInputs(Integer maintenanceOverrideKcal, Integer dailyAdjustmentKcal) {
+        this.maintenanceOverrideKcal = maintenanceOverrideKcal;
+        this.dailyAdjustmentKcal = dailyAdjustmentKcal;
+    }
+
     public Long getId() { return id; }
     public Long getOwnerUserId() { return ownerUserId; }
     public GoalDirection getGoalDirection() { return goalDirection; }
@@ -92,6 +105,8 @@ public class UserGoalEntity {
     public Integer getTimelineWeeks() { return timelineWeeks; }
     public CalorieGoalMode getCalorieGoalMode() { return calorieGoalMode; }
     public Integer getCalorieGoal() { return calorieGoal; }
+    public Integer getMaintenanceOverrideKcal() { return maintenanceOverrideKcal; }
+    public Integer getDailyAdjustmentKcal() { return dailyAdjustmentKcal; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }

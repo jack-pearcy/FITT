@@ -60,7 +60,7 @@ class GoalServiceTest {
         when(biometricsRepository.findByOwnerUserId(USER_ID)).thenReturn(Optional.empty());
         SaveGoalsRequest request = new SaveGoalsRequest(
                 GoalDirection.BULK, new BigDecimal("85"), 12,
-                CalorieGoalMode.AUTO, null);
+                CalorieGoalMode.AUTO, null, null, null);
 
         assertThatThrownBy(() -> service.saveGoals(USER_ID, request))
                 .isInstanceOf(BiometricsNotFoundException.class)
@@ -81,7 +81,7 @@ class GoalServiceTest {
 
         SaveGoalsRequest request = new SaveGoalsRequest(
                 GoalDirection.BULK, new BigDecimal("85"), 12,
-                CalorieGoalMode.AUTO, null);
+                CalorieGoalMode.AUTO, null, null, null);
 
         service.saveGoals(USER_ID, request);
 
@@ -108,7 +108,7 @@ class GoalServiceTest {
 
         SaveGoalsRequest request = new SaveGoalsRequest(
                 GoalDirection.CUT, new BigDecimal("75"), 8,
-                CalorieGoalMode.AUTO, null);
+                CalorieGoalMode.AUTO, null, null, null);
 
         service.saveGoals(USER_ID, request);
 
@@ -126,7 +126,7 @@ class GoalServiceTest {
 
         SaveGoalsRequest request = new SaveGoalsRequest(
                 GoalDirection.MAINTAIN, null, null,
-                CalorieGoalMode.MANUAL, 2300);
+                CalorieGoalMode.MANUAL, 2300, null, null);
 
         service.saveGoals(USER_ID, request);
 
@@ -145,7 +145,7 @@ class GoalServiceTest {
 
         SaveGoalsRequest request = new SaveGoalsRequest(
                 GoalDirection.MAINTAIN, null, null,
-                CalorieGoalMode.MANUAL, null);
+                CalorieGoalMode.MANUAL, null, null, null);
 
         assertThatThrownBy(() -> service.saveGoals(USER_ID, request))
                 .isInstanceOf(IllegalArgumentException.class)

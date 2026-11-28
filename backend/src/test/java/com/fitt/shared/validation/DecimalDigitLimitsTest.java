@@ -96,7 +96,7 @@ class DecimalDigitLimitsTest {
     private static SaveGoalsRequest goals(String targetWeightKg) {
         return new SaveGoalsRequest(
                 GoalDirection.BULK, targetWeightKg == null ? null : new BigDecimal(targetWeightKg),
-                null, CalorieGoalMode.AUTO, null);
+                null, CalorieGoalMode.AUTO, null, null, null);
     }
 
     private static <T> Set<String> messages(T request) {
