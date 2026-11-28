@@ -5,6 +5,8 @@ import com.fitt.workouts.dto.CreateWorkoutSessionRequest;
 import com.fitt.workouts.dto.FinishSessionRequest;
 import com.fitt.workouts.dto.LogSetRequest;
 import com.fitt.workouts.dto.UpdateSessionNotesRequest;
+import com.fitt.workouts.dto.UpdateSessionRequest;
+import com.fitt.workouts.dto.UpdateSetRequest;
 import com.fitt.workouts.dto.WorkoutSessionResponse;
 import java.util.List;
 import java.util.Optional;
@@ -37,6 +39,11 @@ public interface WorkoutSessionService {
     WorkoutSessionResponse logSet(Long ownerUserId, Long sessionId, Long entryId, LogSetRequest request);
 
     WorkoutSessionResponse deleteSet(Long ownerUserId, Long sessionId, Long entryId, Long setId);
+
+    WorkoutSessionResponse updateSet(Long ownerUserId, Long sessionId, Long entryId, Long setId,
+                                     UpdateSetRequest request);
+
+    WorkoutSessionResponse updateSession(Long ownerUserId, Long sessionId, UpdateSessionRequest request);
 
     long countCompletedSessions(Long ownerUserId, Long planId);
 }
