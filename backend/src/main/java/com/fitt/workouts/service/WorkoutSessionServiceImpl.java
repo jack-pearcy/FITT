@@ -121,10 +121,20 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
             int dayCount = planRepository.findByIdAndOwnerUserId(request.planId(), ownerUserId)
                     .orElseThrow(() -> new WorkoutPlanNotFoundException(request.planId()))
                     .getDays().size();
-            // Record which day this session trains: the day the rotation points at now.
-            if (dayCount > 0) {
+            if (request.planDayIndex() != null) {
+                // The day the user picked. Stored like a rotation day, so the next
+                // lift moves on from it.
+                if (request.planDayIndex() >= dayCount) {
+                    throw new InvalidSessionEditException("planDayIndex",
+                            "The plan has no day " + (request.planDayIndex() + 1));
+                }
+                planDayIndex = request.planDayIndex();
+            } else if (dayCount > 0) {
+                // Record which day this session trains: the day the rotation points at now.
                 planDayIndex = PlanRotation.nextDayIndex(sessionRepository, ownerUserId, request.planId(), dayCount);
             }
+        } else if (request.planDayIndex() != null) {
+            throw new InvalidSessionEditException("planDayIndex", "A plan day needs a plan");
         }
 
         // entity constructor requires ownerUserId and startedAt

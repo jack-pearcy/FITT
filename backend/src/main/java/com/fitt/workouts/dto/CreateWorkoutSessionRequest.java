@@ -1,5 +1,6 @@
 package com.fitt.workouts.dto;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -19,9 +20,18 @@ public record CreateWorkoutSessionRequest(
         // Optional. A start sent again with the same id returns the session the
         // first one made.
         @Pattern(regexp = ClientIds.PATTERN, message = ClientIds.MESSAGE)
-        String clientId
+        String clientId,
+
+        // Optional. The day of the plan to train, from 0 in the plan's day order,
+        // in place of the day the rotation points at. Needs planId.
+        @Min(value = 0, message = "Plan day cannot be negative")
+        Integer planDayIndex
 ) {
     public CreateWorkoutSessionRequest(Instant startedAt, Long planId, String notes) {
-        this(startedAt, planId, notes, null);
+        this(startedAt, planId, notes, null, null);
+    }
+
+    public CreateWorkoutSessionRequest(Instant startedAt, Long planId, String notes, String clientId) {
+        this(startedAt, planId, notes, clientId, null);
     }
 }
