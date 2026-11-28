@@ -95,6 +95,7 @@ public class WorkoutSessionEntity {
         return Collections.unmodifiableList(exerciseEntries);
     }
 
+    public void setStartedAt(Instant startedAt) { this.startedAt = startedAt; }
     public void setFinishedAt(Instant finishedAt) { this.finishedAt = finishedAt; }
     public void setNotes(String notes) { this.notes = notes; }
     public void setPlanId(Long planId) { this.planId = planId; }
