@@ -292,4 +292,34 @@ struct ExerciseStatsTests {
         #expect(weeks.map(\.start) == [CalendarDate(year: 2026, month: 11, day: 16)])
         #expect(weeks[0].sets[.chest] == 1)
     }
+
+    @Test("an exercise trained in more than one session of a week adds its sets up")
+    func sameExerciseTwiceInAWeek() {
+        let sessions = [
+            session(1, "2026-11-23T08:00:00Z", [(bench, [("100", 5), ("100", 5)])]),
+            session(2, "2026-11-25T08:00:00Z", [(bench, [("90", 8), ("90", 8), ("90", 8)])]),
+            session(3, "2026-11-18T08:00:00Z", [(bench, [("80", 10)])]),
+        ]
+
+        let weeks = MuscleWeek.weeks(sessions, count: 2, now: date("2026-11-26T08:00:00Z"), calendar: utc)
+
+        #expect(weeks[0].sets == [.chest: 5])
+        #expect(weeks[0].volume == [.chest: 3160])
+        #expect(weeks[1].sets == [.chest: 1])
+        #expect(weeks[0].totalSets == 5)
+    }
+
+    @Test("muscles rank by sets, most first, and a tie keeps the app's usual order")
+    func rankedMuscles() {
+        let sessions = [
+            session(1, "2026-11-23T08:00:00Z", [(squat, [("140", 5)]), (pullUp, [(nil, 10), (nil, 8)]), (bench, [("100", 5)])]),
+        ]
+
+        let weeks = MuscleWeek.weeks(sessions, count: 2, now: date("2026-11-24T08:00:00Z"), calendar: utc)
+
+        #expect(weeks[0].rankedMuscles == [.back, .chest, .legs])
+        #expect(weeks[0].totalSets == 4)
+        #expect(weeks[1].rankedMuscles.isEmpty)
+        #expect(weeks[1].totalSets == 0)
+    }
 }
